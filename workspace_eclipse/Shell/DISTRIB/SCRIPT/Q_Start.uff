@@ -1,0 +1,249 @@
+#!/bin/sh
+
+######## Retrieves AGENT environmental variables
+if [ -e "ENV_FILE" ];
+then
+  . "ENV_FILE"
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+OO_AMS_USAGE=NoAMS
+export OO_AMS_USAGE
+
+DBNAME="SOO_TMF_DB"
+
+if [ "$1" = "recovery" ];
+then
+  echo ""
+  echo "Starting FULLNAME application recovery..."
+  "${OBJDIR}"/bin/oocheckls -quiet
+  if [ $? -eq 0 ];
+  then
+    echo "The lockServer must be down to recovery"
+    exit 2
+  fi
+
+  jnl_file=$(ls "${AGENT_DIR}"/DATA/*.JNL | head -n 1)
+  DEADHOST=$(basename ${jnl_file} | cut -d'_' -f4)
+  if [ "${DEADHOST}" != "" ];
+  then
+    "${OBJDIR}"/bin/oocleanup \
+                    -notitle \
+                    -standalone \
+                    -force \
+                    -deadhost ${DEADHOST} \
+                    "${AGENT_DIR}"/DATA/"${DBNAME}".boot
+    if [ $? -ne 0 ];
+    then
+      exit 4
+    fi
+  else
+    echo "nothing to recover"
+    echo ""
+  fi
+
+  echo "done"
+  echo ""
+fi
+
+echo ""
+echo "Starting FULLNAME application..."
+
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" -o "${curr_os}" = "Linux" ];
+then
+  sep=":"
+else
+  sep=";"
+fi
+
+if [ "${curr_os}" = "HP-UX" ];
+then
+  if [ "${SG}" = "1" ];
+  then
+    HP_ARCH=pa11
+    if [ -x /usr/bin/hp-pa ];
+    then
+      /usr/bin/hp-pa
+      if [ $? -ne 0 ];
+      then
+        HP_ARCH=ia64
+        OS_SUBVER=$(uname -r | awk -F. '{print $3}')
+        if [ "${OS_SUBVER}" -ge "31" ];
+        then
+          HP_ARCH="ia64_31"
+        fi
+      fi
+    fi
+    if [ ! "${AGENT_DIR}/BIN/monitorapp" -ef "${AGENT_DIR}/BIN/monitorapp.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/BIN/monitorapp.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/BIN/monitorapp"
+    fi
+
+    #if [ ! "${AGENT_DIR}/LIB/oojava.jar" -ef "${AGENT_DIR}/LIB/oojava.jar.${curr_os}.${HP_ARCH}" ];
+    #then
+    #  ln -f -s "${AGENT_DIR}/LIB/oojava.jar.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/LIB/oojava.jar"
+    #fi
+
+    if [ ! "${AGENT_DIR}/BIN/TMFA_Man" -ef "${AGENT_DIR}/BIN/TMFA_Man.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/BIN/TMFA_Man.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/BIN/TMFA_Man"
+    fi
+
+    if [ ! "${AGENT_DIR}/CONF/app.ini" -ef "${AGENT_DIR}/CONF/app.ini.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/CONF/app.ini.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/CONF/app.ini"
+    fi
+
+    curr_host=$(hostname | cut -d '.' -f 1)
+    trueLicFile="${AGENT_DIR}/CONF/License.xml"
+    newLicFile="${trueLicFile}.${curr_host}"
+
+    file_list=$(find "${AGENT_DIR}/CONF" \( -type f -o -type l \) \( -name "License.xml.*" -a ! -name "License.xml.*.bak" \) -print)
+    for item in ${file_list};
+    do
+      diff "${newLicFile}" "${item}" > /dev/null 2>&1
+      if  [ $? -eq 0 ];
+      then
+        cleanNewFile=$(echo "${item}" | sed -e "s?\/?\\\/?g")
+        ex << ++ "${AGENT_DIR}/CONF/Application.properties" > /dev/null
+          g/^LicenseManager.licenseFile/s/LicenseManager.licenseFile.*/LicenseManager.licenseFile = ${cleanNewFile}/
+        w!
+++
+        break
+      fi
+    done
+
+    if [ ! "${trueLicFile}" -ef "${newLicFile}" ];
+    then
+      ln -f -s "${newLicFile}" "${trueLicFile}"
+    fi
+
+  fi
+fi
+
+TMF_XP="."
+
+file_list=$(find "${AGENT_DIR}/LIB" \( -type f -o -type l \) -name "*.jar" -print)
+
+for item in ${file_list};
+do
+  if [ "${item}" = "${AGENT_DIR}/LIB/jlima.jar" ]
+  then
+       if [ -x "${AGENT_DIR}/SCRIPT/CheckJlima" ];
+  	   then
+    		. "${AGENT_DIR}/SCRIPT/CheckJlima"
+    		if [ $? -ne  0 ]
+       		then
+       		    echo ""
+       			echo "..application FULLNAME NOT started!"
+			    echo "Check your LIMA configuration!"
+			    echo ""
+			    exit 2
+       		fi
+    		CheckJlima
+    		if [ $? -ne  0 ]
+       		then
+       			item="${Lima_jlima}"
+       		fi
+ 	   fi
+   fi
+  TMF_XP="${TMF_XP}${sep}${item}"
+done
+
+file_list=$(find "${OBJDIR}/java" \( -type f -o -type l \) -name "oojava.jar" -print)
+
+for item in ${file_list};
+do
+  TMF_XP="${TMF_XP}${sep}${item}"
+done
+
+export TMF_XP
+
+# check for nmsdb
+"${AGENT_DIR}"/SCRIPT/Q_CheckNMSDB
+
+if [ $? -ne 0 ];
+then
+  echo "..application FULLNAME NOT started!"
+  echo "Check your NMSDB configuration!"
+  echo ""
+  exit 2
+fi
+
+if [ "${SG}" = "1" ];
+then
+  "${AGENT_DIR}"/SCRIPT/installfd
+
+  if [ $? -ne 0 ];
+  then
+    echo "..application FULLNAME NOT started!"
+    echo "Check your installfd configuration!"
+    echo ""
+    exit 2
+  fi
+
+  trans=$("${OBJDIR}"/bin/oocleanup -notitle "${AGENT_DIR}"/DATA/"${DBNAME}".boot | {
+    found=0
+    while read line
+    do
+      if [ $found -ne 0 ];
+      then
+        if [ "$line" = "" ];
+        then
+          break
+        else
+          echo $line | cut -d' ' -f1 | grep -E "[0-9]+"
+        fi
+      else
+        echo $line | grep -qE "^---------" && found=1
+      fi
+    done
+  })
+
+  #print "active transaction = \"$trans\""
+
+  id=0
+  for id in $trans
+  do
+    "${OBJDIR}"/bin/oocleanup \
+        -notitle \
+        -force \
+        -transaction $id \
+        -deadowner \
+        "${AGENT_DIR}"/DATA/"${DBNAME}".boot > /dev/null 2>&1 || \
+        exit 2
+  done
+fi
+
+######## DB LICENSE CHECK
+${AGENT_DIR}/SCRIPT/Q_CheckDBLic
+
+if [ $? -ne 0 ];
+then
+  echo "..application FULLNAME NOT started!"
+  echo "Check your DB License configuration!"
+  echo ""
+  exit 1
+fi
+######## end of DB LICENSE CHECK
+
+"${AGENT_DIR}"/BIN/monitorapp -p "${AGENT_DIR}"/CONF/app.ini 1> /dev/null 2>&1
+
+if [ $? -eq 0 ];
+then
+  echo "..application FULLNAME started with success!"
+  echo ""
+  exit 0
+else
+  echo "..application FULLNAME NOT started!"
+  echo ""
+  exit 1
+fi
+
+exit 0

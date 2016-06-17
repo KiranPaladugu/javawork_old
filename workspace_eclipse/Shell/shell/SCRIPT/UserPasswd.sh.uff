@@ -1,0 +1,102 @@
+#!/bin/sh
+
+###############################################################################
+#
+#  UserPasswd.sh
+#
+#  This script contains a browser management for the TMF users.
+#
+###############################################################################
+
+###############################################################################
+#
+# @(#) Revision: 1.01 "
+#
+# NOTE:    This script is not configurable!  Any changes made to this
+#          script will be overwritten when you upgrade to the next
+#          release of FULLNAME application.
+#
+# WARNING: Changing this script in any way may lead to all
+#          FULLNAME application.
+#          Do not modify this script.
+#
+###############################################################################
+
+######## Retrieves AGENT environmental variables
+if [ -e "ENV_FILE" ];
+then
+  . "ENV_FILE"
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+ROOT_DIR=AGENT_FULL_PATH
+LIB_DIR="${ROOT_DIR}"/LIB
+CONF_DIR="${ROOT_DIR}"/CONF
+SCRIPT_DIR="${ROOT_DIR}"/SCRIPT
+USERS_DIR="${ROOT_DIR}"/USERS
+
+if [[ -x /usr/bin/whoami ]]; then
+  if [[ $(/usr/bin/whoami) != "AGENT_USER" ]]; then
+    echo ""
+    echo "Sorry, you must be AGENT_USER user to run this script!"
+    echo "${Exiting}"
+    ExitVal="${Success}"
+    exit 1
+  fi
+fi
+
+cur_dir=$(pwd)
+cd "${SCRIPT_DIR}"
+
+JOPTS="-server"
+
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" -o "${curr_os}" = "Linux" ];
+then
+  sep=":"
+else
+  sep=";"
+fi
+
+if [ "${curr_os}" = "HP-UX" ];
+then
+  JOPTS="${JOPTS} -V2"
+fi
+
+JAVA_EXE="/opt/java1.6/jre/bin/java"
+
+if [ -x "${JAVA_HOME}/jre/bin/java" ];
+then
+  JAVA_EXE="${JAVA_HOME}/jre/bin/java"
+elif [ -x "${JAVA_HOME}/bin/java" ];
+then
+  JAVA_EXE="${JAVA_HOME}/bin/java"
+else
+  echo ""
+  echo "Cannot find java on your server!"
+  echo "Please check your installation"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+TMF_XP="."
+
+file_list=$(find "${LIB_DIR}" \( -type f -o -type l \) -name "*.jar" -print)
+for item in ${file_list};
+do
+  TMF_XP="${TMF_XP}${sep}${item}"
+done
+
+export TMF_XP
+
+"${JAVA_EXE}" ${JOPTS} -Dlog4j.configuration=file:"${CONF_DIR}"/log4j_um.xml -classpath "${TMF_XP}" com.marconi.fusion.tmf.usermgt.UserPasswd
+
+cd "${cur_dir}"
+
+exit $?

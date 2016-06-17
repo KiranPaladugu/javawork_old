@@ -1,0 +1,503 @@
+# ==============================================================================
+#
+#   TMF Agent Framework configuration file
+#
+# ==============================================================================
+
+##
+# agents to be started
+#com.marconi.fusion.tmf.TMFAgent = com.marconi.fusion.tmf.remote.server.TMFAgentRmi, \
+#				  com.ericsson.fusion.tmf.mtosi.MTOSIAgent
+#com.marconi.fusion.tmf.TMFAgent = 	  com.ericsson.fusion.tmf.mtosi.MTOSIAgent
+com.marconi.fusion.tmf.TMFAgent = com.marconi.fusion.tmf.mtnm.MTNMAgent
+
+# ==============================================================================
+#  Paths
+#
+# Framework.home set the home directory for framework installation
+# all remain paths are evaluated starting from that
+# es: Framework.home = E:/Develop/TMF814/TMF_V30_C2/TMF_V30_C2
+
+#Framework.home=D:/Devel/SIRIUS/SIRIUS_FORT/run
+Framework.home=@BASEDIR@
+Framework.log=${Framework.home}/LOG
+Framework.conf=${Framework.home}/CONF
+Framework.bin=${Framework.home}/BIN
+Framework.users=${Framework.home}/USERS
+Framework.data=${Framework.home}/DATA
+Framework.pmm=${Framework.home}/PERFORMANCE
+Framework.tmp=${Framework.home}/WORKING
+Framework.objectivity=${Framework.home}/DATA
+
+# ==============================================================================
+#
+#  Configuration
+#
+# ==============================================================================
+#com.marconi.fusion.tmf.tmfFramework.repository.LayeredParameterManager.configuration = ${Framework.conf}/
+#com.marconi.fusion.tmf.tmfFramework.repository.PMLocationManager.configuration = ${Framework.conf}/
+#com.marconi.fusion.tmf.tmfFramework.repository.GranularityManager.configuration = ${Framework.conf}/
+com.marconi.fusion.tmf.tmfFramework.repository.AdditionalInfoManager.configuration = ${Framework.conf}/AdditionalInfo.properties
+com.marconi.fusion.tmf.tmfFramework.repository.LayerRateManager.configuration = ${Framework.conf}/LayerRateManager.properties
+com.marconi.fusion.tmf.tmfFramework.db.ClassInformation.configuration = ${Framework.conf}/Notifications.properties
+com.marconi.fusion.tmf.mtnm.converter.TMF814Convertion.configuration = ${Framework.conf}/TMF814ConvertionRules.xml
+
+##
+# this flag allow proprietary LR to be used as input in operation:
+# otherwise a invalidInput exception will be thown
+# default true
+com.marconi.fusion.tmf.tmfFramework.repository.LayerRateManager.allowUnknownProprietaryLR = true
+##
+# this flag allow standard LR value not yet used to be used as input in operation:
+# otherwise a invalidInput exception will be thown
+# ie LR 998 is not yet used: using false an invalidInput exception will be throw using it as input
+# default false
+com.marconi.fusion.tmf.tmfFramework.repository.LayerRateManager.allowGapInStandard = false
+
+# ==============================================================================
+#
+#  Licensing configuration
+#
+# ==============================================================================
+Framework.cxc.license.file = ${Framework.conf}/License.cxc
+
+# ==============================================================================
+#
+#  EMS configuration
+#
+# ==============================================================================
+EMS = SO-Fusion
+
+EMS.name= ${EMS}
+EMS.vendor = Ericsson
+EMS.nativeName =
+EMS.version = 4.1
+EMS.type = NM
+## this is the version in session factory name component on name service
+EMS.idlVersion = 3.5
+
+# ==============================================================================
+#
+#  Plugin management
+#
+# ==============================================================================
+# Plugin properties to be specified here
+
+# specifies the implementation for plugin and its properties file
+# the default is com.marconi.fusion.tmf.tmfFramework.delegates.PlugIn
+com.marconi.fusion.tmf.plugIn.IPlugIn= com.marconi.fusion.tmf.orchestrator.plugIn.OrchestratorPlugIn
+#com.marconi.fusion.tmf.plugIn.IPlugIn.properties=${Framework.conf}/
+
+# specifies the implementation for session used by plugin
+# the default is com.marconi.fusion.tmf.tmfFramework.delegates.Session
+#com.marconi.fusion.tmf.plugIn.ISession =
+
+# ==============================================================================
+#
+#  User management
+#
+# ==============================================================================
+#EMS.users.defaultProfile = ${Framework.conf}/DefaultUserProfile.properties
+EMS.users.profilesDir = ${Framework.users}/${EMS.name}
+EMS.users.configFile = ${Framework.conf}/UserPasswd.properties
+##
+# enable/disable single logIn
+# if disabled a user can open more than 1 session
+# if enabled a user can open olny one session
+EMS.users.singleLogIn=false
+##
+# max number of users allowed
+# 0 means no users are allowed
+# -1 means no limit
+EMS.users.maxAllowed=100
+
+#EMS.users.profilesClass =
+
+# ==============================================================================
+#
+#  Database management
+#
+# ==============================================================================
+#com.marconi.fusion.tmf.db.Database = com.marconi.fusion.db.db4o.DB4ODatabase
+#com.marconi.fusion.tmf.db.Database.properties = ${Framework.conf}/DB4O.properties
+#com.marconi.fusion.tmf.db.Database.URL = file://localhost:0/${Framework.data}/${EMS.name}.yap
+
+#com.marconi.fusion.tmf.db.Database = com.marconi.fusion.db.cache.EhcacheDatabase
+#com.marconi.fusion.tmf.db.Database.properties = ${Framework.conf}/ehcache.xml
+#com.marconi.fusion.tmf.db.Database.URL = ${Framework.data}/
+
+#com.marconi.fusion.tmf.db.Database = com.marconi.fusion.db.jpa.JPADatabase
+#com.marconi.fusion.tmf.db.Database.properties =
+#com.marconi.fusion.tmf.db.Database.URL =
+
+com.marconi.fusion.tmf.db.Database = com.marconi.fusion.db.objectivity.ObjectivityDatabase
+com.marconi.fusion.tmf.db.Database.properties = ${Framework.conf}/Objectivity.properties
+com.marconi.fusion.tmf.db.Database.URL = ${Framework.objectivity}/SOO_TMF_DB.boot
+
+EMS.database.probe = no
+EMS.database.stats = no
+EMS.database.dump =
+#Ems,\
+#		    Subnetwork,\
+#		    ManagedElement,\
+#		    EquipmentHolder,\
+#		    Equipment,\
+#		    Ptp,\
+#		    Ftp,\
+#	    	    Ctp,\
+#		    CrossConnection
+
+# ==============================================================================
+#
+#  Other configuration
+#
+# ==============================================================================
+
+# specify how many session is possible to open (used by EMSSessionFactory)
+Framework.maxNumberOfSession = 100
+
+Framework.Iterators.numMaxIterators = 10
+Framework.Iterators.expiredTime = 2m
+Framework.Iterators.period = 6s
+
+Framework.heartbeatInterval = 10m
+Framework.heartbeatFailures = 3
+
+Framework.NMSSession.pingInterval = 60s
+Framework.NMSSession.pingFailures = 3
+
+Framework.CORBA.emsSessionFactory.IORFile=${Framework.log}/emsSessionFactory.ior
+Framework.CORBA.EventChannel.IORFile=${Framework.log}/EventChannel.ior
+Framework.CORBA.EventChannel.IDFile=${Framework.log}/EventChannel.id
+Framework.CORBA.EventChannel.service=NotificationService
+
+#Framework.CORBA.EventChannel.IORFile=${Framework.log}/eventChannel.ior
+#Framework.CORBA.EventChannel.QoS=EventReliability,ConnectionReliability,Priority,OrderPolicy,DiscardPolicy
+#Framework.CORBA.EventChannel.QoS.EventReliability=0
+#Framework.CORBA.EventChannel.QoS.ConnectionReliability=0
+#Framework.CORBA.EventChannel.QoS.Priority=0
+#Framework.CORBA.EventChannel.QoS.OrderPolicy=1
+#Framework.CORBA.EventChannel.QoS.DiscardPolicy=1
+
+# ==============================================================================
+#
+#  Notifications
+#
+# ==============================================================================
+
+##
+# events (alarm and TCA) will be kept in synch with the related resources
+# ie if the nativeEMSname changes subsequent gets on alarms/TCA will report the change
+# the same for monitoredAttributes if any
+# default: yes
+Framework.eventManagement.keepInSynch = yes
+
+
+com.marconi.fusion.tmf.tmfFramework.eventManagement.EventConsumerImpl.timeSlice = 5s
+com.marconi.fusion.tmf.tmfFramework.eventManagement.EventConsumerImpl.blockSize = 100
+
+##
+# specify the implementation for IEventConsumer interface
+# it MUST provide a costructor as
+# public EventManager(IEventConsumer consumer);
+# where the consumer is the actual event consumer used by framewor to dispatch events
+#
+# to completly disable the event management chain it is possible to use
+# com.marconi.fusion.tmf.plugIn.IEventConsumer = com.marconi.fusion.tmf.tmfFramework.eventManagement.NullEventManager
+
+com.marconi.fusion.tmf.plugIn.IEventConsumer = \
+	com.marconi.fusion.tmf.tmfFramework.eventManagement.EventMultiplexer,\
+	com.marconi.fusion.tmf.tmfFramework.eventManagement.EventManager
+
+com.marconi.fusion.tmf.tmfFramework.eventManagement.EventManager.timeSlice = 5s
+com.marconi.fusion.tmf.tmfFramework.eventManagement.EventManager.threshold = 100
+com.marconi.fusion.tmf.tmfFramework.eventManagement.EventManager.processor = \
+	com.marconi.fusion.tmf.tmfFramework.eventManagement.processors.TransactionalEventProcessor
+
+com.marconi.fusion.tmf.tmfFramework.eventManagement.processors.TransactionalEventProcessor.processor = \
+	com.marconi.fusion.tmf.tmfFramework.eventManagement.processors.EventProcessorChain
+
+com.marconi.fusion.tmf.tmfFramework.eventManagement.processors.EventProcessorChain.processors = \
+	com.marconi.fusion.tmf.tmfFramework.eventManagement.processors.NotificationIdAllocator, \
+	com.marconi.fusion.tmf.tmfFramework.eventManagement.processors.EventWriter, \
+	com.marconi.fusion.tmf.tmfFramework.eventManagement.processors.EventFilter
+
+##
+# Allow event filtering
+# all event specified will be processed and forwarded on
+# all event will be processed if this property is missing
+com.marconi.fusion.tmf.tmfFramework.eventManagement.processors.EventFilter.allowedEvents = \
+	objectCreation, \
+	objectDeletion, \
+	objectStateChange, \
+	objectAttributeValueChange, \
+	protectionSwitch, \
+	eProtectionSwitch, \
+	thresholdCrossed, \
+	alarm, \
+	fileTransferStatus, \
+	heartBeat, \
+	routeChange
+
+
+# force the notification for alarm ON event if the alarm is present on DB: default no
+#Framework.alarmManagement.forceAlarmOn = no
+# force the notification for alarm OFF even if the alarm is NOT present on DB: default no
+#Framework.alarmManagement.forceAlarmOff = no
+
+Framework.alarmManagement.correlatedNotifications = yes
+Framework.alarmManagement.correlatedNotifications.forceObjectName = no
+
+Framework.alarmManagement.ot_aid.monitoredAttributes =
+Framework.alarmManagement.ot_asap.monitoredAttributes =
+Framework.alarmManagement.ot_call.monitoredAttributes =
+Framework.alarmManagement.ot_connection.monitoredAttributes = userLabel, nativeEMSName
+Framework.alarmManagement.ot_connection_termination_point.monitoredAttributes = userLabel, nativeEMSName, edgePoint
+Framework.alarmManagement.ot_ems.monitoredAttributes = userLabel
+Framework.alarmManagement.ot_eprotection_group.monitoredAttributes =
+Framework.alarmManagement.ot_equipment.monitoredAttributes =
+Framework.alarmManagement.ot_equipment_holder.monitoredAttributes =
+Framework.alarmManagement.ot_floating_termination_point.monitoredAttributes = userLabel, nativeEMSName, edgePoint
+Framework.alarmManagement.ot_flow_domain.monitoredAttributes =
+Framework.alarmManagement.ot_flow_domain_fragment.monitoredAttributes =
+Framework.alarmManagement.ot_gtp.monitoredAttributes =
+Framework.alarmManagement.ot_managed_element.monitoredAttributes = userLabel, location, productName, nativeEMSName
+Framework.alarmManagement.ot_matrix_flow_domain.monitoredAttributes =
+Framework.alarmManagement.ot_multilayer_routing_area.monitoredAttributes =
+Framework.alarmManagement.ot_multilayer_snpp.monitoredAttributes =
+Framework.alarmManagement.ot_multilayer_snpplink.monitoredAttributes =
+Framework.alarmManagement.ot_multilayer_subnetwork.monitoredAttributes = userLabel, nativeEMSName
+Framework.alarmManagement.ot_physical_termination_point.monitoredAttributes = userLabel, edgePoint, nativeEMSName
+Framework.alarmManagement.ot_pmp.monitoredAttributes =
+Framework.alarmManagement.ot_protection_group.monitoredAttributes =
+Framework.alarmManagement.ot_subnetwork_connection.monitoredAttributes = userLabel, nativeEMSName
+Framework.alarmManagement.ot_tca_parameter_profile.monitoredAttributes =
+Framework.alarmManagement.ot_termination_point_pool.monitoredAttributes =
+Framework.alarmManagement.ot_topological_link.monitoredAttributes = userLabel, nativeEMSName
+Framework.alarmManagement.ot_traffic_conditioning_profile.monitoredAttributes =
+Framework.alarmManagement.ot_traffic_descriptor.monitoredAttributes =
+Framework.alarmManagement.ot_transmission_descriptor.monitoredAttributes =
+Framework.alarmManagement.pt_gtp.monitoredAttributes =
+
+# ==============================================================================
+#
+#  AdditionalInfo
+# Used to specify which additional info it is possible to Modify, Add or Delete (MAD)
+# the format is
+# Framework.modifiable.additionalInfo.objectType = [name.MAD]*
+# the action qualifiers stand for
+# A = add it is possible to add the value
+# M = it is possible to modify the value
+# D = it is possible to delete the value (specifying - as value)
+# ==============================================================================
+Framework.modifiable.additionalInfo.ot_aid =
+Framework.modifiable.additionalInfo.ot_asap =
+Framework.modifiable.additionalInfo.ot_call =
+Framework.modifiable.additionalInfo.ot_connection =
+Framework.modifiable.additionalInfo.ot_connection_termination_point = ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_ems = ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_eprotection_group = ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_equipment = ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_equipment_holder = ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_floating_termination_point = ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_flow_domain =
+Framework.modifiable.additionalInfo.ot_flow_domain_fragment =
+Framework.modifiable.additionalInfo.ot_gtp =
+Framework.modifiable.additionalInfo.ot_managed_element = ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_matrix_flow_domain =
+Framework.modifiable.additionalInfo.ot_multilayer_routing_area =
+Framework.modifiable.additionalInfo.ot_multilayer_snpp =
+Framework.modifiable.additionalInfo.ot_multilayer_snpplink =
+Framework.modifiable.additionalInfo.ot_multilayer_subnetwork =
+Framework.modifiable.additionalInfo.ot_physical_termination_point =
+Framework.modifiable.additionalInfo.ot_pmp =
+Framework.modifiable.additionalInfo.ot_protection_group = ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_subnetwork_connection = AlarmReporting.M, ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_tca_parameter_profile =
+Framework.modifiable.additionalInfo.ot_termination_point_pool =
+Framework.modifiable.additionalInfo.ot_topological_link = AlarmReporting.M, ASAPpointer.MAD
+Framework.modifiable.additionalInfo.ot_traffic_conditioning_profile =
+Framework.modifiable.additionalInfo.ot_traffic_descriptor =
+Framework.modifiable.additionalInfo.ot_transmission_descriptor =
+Framework.modifiable.additionalInfo.pt_gtp =
+
+# ==============================================================================
+#
+#  AVC / SC
+#
+# ==============================================================================
+com.marconi.fusion.tmf.tmfFramework.notifications.LayeredParameterListAVCEvaluator.parameterNames = \
+					AlarmReporting, \
+					ClientConnectivity, \
+					ClientType, \
+					ServerConnectivity, \
+					ServiceState, \
+					TCAParameterProfilePointer, \
+					TrailTraceActualTx, \
+					TrailTraceExpectedRx, \
+					TrailTraceMonitor, \
+					TransmissionDescriptorPointer, \
+					AllocatedNumber, \
+					ActiveAllocationNumberRx, \
+					ActiveAllocationNumberTx, \
+					DynamicAllocationEnabled, \
+					FrameFormat, \
+					LineCode, \
+					Mapping, \
+					SDH_SONET_SS_BITS, \
+					SignalLabelExpectedRx, \
+					TS0monitoring, \
+					MinNumTxLinks, \
+					MinNumRxLinks, \
+					NeTxClkMode, \
+					FeTxClkMode, \
+					NeTxClkSource, \
+					ClientRate, \
+					FrequencySpacing, \
+					FrequencySpread, \
+					MinClientRate, \
+					ThisLayerActive, \
+					TunedFrequency
+
+com.marconi.fusion.tmf.tmfFramework.notifications.LayeredParameterListSCEvaluator.parameterNames = \
+					OperationalStatus, \
+					NeState, \
+					FeState, \
+					FailureStatus
+
+com.marconi.fusion.tmf.tmfFramework.notifications.AdditionalInfoAVCEvaluator.parameterNames = \
+					AlarmReporting, \
+					AllocatedNumber, \
+					ASAPpointer, \
+					ClientConnectivity, \
+					ConformanceDefinition, \
+					ContainedMember, \
+					CorrelationId, \
+					DescriptionOfUse, \
+					EgressTMDstate, \
+					EquipmentProtected, \
+					FragmentServerLayer, \
+					IngressTMDstate, \
+					Manufacturer, \
+					MustRemoveGTPs, \
+					NetworkAccessDomain, \
+					NetworkReroute, \
+					ProtectionRole, \
+					ProtectionSchemeState, \
+					RouteActualState, \
+					RouteAdminState, \
+					RouteExclusive, \
+					RouteId, \
+					RouteIntended, \
+					RouteInUseBy, \
+					ServerConnectivity, \
+					SNC_PRIORITY, \
+					SNC_REVERTIVE
+
+com.marconi.fusion.tmf.tmfFramework.notifications.AdditionalInfoSCEvaluator.parameterNames =
+
+# ==============================================================================
+#
+#  Naming
+#
+# ==============================================================================
+
+# use it to modify the slot component for TP names
+# when the name is built from internal syntax
+Framework.naming.slotComponentInPTP.token = /slot=
+#Framework.naming.slotComponentInPTP.token = /slot=
+
+# ==============================================================================
+#
+#  Utilities
+#
+# ==============================================================================
+Framework.compression.gz = java.util.zip.GZIPOutputStream
+Framework.compression.Z = java.util.zip.ZipOutputStream
+
+# SE AGGIUNGIAMO DELLE COSE VANNO SCRITTE DA QUA IN GIU
+# == EOF =======================================================================
+
+# ==============================================================================
+#
+# CXF Configuration
+#
+# ==============================================================================
+Framework.mtosi.config.files = \
+        ${Framework.conf}/cxf.xml,\
+        ${Framework.conf}/endpoints-jms.xml,\
+        ${Framework.conf}/endpoints-http.xml
+
+# Uncomment and customize in order to launch activemq embedded in your application
+# and use a memory persistence adapter. The default behavior is to have it running outside
+# of the application, then these rows are commented.
+# com.ericsson.fusion.tmf.mtosi.ActiveMQConfigurer = com.ericsson.fusion.tmf.mtosi.ActiveMQEmbeddedConfigurer
+# com.ericsson.fusion.tmf.mtosi.ActiveMQEmbeddedConfigurer.connector.url=tcp://localhost:10361
+# com.ericsson.fusion.tmf.mtosi.ActiveMQEmbeddedConfigurer.connector.data=/opt/activemqdata
+
+# ==============================================================================
+#
+# AdditionalInfo - VendorExtention Configuration
+#
+# ==============================================================================
+AdditionalInfo_Activate=true
+
+# ==============================================================================
+#
+# PTP name control Configuration
+#
+# ==============================================================================
+CheckPortFormat=true
+# ==============================================================================
+#
+# OOJ Tree view web application configuration
+#
+# ==============================================================================
+com.ericsson.fusion.tmf.servlets.util.UniqueName = com.ericsson.fusion.tmf.servlets.util.ObjyUniqueName
+com.ericsson.fusion.tmf.servlets.util.Navigator = com.ericsson.fusion.tmf.servlets.util.NavigatorImpl
+com.ericsson.fusion.tmf.servlets.util.ObjectInfo = com.ericsson.fusion.tmf.servlets.util.ObjectInfoImpl
+# Session time to Live (in seconds)
+LoginManager.Session.TimeToLive=900
+LoginManager.Session.TimeBeforeExpiration=900
+
+# ==============================================================================
+#
+# MTOSIHandler - check header configuration
+# to disable check header set false
+# ==============================================================================
+# Check_Header=true
+
+# ==============================================================================
+#
+# Sleep time between different connection attempt to activeMQ
+#
+# ==============================================================================
+check_ActiveMQ=10000
+JmsTimeToLive=60000
+# ==============================================================================
+#
+# SRR ARR configuration path
+#
+# ==============================================================================
+Communication_Pattern_conf=${Framework.conf}/CommunicationPattern.properties
+# ==============================================================================
+#
+# Tca remove exception
+#
+# ==============================================================================
+PMP.ExceptionOnTcaRemoval=never
+# ==============================================================================
+#
+# ORCHESTRATOR
+#
+# =============================================================================
+# spcifies the property files to be taken when TMF runs over IPT-NMS Circuit
+#Orchestrator.PlugIn=${Framework.conf}/OrchestratorPlugin_NM.properties
+#Orchestrator.Manager=${Framework.conf}/OrchestratorManager_NM.properties
+
+# spcifies the property files to be taken when TMF runs over SO-EM
+Orchestrator.PlugIn=${Framework.conf}/OrchestratorPlugin.properties
+Orchestrator.Manager=${Framework.conf}/OrchestratorManager.properties
+
+# == EOF =======================================================================
+

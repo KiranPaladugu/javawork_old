@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="src" path="remainder"/>
+	<classpathentry kind="src" path="other"/>
+	<classpathentry kind="src" output="output" path="hangman"/>
+	<classpathentry kind="src" path="SCAP"/>
+	<classpathentry kind="src" output="brick" path="brickBreaker"/>
+	<classpathentry kind="src" path="JNote"/>
+	<classpathentry kind="src" path="samples"/>
+	<classpathentry kind="src" output="asdsd" path="JLogAnalyser"/>
+	<classpathentry kind="src" path="logserver"/>
+	<classpathentry kind="src" path="logClient"/>
+	<classpathentry kind="src" path="JFilesplitter"/>
+	<classpathentry kind="src" output="CPU" path="CPUUtils"/>
+	<classpathentry kind="src" output="iP_fact" path="ip"/>
+	<classpathentry kind="src" path="speech"/>
+	<classpathentry kind="src" path="swings"/>
+	<classpathentry kind="src" path="networking"/>
+	<classpathentry kind="src" path="xml"/>
+	<classpathentry kind="src" output="OLC" path="onLineChess"/>
+	<classpathentry kind="src" output="OCS" path="ocSever"/>
+	<classpathentry kind="src" path="dynamic"/>
+	<classpathentry kind="src" output="app" path="app"/>
+	<classpathentry kind="src" path="commons"/>
+	<classpathentry kind="src" path="newApp"/>
+	<classpathentry kind="src" output="bimp.bin" path="bimp"/>
+	<classpathentry kind="src" output="unres" path="UresolvedAlarmsReader"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="lib/poi-3.14-beta1-20151223.jar"/>
+	<classpathentry kind="lib" path="lib/poi-examples-3.14-beta1-20151223.jar"/>
+	<classpathentry kind="lib" path="lib/poi-excelant-3.14-beta1-20151223.jar"/>
+	<classpathentry kind="lib" path="lib/poi-ooxml-3.14-beta1-20151223.jar"/>
+	<classpathentry kind="lib" path="lib/poi-ooxml-schemas-3.14-beta1-20151223.jar"/>
+	<classpathentry kind="lib" path="lib/poi-scratchpad-3.14-beta1-20151223.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

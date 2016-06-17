@@ -1,0 +1,4 @@
+This command activate the automated backup procedure for the TMFAgent's
+database. 
+At the end of the procedure the backup file will be placed in the TMFAgent's 
+installation directory.

@@ -1,0 +1,2 @@
+This command activate the automated backup procedure for the TM Agent's Users.
+At the end of the procedure the backup file will be placed in the TM Agent's installation directory.

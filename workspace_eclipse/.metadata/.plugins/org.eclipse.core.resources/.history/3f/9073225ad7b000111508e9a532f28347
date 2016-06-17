@@ -1,0 +1,1096 @@
+package com.marconi.fusion.tmf.i36PlugIn.realignment;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.commons.lang.time.StopWatch;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.ericsson.oss.sbiadapter.converter.StepByStepConverter;
+import com.ericsson.oss.sbiadapter.converter.StepByStepConverter.TypeOfConversion;
+import com.marconi.fusion.X36.X36GetReportBshrProtection;
+import com.marconi.fusion.X36.X36GetReportNodeConfiguration;
+import com.marconi.fusion.X36.X36GetReportNodeCrossConnections;
+import com.marconi.fusion.X36.X36GetReportNodePossibleConfiguration;
+import com.marconi.fusion.X36.X36GetReportProtectionConfiguration;
+import com.marconi.fusion.X36.X36MatrixBehaviour;
+import com.marconi.fusion.X36.X36Message;
+import com.marconi.fusion.X36.X36MsSpringSupporting;
+import com.marconi.fusion.X36.X36MsgGetCollection;
+import com.marconi.fusion.X36.X36MsgGetDataProfiles;
+import com.marconi.fusion.X36.X36MsgGetNodePossibleConfiguration;
+import com.marconi.fusion.X36.X36MsgGetProtectionConfiguration;
+import com.marconi.fusion.X36.X36MsgGetReportBshrProtection;
+import com.marconi.fusion.X36.X36MsgGetReportNodeConfiguration;
+import com.marconi.fusion.X36.X36MsgGetReportNodeCrossConnections;
+import com.marconi.fusion.X36.X36MsgGetReportNodePossibleConfiguration;
+import com.marconi.fusion.X36.X36MsgGetReportProtectionConfiguration;
+import com.marconi.fusion.X36.X36MsgReportGetCollection;
+import com.marconi.fusion.X36.X36MsgReportGetDataProfiles;
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.X36.X36ReportGetDataProfiles;
+import com.marconi.fusion.X36.X36ReqId;
+import com.marconi.fusion.X36.X36RequestType;
+import com.marconi.fusion.X36.X36SetOfDataProfiles;
+import com.marconi.fusion.X36.X36SetOfNeId;
+import com.marconi.fusion.X36.X36SyntaxCode;
+import com.marconi.fusion.base.application.BaseApplication;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.asn1.ASN1Obj;
+import com.marconi.fusion.base.asn1.msg.FileMsgBerWriter;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.pipe.MsgClient;
+import com.marconi.fusion.base.pipe.MultiplePayloadCustomer;
+import com.marconi.fusion.base.util.FileUtils;
+import com.marconi.fusion.tmf.additionalInformation.EmSystemProfile;
+import com.marconi.fusion.tmf.additionalInformation.MEOwner;
+import com.marconi.fusion.tmf.db.DBException;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.Session;
+import com.marconi.fusion.tmf.i36PlugIn.I36PlugIn;
+import com.marconi.fusion.tmf.i36PlugIn.PluginUtility;
+import com.marconi.fusion.tmf.i36PlugIn.SBIClientI;
+import com.marconi.fusion.tmf.i36PlugIn.converter.NodeConverter;
+import com.marconi.fusion.tmf.i36PlugIn.performance.PerformanceProperties;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.adapter.support.PENPDMConverter;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEDnList;
+import com.marconi.fusion.tmf.plugIn.types.MEId;
+import com.marconi.fusion.tmf.utils.FileFastUtils;
+import com.marconi.fusion.tmf.utils.NumberGenerator;
+
+public class RealignerJob implements Runnable, MultiplePayloadCustomer<X36Message<?>> {
+	private static Log log = LogFactory.getLog(RealignerJob.class);
+	private RealignmentManager manager = null;
+	private X36NeId neId = null;
+	private MEDn meDn = null;
+	String emId = null;
+
+	/**
+	 * @return the meDn
+	 */
+	public MEDn getMeDn() {
+		return meDn;
+	}
+
+	public void setEmId(final String emId) {
+		this.emId = emId;
+	}
+
+	/**
+	 * @param meDn
+	 *            the meDn to set
+	 */
+	public void setMeDn(final MEDn meDn) {
+		this.meDn = meDn;
+		final MEId meId = meDn.getMe();
+		final X36NeId ne = sbiClient.getNaming().getNeId(meId);
+		neLocator = manager.getSBIClient().getNeLocator(meDn);
+		this.setNeId(ne);
+	}
+
+	private String neLocator = "";
+	private long timeout = 120000; // in millis
+	private final AtomicBoolean started = new AtomicBoolean(false);
+
+	/** the sbiClient that has to be used to send and receive a message */
+	SBIClientI sbiClient = null;
+
+	// private Properties equipmentProperties = null;
+
+	private X36GetReportNodeConfiguration nodeConfiguration = null;
+	private X36GetReportNodePossibleConfiguration nodePossibleConfiguration = null;
+	private X36GetReportNodeCrossConnections nodeCrossConnections = null;
+	private X36GetReportProtectionConfiguration nodeProtections = null;
+	private X36GetReportBshrProtection bshrProtections = new X36GetReportBshrProtection();
+	private X36ReportGetDataProfiles dataProfiles = null;
+
+	private File oldBerFile;
+
+	/* ************************************************************************** */
+	public RealignerJob(final RealignmentManager manager) {
+		this.manager = manager;
+		sbiClient = manager.getSBIClient();
+
+		// /**
+		// * leggo il file Equipment.properties
+		// */
+		// String fileName =
+		// manager.getSBIClient().getPlugIn().getProfile().getProperty(PluginProperty.equipmentInfo,
+		// "./EquipmentInfo.properties");
+		// //Properties properties = new Properties();
+		//
+		// try {
+		// //properties.load(new FileInputStream(fileName));
+		// this.equipmentProperties = Utility.getProperties(fileName);
+		// //this.properties = properties;
+		// } catch (Exception ex) {
+		// log.error(ex.getMessage());
+		// }
+	}
+
+	/* ************************************************************************** */
+	public X36NeId getNeId() {
+		return neId;
+	}
+
+	/* ************************************************************************** */
+
+	public void setNeId(final X36NeId neId) {
+		this.neId = neId; /*
+						 * MEId id = manager.getSBIClient().getSbiConverter().getNaming ().makeMEId(neId); meId =
+						 * TmfNameUtilities.toString(id);
+						 */
+	}
+
+	@Override
+	public String toString() {
+		if (neLocator != null) {
+			return neLocator;
+		}
+		return super.toString();
+	}
+
+	/**
+	 * @return the neLocator
+	 */
+	public String getNeLocator() {
+		return neLocator;
+	}
+
+	/* ************************************************************************** */
+	public long getTimeout() {
+		return timeout;
+	}
+
+	/* ************************************************************************** */
+	public void setTimeout(final long timeout) {
+		this.timeout = timeout;
+	}
+
+	/* ************************************************************************** */
+	public boolean isStarted() {
+		return started.get();
+	}
+
+	/* ************************************************************************** */
+	// public void shutdown() {
+	// shuttedDown.set(true);
+	// }
+
+	/* ************************************************************************** */
+	@Override
+	public void run() {
+		final StopWatch watch = new StopWatch();
+		watch.start();
+
+		manager.realignStarted(meDn);
+
+		log.info(String.format("Realignment for ME <%s>: start...", neLocator));
+		boolean success = false;
+		String cause = "";
+		try {
+
+			started.set(true);
+
+			success = doWork();
+		} catch (final Exception e) {
+			log.error(new DumpInfo(String.format("Realignment for ME <%s> ended with exception...", neLocator), e));
+			cause = e.getMessage();
+		} finally {
+			watch.stop();
+
+			if (log.isInfoEnabled()) {
+				log.info(String.format("Realignment for ME <%s>: done with %s in %s", neLocator,
+						(success ? "SUCCESS" : "FAILURE"), watch.toString()));
+			}
+
+			((MsgClient<X36Message<? extends ASN1Obj>>) sbiClient.getSbi(meDn)).flushPendingRequest();
+
+			manager.realignEnded(meDn, success, cause);
+
+			if (log.isDebugEnabled()) {
+				log.debug(String.format("RealignerJob for ME <%s> exiting...", neLocator));
+			}
+		}
+		// synchronized (shuttedDown) {
+		// shuttedDown.wait();
+		// }
+		// }
+		// } catch (InterruptedException e) {
+		// } catch (Exception e) {
+		// log.error(new DumpInfo("Exception in realigner job...", e));
+		// }
+	}
+
+	/* ************************************************************************** */
+	@Override
+	public boolean hasMore(final X36Message<?> evt) {
+		return false;
+	}
+
+	/* ************************************************************************** */
+	protected boolean doWork() {
+		log.trace(String.format("Entering doWork for ME <%s>", neLocator));
+
+		boolean ret = false;
+		if (BaseApplication.getApplication().getCommandLine().hasOption("readBer")) {
+			ret = collectMessagesFromBER();
+		} else {
+			ret = collectMessages();
+		}
+		if (ret == false) {
+			log.warn(String.format("Something went wrong collecting messages for <%s>", neLocator));
+			return false;
+		}
+		if (log.isDebugEnabled()) {
+			log.debug(String.format("Ready to convert messages into objects to realign ME <%s>", neLocator));
+		}
+		final String hostName = sbiClient.getHostName(meDn, false);
+		final NodeConverter converter = new NodeConverter(manager.getSBIClient(), hostName);
+		try {
+			/*
+			 * During BER realignment from the older versions of TMFv2.2, TMF3.2 and TMF3.3 the dataProfiles does not exist. For
+			 * this reason a null check is required.
+			 */
+			X36SetOfDataProfiles x36DataProfiles = null;
+			if (dataProfiles != null) {
+				x36DataProfiles = dataProfiles.getSupportedProfiles();
+			}
+			converter.process(nodeConfiguration, nodePossibleConfiguration, nodeCrossConnections.getCrossConnections(),
+					nodeProtections.getProtectionInfo(), bshrProtections, x36DataProfiles, hostName);
+			createRealignedBer();
+		} catch (final Exception e) {
+			log.error(new DumpInfo("Unable to realign ne <" + neId.getValue() + ">", e));
+			return false;
+		}
+		if (log.isDebugEnabled()) {
+			log.debug(String.format("Convertion of messages into objects to realign ME <%s> done.", neLocator));
+		}
+		if (log.isTraceEnabled()) {
+			log.trace(String.format("Exiting doWork for <%s>", neLocator));
+		}
+		return true;
+	}
+
+	/* ************************************************************************** */
+	protected boolean collectMessages() {
+		if (log.isTraceEnabled()) {
+			log.trace(String.format("Entering collectMessages for ME <%s>", neLocator));
+		}
+
+		final Profile profile = manager.getSBIClient().getProfile();
+		// ((RealignerJob)
+		// SBIContainer.instance().getAllSbi().get(0)).setTimeout(timeout);
+		final List<X36Message<?>> responseList = new ArrayList<X36Message<?>>();
+
+		try {
+			final StopWatch watch = new StopWatch();
+			watch.start();
+
+			log.info(String.format("Collecting messages to realign ME <%s>", neLocator));
+
+			/**
+			 * Fix for TR HO89451.
+			 * 
+			 * The current behaviour is adapted to “If the compliance is failed for any message, the realignment would be
+			 * terminated with failure”, TMF should verify each message compliance as soon as the response is received and in case
+			 * of failure:
+			 * 
+			 * a. write the BER file with the messages received until that point b. make fail the realignment immediately, without
+			 * sending the remaining requests
+			 */
+
+			// Get Node Configuration
+			final X36MsgGetReportNodeConfiguration nodeConfigResp = getNodeConfiguration();
+			responseList.add(nodeConfigResp);
+
+			if (!assignMsg(nodeConfigResp)) {
+				// Writes Messages into BER File
+				writeBERMessages(profile, responseList);
+				return false;
+			}
+
+			// Get Data Profiles
+			final X36MsgReportGetDataProfiles dataProfilesResp = getDataProfiles();
+			responseList.add(dataProfilesResp);
+
+			if (!assignMsg(dataProfilesResp)) {
+				// Writes Messages into BER File
+				writeBERMessages(profile, responseList);
+				return false;
+			}
+
+			// Get Node Possible Configuration
+			if (!manager.isStartUpGetNodePossibleConfiguration()) {
+				final List<X36MsgGetReportNodePossibleConfiguration> nodePossibleConfigResp = getNodePossibleConfiguration();
+				responseList.addAll(nodePossibleConfigResp);
+
+				if (nodePossibleConfigResp.size() > 0 && !assignMsg(nodePossibleConfigResp.get(0))) {
+					// Writes Messages into BER File
+					writeBERMessages(profile, responseList);
+					return false;
+				}
+			}
+
+			// Get Node Cross Connections
+			final X36MsgGetReportNodeCrossConnections nodeXConnResp = getNodeCrossConnection();
+			responseList.add(nodeXConnResp);
+
+			if (!assignMsg(nodeXConnResp)) {
+				// Writes Messages into BER File
+				writeBERMessages(profile, responseList);
+				return false;
+			}
+
+			// Get Protection Configuration
+			final X36MsgGetReportProtectionConfiguration protConfResp = getNodeProtectionsConfiguration();
+			responseList.add(protConfResp);
+
+			if (!assignMsg(protConfResp)) {
+				// Writes Messages into BER File
+				writeBERMessages(profile, responseList);
+				return false;
+			}
+
+			/**
+			 * Recupero le informazioni sulle Collection per ora solo per metterle nel file di BER
+			 */
+			final boolean flag = profile.getBoolProperty(I36PlugIn.PluginProperty.realignmentCollection, true);
+
+			// Get Node Collection
+			final X36MsgReportGetCollection nodeCollectionResp = processNodeCollection(flag);
+			if (nodeCollectionResp != null) {
+				responseList.add(nodeCollectionResp);
+
+				if (!assignMsg(nodeCollectionResp)) {
+					// Writes Messages into BER File
+					writeBERMessages(profile, responseList);
+					return false;
+				}
+			}
+
+			// Get Bshr Protection
+			final X36MsgGetReportBshrProtection bshrProtectionResp = processBshrProtection(nodeConfigResp);
+			if (bshrProtectionResp != null) {
+				responseList.add(bshrProtectionResp);
+
+				if (!assignMsg(bshrProtectionResp)) {
+					// Writes Messages into BER File
+					writeBERMessages(profile, responseList);
+					return false;
+				}
+			}
+
+			/*
+			 * se la funzionalita' e' abilitata genero un file di BER per ogni ME da usare con IANUS
+			 */
+
+			// Writes Messages into BER File here, when all message Compliances
+			// are OK
+			writeBERMessages(profile, responseList);
+
+			if (nodeConfiguration == null && nodeCrossConnections == null && nodeProtections == null) {
+				log.error(String.format("Unable to realign NE <%s> may be because BER file is not written properly or "
+						+ "unable to get response from SO-EM", neLocator));
+				return false;
+			}
+			if (nodeConfiguration == null || nodeCrossConnections == null || nodeProtections == null) {
+				log.error(String.format("Unable to realign NE <%s> may be because BER file is not written properly or "
+						+ "unable to get response from SO-EM", neLocator));
+				return false;
+			}
+
+			watch.stop();
+
+			log.info(String.format("Collected %d messages to realign ME <%s> in %s", responseList.size(), neLocator,
+					watch.toString()));
+
+			return true;
+		} catch (final Exception e) {
+			log.error(new DumpInfo(String.format("Unable to collect messages for ME <%s>.", neLocator), e));
+		} finally {
+			((MsgClient<X36Message<? extends ASN1Obj>>) sbiClient.getSbi(meDn)).flushPendingRequest();
+			if (log.isTraceEnabled()) {
+				log.trace(String.format("Exiting collectMessages for ME <%s>", neLocator));
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * This method opens the BER File and writes all Successful Messages (Compliance OK Messages) into BER File
+	 * 
+	 * @param profile
+	 *            - Profile
+	 * @param responseList
+	 *            - List<X36Message<?>>
+	 */
+	private void writeBERMessages(final Profile profile, final List<X36Message<?>> responseList) {
+		FileMsgBerWriter<X36Message<?>> writer = null;
+		try {
+			final String fileName = profile.getProperty(I36PlugIn.PluginProperty.realignmentBerHome);
+			writer = getFileMsgBerWriter(fileName);
+			if (writer != null) {
+				writeBER(writer, responseList);
+			}
+		} catch (final Exception e) {
+			log.error(new DumpInfo(String.format("Unable to write BER messages for ME <%s>.", neLocator), e));
+		} finally {
+			if (writer != null) {
+				try {
+					writer.close();
+				} catch (final Exception e) {
+					log.error(new DumpInfo("unable to close Writer object ", e));
+				}
+			}
+		}
+	}
+
+	/**
+	 * Check if this node support bshr (mspring) configuration.
+	 * 
+	 * @param nodeConfiguration
+	 *            the node configuration
+	 * @return true if this node support bshr configuration.
+	 */
+	private boolean supportBshr(final X36GetReportNodeConfiguration nodeConfiguration) {
+		if (nodeConfiguration.getNetworkElement().getNeInfo().isPresentMatrixBehaviour()) {
+			final X36MatrixBehaviour matrixBehaviour = nodeConfiguration.getNetworkElement().getNeInfo().getMatrixBehaviour();
+			final X36MsSpringSupporting msFourFiberSpringSupporting = matrixBehaviour.getMsFourFiberSpringSupporting();
+			final X36MsSpringSupporting msTwoFiberSpringSupporting = matrixBehaviour.getMsTwoFiberSpringSupporting();
+			return msFourFiberSpringSupporting.getValue() || msTwoFiberSpringSupporting.getValue();
+		}
+		return false;
+	}
+
+	private void createRealignedBer() {
+		final Profile profile = sbiClient.getProfile();
+		final String fileName = profile.getProperty(I36PlugIn.PluginProperty.realignmentBerHome);
+		// FileMsgBerWriter<X36Message<?>> writer = null;
+
+		if (fileName != null) {
+			final File file = new File(fileName);
+			file.mkdirs();
+			final String meNm = FileUtils.normalize(emId) + "_" + neId.getValue() + "_"
+					+ manager.getSBIClient().getX36Version().replace(".", "_") + ".ber";
+			if (meNm != null) {
+				final String source = fileName + File.separator + meNm;
+				final String target = source + ".realigned";
+				try {
+					FileFastUtils.copy(source, target);
+				} catch (final IOException e) {
+					log.warn(String.format("Unable to copy BER: source file <%s>, target file <%s>, reason: <%s>", source,
+							target, e.getMessage()));
+				}
+			}
+		}
+
+	}
+
+	/**
+	 * This method is to read X36 response messages required for realignment from the BER files.
+	 * 
+	 * @return
+	 */
+	private boolean collectMessagesFromBER() {
+		if (log.isTraceEnabled()) {
+			log.trace(String.format("Entering collectMessagesFromBER for ME <%s>", neLocator));
+		}
+		final Profile profile = manager.getSBIClient().getProfile();
+		StepByStepConverter stepByStepConverter = null;
+		String msgFactoryClsStr = null;
+		boolean isLatestX36Version = true;
+		int currentX36Index = 0;
+
+		try {
+			final int latestX36Index = Integer.parseInt(sbiClient.getProfile().getProperty(
+					I36PlugIn.PluginProperty.latestX36Index, "0"));
+			final String berLoc = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.realignmentBerHome);
+			final StringBuffer emId_neId = new StringBuffer(emId.replace(':', '_'));
+			emId_neId.append("_" + neId.getValue());
+			if (berLoc != null) {
+				final File ber = new File(berLoc);
+				final File[] berFiles = ber.listFiles();
+				if (berFiles != null) {
+					currentX36Index = checkForCurrentX36Version(berFiles, emId_neId);
+				} else {
+					return false;
+				}
+			}
+			final String syntaxSeperator = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.x36SyntaxSeparator, "_");
+
+			if (currentX36Index != latestX36Index) {
+				isLatestX36Version = false;
+				stepByStepConverter = new StepByStepConverter(latestX36Index, currentX36Index, syntaxSeperator,
+						TypeOfConversion.X36, sbiClient.getProfile().getProperty(PENPDMConverter.ROOT_DIR));
+
+				// Getting the MessageFactory according to the version of X36
+				// Build the message factory class string
+				msgFactoryClsStr = "com.marconi.fusion.X36" + syntaxSeperator + (currentX36Index - latestX36Index)
+						+ ".X36MessageFactory";
+			}
+			final BERReader berReader = new BERReader(stepByStepConverter);
+			List<X36Message<?>> x36MsgsList = new ArrayList<X36Message<?>>();
+			if (sbiClient.isStandAlone()) {
+				x36MsgsList = berReader.getMessages(berLoc, msgFactoryClsStr, isLatestX36Version, neId, emId);
+			} else {
+				log.debug("Getting messages from BER reader for NM mode");
+
+				try {
+
+					x36MsgsList = berReader.getMessages(berLoc, msgFactoryClsStr, isLatestX36Version, neId, emId);
+					log.debug("Successfully finished reading messages from BER for NM mode");
+				} catch (final DBException e) {
+					log.error(new DumpInfo(e, "Cannot get messages for the ME: " + meDn.getMe().getValue()));
+				}
+			}
+
+			if (!x36MsgsList.isEmpty() && assignMsgs(x36MsgsList)) {
+				writeBERMessages(profile, x36MsgsList);
+				if (currentX36Index != latestX36Index) {
+					oldBerFile.delete();
+				}
+				return true;
+			}
+		} catch (final Exception e) {
+			log.error(new DumpInfo(String.format("Unable to collect messages from BER file, for ME <%s>.", neLocator), e));
+			return false;
+		}
+		return false;
+	}
+
+	/**
+	 * @param responseList
+	 * @return true - If all response messages are properly received and compliance for all responses is Ok false - If any of the
+	 *         response message is null or compliance for the response is notOK.
+	 */
+	private boolean assignMsgs(final List<X36Message<?>> responseList) {
+		log.info(String.format("Ready to dequeue %d response messages for ME <%s> (timeout = %d)", responseList.size(),
+				neLocator, timeout));
+		for (int resp = 0; resp < responseList.size(); resp++) {
+			ASN1Obj body = null;
+			try {
+				final X36Message<?> message = responseList.get(resp);
+				if (message == null) {
+					continue;
+				}
+				body = message.getBody();
+
+				printLog(body, resp + 1, responseList.size());
+
+				try {
+					PluginUtility.checkForCompliance(body);
+				} catch (final PlugInException e) {
+					log.error(new DumpInfo(body, String.format("Compliance NOT OK in <%s> for ME <%s>.", body.getClass()
+							.getSimpleName(), neLocator), e));
+					return false;
+				}
+				fillX36BodySyntax(body);
+			} catch (final ClassCastException e) {
+				log.error("Unable to cast message " + body.getClass().getName(), e);
+				return false;
+			}
+		}
+
+		if (nodeConfiguration == null && nodeCrossConnections == null && nodeProtections == null) {
+			log.error(String
+					.format("Unable to realign NE <%s> may be because BER file is not written properly or unable to get response from SO-EM",
+							neLocator));
+			return false;
+		}
+		if (nodeConfiguration == null || nodeCrossConnections == null || nodeProtections == null) {
+			log.error(String
+					.format("Unable to realign NE <%s> may be because BER file is not written properly or unable to get response from SO-EM",
+							neLocator));
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * This method checks the Compliance of the Response Message and returns 'false' if Compliance is not OK. If Compliance is OK,
+	 * the corresponding X36 body syntax is filled and returns 'true'.
+	 * 
+	 * @param resMessage
+	 *            - X36Message<?>
+	 * @return boolean
+	 */
+	private boolean assignMsg(final X36Message<?> resMessage) {
+		if (resMessage != null) {
+			log.info(String.format("Ready to dequeue <%s> response message for ME <%s> (timeout = %d)", resMessage.getClass()
+					.getSimpleName(), neLocator, timeout));
+			ASN1Obj body = null;
+			try {
+				body = resMessage.getBody();
+
+				if (log.isDebugEnabled()) {
+					log.debug(new DumpInfo(body, String.format("Got response <%s> for ME <%s>", body.getClass().getSimpleName(),
+							neLocator)));
+				} else if (log.isInfoEnabled()) {
+					log.info(String.format("Got response <%s> for ME <%s>", body.getClass().getSimpleName(), neLocator));
+				}
+
+				try {
+					PluginUtility.checkForCompliance(body);
+				} catch (final PlugInException e) {
+					log.error(new DumpInfo(body, String.format("Compliance NOT OK in <%s> for ME <%s>.", body.getClass()
+							.getSimpleName(), neLocator), e));
+					return false;
+				}
+				fillX36BodySyntax(body);
+			} catch (final ClassCastException e) {
+				log.error("Unable to cast message " + body.getClass().getName(), e);
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * This method prints the message log information
+	 * 
+	 * @param body
+	 *            - message body
+	 * @param resp
+	 *            - response number
+	 * @param responseListSize
+	 *            - Size of the responseList
+	 */
+	private void printLog(final ASN1Obj body, final int resp, final int responseListSize) {
+		if (log.isDebugEnabled()) {
+			log.debug(new DumpInfo(body, String.format("Got response <%s> %d/%d for ME <%s>", body.getClass().getSimpleName(),
+					resp, responseListSize, neLocator)));
+		} else if (log.isInfoEnabled()) {
+			log.info(String.format("Got response <%s> %d/%d for ME <%s>", body.getClass().getSimpleName(), resp,
+					responseListSize, neLocator));
+		}
+	}
+
+	/**
+	 * This method fills the corresponding X36 entities
+	 * 
+	 * @param body
+	 *            - message body
+	 * @throws ClassCastException
+	 */
+	private void fillX36BodySyntax(final ASN1Obj body) throws ClassCastException {
+		final int code = body.asn1Code();
+		switch (code) {
+		case X36SyntaxCode.X36GetReportNodeConfiguration:
+			nodeConfiguration = (X36GetReportNodeConfiguration) body;
+			break;
+
+		case X36SyntaxCode.X36GetReportNodePossibleConfiguration:
+			nodePossibleConfiguration = (X36GetReportNodePossibleConfiguration) body;
+			break;
+
+		case X36SyntaxCode.X36GetReportNodeCrossConnections:
+			nodeCrossConnections = (X36GetReportNodeCrossConnections) body;
+			break;
+
+		case X36SyntaxCode.X36GetReportProtectionConfiguration:
+			nodeProtections = (X36GetReportProtectionConfiguration) body;
+			break;
+
+		case X36SyntaxCode.X36GetReportBshrProtection:
+			bshrProtections = (X36GetReportBshrProtection) body;
+			break;
+
+		case X36SyntaxCode.X36ReportGetCollection:
+			break;
+
+		case X36SyntaxCode.X36ReportGetDataProfiles:
+			dataProfiles = (X36ReportGetDataProfiles) body;
+			break;
+
+		default:
+			log.warn("Unexpected message");
+		}
+	}
+
+	/**
+	 * Query is made to retreive X36MsgGetReportNodeConfiguration.
+	 * 
+	 * @param responseList
+	 * @throws Exception
+	 */
+	private X36MsgGetReportNodeConfiguration getNodeConfiguration() throws Exception {
+		/*
+		 * final X36MsgGetNodeConfiguration nodeConf = new X36MsgGetNodeConfiguration(); nodeConf.getBody().setNeId(neId);
+		 * nodeConf.getBody().setPresentGetFullEquipmentModel(); nodeConf.getBody().setPresentGetFullSlotConfiguration();
+		 * nodeConf.getBody().setReqId(NumberGenerator.getReqId()); if (log.isDebugEnabled()) { log.debug(new DumpInfo(nodeConf,
+		 * String.format("Requesting node configuration for ME <%s>", neLocator))); } else {
+		 * log.info(String.format("Requesting node configuration for ME <%s>", neLocator)); }
+		 */
+		/*
+		 * To send GetBshrProtection request, X36MsgGetReportNodeConfiguration is needed. So, saving the report in a local
+		 * variable
+		 */
+		final long timeout = sbiClient.getProfile().getTimeProperty(I36PlugIn.PluginProperty.realignmentMsgTimeout, 120000);
+		sbiClient.getMessageHandler().setTimeout(timeout);
+		final X36MsgGetReportNodeConfiguration response = sbiClient.getMessageHandler().getNodeConfigurationImpl(meDn);
+		return response;
+	}
+
+	/**
+	 * Query is made to retreive X36MsgGetReportNodePossibleConfiguration.
+	 * 
+	 * @throws Exception
+	 */
+	private List<X36MsgGetReportNodePossibleConfiguration> getNodePossibleConfiguration() throws Exception {
+		final X36MsgGetNodePossibleConfiguration nodePossibleConf = new X36MsgGetNodePossibleConfiguration();
+		final X36SetOfNeId setOfNeId = new X36SetOfNeId();
+		final MEDnList meDnList = new MEDnList();
+		new X36RequestType();
+		final MEId meId = meDn.getMe();
+		meDnList.add(meDn);
+		final X36NeId neId = sbiClient.getNaming().getNeId(meId);
+		setOfNeId.add(neId);
+		nodePossibleConf.getBody().setNeIdList(setOfNeId);
+		nodePossibleConf.getBody().setReqId(NumberGenerator.getReqId());
+		if (log.isDebugEnabled()) {
+			log.debug(new DumpInfo(nodePossibleConf, String.format("Requesting node possible configuration for ME <%s>",
+					neLocator)));
+		} else {
+			log.info(String.format("Requesting node possible configuration for ME <%s>", neLocator));
+		}
+
+		final long timeout = sbiClient.getProfile().getTimeProperty(I36PlugIn.PluginProperty.realignmentMsgTimeout, 120000);
+		sbiClient.getMessageHandler().setTimeout(timeout);
+		/*
+		 * To send GetBshrProtection request, X36MsgGetReportNodepossibleConfiguration is needed. So, saving the report in a local
+		 * variable
+		 */
+		final List<X36MsgGetReportNodePossibleConfiguration> response = sbiClient.getMessageHandler()
+				.getNodePossibleConfiguration(nodePossibleConf, meDnList);
+		return response;
+
+	}
+
+	/**
+	 * Query is made to get X36MsgReportGetDataProfiles
+	 * 
+	 * @return X36MsgReportGetDataProfiles
+	 * @throws Exception
+	 */
+	private X36MsgReportGetDataProfiles getDataProfiles() throws Exception {
+		/*
+		 * To send GetDataProfiles request, X36MsgReportGetDataProfiles is needed. So, saving the report in a local variable
+		 */
+		final X36MsgGetDataProfiles dataProfiles = new X36MsgGetDataProfiles();
+		Session session = null;
+		String hostName = null;
+		final X36RequestType requestType = new X36RequestType();
+		final MEId meId = meDn.getMe();
+		final X36NeId neId = sbiClient.getNaming().getNeId(meId);
+		try {
+			session = sbiClient.getDbManager().beginSession(false);
+			final DBManagedElement dbME = sbiClient.getDbManager().getManagedElement(meDn);
+
+			if (sbiClient.isStandAlone()) {
+				hostName = sbiClient.getHostName();
+
+			} else {
+				final EmSystemProfile emSystemProfile = sbiClient.getEmSystemProfile(dbME);
+				if (emSystemProfile != null) {
+					hostName = emSystemProfile.getSyntax().getHostId().getValue();
+				}
+			}
+			final MEOwner meOwner = (MEOwner) dbME.getAdditionalInformation(MEOwner.NAME);
+			sbiClient.getMessageHandler().getRequesttype(meOwner, requestType);
+
+		} catch (final Exception e) {
+			log.error(e);
+		} finally {
+			if (session != null) {
+				session.terminate();
+				session = null;
+			}
+		}
+
+		dataProfiles.getBody().setJobId(NumberGenerator.getReqId());
+		dataProfiles.getBody().setNeId(neId);
+		dataProfiles.getBody().setRequestType(requestType);
+		if (log.isDebugEnabled()) {
+			log.debug(new DumpInfo(dataProfiles, String.format("Requesting getDataProfiles for ME <%s>", neLocator)));
+		} else {
+			log.info(String.format("Requesting getDataProfiles for ME <%s>", neLocator));
+		}
+		final long timeout = sbiClient.getProfile().getTimeProperty(I36PlugIn.PluginProperty.realignmentMsgTimeout, 120000);
+		sbiClient.getMessageHandler().setTimeout(timeout);
+		final X36MsgReportGetDataProfiles response = sbiClient.getMessageHandler().getDataProfiles(dataProfiles, hostName);
+		return response;
+	}
+
+	/**
+	 * Query is made to retreive X36MsgGetReportNodeCrossConnections
+	 * 
+	 * @return X36MsgGetReportNodeCrossConnections
+	 * @throws Exception
+	 */
+	private X36MsgGetReportNodeCrossConnections getNodeCrossConnection() throws Exception {
+		X36MsgGetReportNodeCrossConnections response;
+		/*
+		 * final X36MsgGetNodeCrossConnections nodeCross = new X36MsgGetNodeCrossConnections();
+		 * 
+		 * nodeCross.getBody().setNeId(neId); nodeCross.getBody().setReqId(NumberGenerator.getReqId());
+		 * 
+		 * if (log.isDebugEnabled()) { log.debug(new DumpInfo(nodeCross,
+		 * String.format("Requesting node crossConnections for ME <%s>", neLocator))); } else {
+		 * log.info(String.format("Requesting node crossConnections for ME <%s>" , neLocator)); }
+		 */
+		// response = ((X36MsgClient)
+		// SBIContainer.instance().getAllSbi().get(0)).request(nodeCross);
+		final long timeout = sbiClient.getProfile().getTimeProperty(I36PlugIn.PluginProperty.realignmentMsgTimeout, 120000);
+		sbiClient.getMessageHandler().setTimeout(timeout);
+		response = sbiClient.getMessageHandler().getNodeCrossConnectionsImpl(meDn);
+
+		return response;
+	}
+
+	/**
+	 * Query is made to retreive X36MsgGetReportProtectionConfiguration
+	 * 
+	 * @return X36MsgGetReportProtectionConfiguration
+	 * @throws Exception
+	 */
+	private X36MsgGetReportProtectionConfiguration getNodeProtectionsConfiguration() throws Exception {
+		X36MsgGetReportProtectionConfiguration response;
+		final X36MsgGetProtectionConfiguration nodeProtection = new X36MsgGetProtectionConfiguration();
+
+		final X36RequestType requestType = new X36RequestType();
+		final MEId meId = meDn.getMe();
+		final X36NeId neId = sbiClient.getNaming().getNeId(meId);
+		Session session = null;
+		String hostName = null;
+		try {
+			session = sbiClient.getDbManager().beginSession(false);
+			final DBManagedElement dbME = sbiClient.getDbManager().getManagedElement(meDn);
+			if (sbiClient.isStandAlone()) {
+				hostName = sbiClient.getHostName();
+			} else {
+				final EmSystemProfile emSystemProfile = sbiClient.getEmSystemProfile(dbME);
+				if (emSystemProfile != null) {
+					hostName = emSystemProfile.getSyntax().getHostId().getValue();
+				}
+			}
+			final MEOwner meOwner = (MEOwner) dbME.getAdditionalInformation(MEOwner.NAME);
+
+			sbiClient.getMessageHandler().getRequesttype(meOwner, requestType);
+
+		} catch (final Exception e) {
+			log.error(e);
+		} finally {
+			if (session != null) {
+				session.terminate();
+				session = null;
+			}
+		}
+		nodeProtection.getBody().setNeId(neId);
+		nodeProtection.getBody().setReqId(NumberGenerator.getReqId());
+		nodeProtection.getBody().setRequestType(requestType);
+
+		if (log.isDebugEnabled()) {
+			log.debug(new DumpInfo(nodeProtection, String.format("Requesting node protection for ME <%s>", neLocator)));
+		} else {
+			log.info(String.format("Requesting node protection for ME <%s>", neLocator));
+		}
+		final long timeout = sbiClient.getProfile().getTimeProperty(I36PlugIn.PluginProperty.realignmentMsgTimeout, 120000);
+		sbiClient.getMessageHandler().setTimeout(timeout);
+		response = sbiClient.getMessageHandler().getProtectionConfiguration(nodeProtection, hostName);
+		return response;
+	}
+
+	/**
+	 * NodeCollection request is processed
+	 * 
+	 * @param responseList
+	 * @param flag
+	 * @throws Exception
+	 */
+	private X36MsgReportGetCollection processNodeCollection(final boolean flag) throws Exception {
+		if (flag) {
+			final X36MsgGetCollection nodeCollection = new X36MsgGetCollection();
+
+			final X36RequestType requestType = new X36RequestType();
+			final MEId meId = meDn.getMe();
+			final X36NeId neId = sbiClient.getNaming().getNeId(meId);
+			Session session = null;
+			String hostName = null;
+			try {
+				session = sbiClient.getDbManager().beginSession(false);
+				final DBManagedElement dbME = sbiClient.getDbManager().getManagedElement(meDn);
+				if (sbiClient.isStandAlone()) {
+					hostName = sbiClient.getHostName();
+				} else {
+					final EmSystemProfile emSystemProfile = sbiClient.getEmSystemProfile(dbME);
+					if (emSystemProfile != null) {
+						hostName = emSystemProfile.getSyntax().getHostId().getValue();
+					}
+				}
+				final MEOwner meOwner = (MEOwner) dbME.getAdditionalInformation(MEOwner.NAME);
+				sbiClient.getMessageHandler().getRequesttype(meOwner, requestType);
+			} catch (final Exception e) {
+				log.error(e);
+			} finally {
+				if (session != null) {
+					session.terminate();
+					session = null;
+				}
+			}
+
+			nodeCollection.getBody().setNeId(neId);
+			nodeCollection.getBody().setReqId(NumberGenerator.getReqId());
+			nodeCollection.getBody().setRequestType(requestType);
+
+			final String note = manager.getSBIClient().getProfile().getProperty(PerformanceProperties.GET_COLLECTION_NOTE, "all");
+			nodeCollection.getBody().setNote(note);
+			if (log.isDebugEnabled()) {
+				log.debug(new DumpInfo(nodeCollection, String.format("Requesting node collection for ME <%s>", neLocator)));
+			} else {
+				log.info(String.format("Requesting node collection for ME <%s>", neLocator));
+			}
+			final long timeout = sbiClient.getProfile().getTimeProperty(I36PlugIn.PluginProperty.realignmentMsgTimeout, 120000);
+			sbiClient.getMessageHandler().setTimeout(timeout);
+			return sbiClient.getMessageHandler().getCollection(nodeCollection, hostName);
+		} else {
+			log.info(String.format("Requesting node collection for ME <%s> DISABLED", neLocator));
+		}
+		return null;
+	}
+
+	/**
+	 * BshrProtection request is processed
+	 * 
+	 * @param responseList
+	 * @param response
+	 * @throws Exception
+	 */
+	private X36MsgGetReportBshrProtection processBshrProtection(final X36MsgGetReportNodeConfiguration response) throws Exception {
+		/*
+		 * To send GetBshrProtection request, X36MsgGetReportNodeConfiguration is needed. So, checking the compliance in the
+		 * report and using it
+		 */
+		if (supportBshr(response.getBody())) {
+			if (log.isDebugEnabled()) {
+				log.debug(new DumpInfo(String.format("Requesting bshr protection for ME <%s>", neLocator)));
+			} else {
+				log.info(String.format("Requesting bshr protection for ME <%s>", neLocator));
+			}
+			final X36ReqId reqId = new X36ReqId(NumberGenerator.getReqId());
+			final long timeout = sbiClient.getProfile().getTimeProperty(I36PlugIn.PluginProperty.realignmentMsgTimeout, 120000);
+			sbiClient.getMessageHandler().setTimeout(timeout);
+			return sbiClient.getMessageHandler().getBSHRProtectionInfo(meDn, reqId);
+		}
+		return null;
+	}
+
+	/**
+	 * Writer object is built for the file .
+	 * 
+	 * @param fileName
+	 * @return FileMsgBerWriter<X36Message<?>>
+	 */
+	private FileMsgBerWriter<X36Message<?>> getFileMsgBerWriter(final String fileName) {
+		FileMsgBerWriter<X36Message<?>> writer = null;
+		if (fileName != null && emId != null) {
+			File file = new File(fileName);
+			file.mkdirs();
+			final String meNm = FileUtils.normalize(emId) + "_" + neId.getValue() + "_"
+					+ manager.getSBIClient().getX36Version().replace(".", "_") + ".ber";
+			file = new File(file.getPath() + File.separator + meNm);
+			try {
+				writer = new FileMsgBerWriter<X36Message<?>>(file, false);
+			} catch (final FileNotFoundException e) {
+				log.warn(String.format("Unable to write BER: file <%s> not found.", file.getName()));
+			}
+		}
+		return writer;
+	}
+
+	/**
+	 * Check for CurrentX36Version is made to check whether it is latest Version .
+	 * 
+	 * @param berFiles
+	 * @param emId_neId
+	 * @return int
+	 */
+	private int checkForCurrentX36Version(final File[] berFiles, final StringBuffer emId_neId) {
+		int currentX36Index = 0;
+		for (int i = 0; i < berFiles.length; i++) {
+			// Should not consider ber.realigned files
+			if (berFiles[i].getName().endsWith("ber")) {
+				// Removing extension .ber from the file name
+				final String berFileWithoutExtn = berFiles[i].getName().substring(0, berFiles[i].getName().lastIndexOf('.'));
+				// If it is current realigning NE's (which is present in current
+				// SO-EM)ber file
+				if (berFileWithoutExtn.contains(emId_neId)) {
+					oldBerFile = berFiles[i];
+					// Getting the string other than EmID_NeID from the ber file
+					// name
+					final StringBuffer x36Version = new StringBuffer(berFileWithoutExtn).delete(0, emId_neId.toString().length());
+					// X36 version is present in the ber file name if that
+					// string is not empty
+					if (!x36Version.toString().equals("") && x36Version.length() > 6) {
+
+						log.info("Version of X36 in the BER file is " + x36Version.substring(1, 5));
+
+						currentX36Index = Integer.parseInt(sbiClient.getProfile().getProperty(
+								"PlugIn.X36Index." + x36Version.substring(1, 5), "0"));
+						break;
+					}
+					// If X36 version is not present in the ber file name, then
+					// read the property SORelease to
+					// determine the version of X36
+					else {
+						final String berFileTMFRelease = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.SORelease,
+								"3_2");
+						final String berFileX36Version = sbiClient.getProfile()
+								.getProperty("PlugIn.ber.x36." + berFileTMFRelease);
+						if (berFileX36Version != null) {
+
+							log.info("TMF release from which BER file is taken is " + berFileTMFRelease);
+							log.info("Version of X36 in the BER file is " + berFileX36Version);
+
+							currentX36Index = Integer.parseInt(sbiClient.getProfile().getProperty(
+									"PlugIn.X36Index." + berFileX36Version, "1"));
+						}
+					}
+				}
+			}
+		}
+		return currentX36Index;
+	}
+
+	/**
+	 * Writes messages into BER File
+	 * 
+	 * @param writer
+	 * @param responseList
+	 */
+	private void writeBER(final FileMsgBerWriter<X36Message<?>> writer, final List<X36Message<?>> responseList) {
+		/*
+		 * non devo usare l'iteratore perche' potrei inserire un elemnto in corsa
+		 */
+		for (final X36Message<?> message : responseList) {
+			if (message == null) {
+				continue;
+			}
+			if (writer != null) {
+				try {
+					writer.writeBER(message);
+				} catch (final Exception e) {
+					log.info(new DumpInfo("Unable to write messages in BER file", e));
+				}
+			}
+		}
+	}
+
+}

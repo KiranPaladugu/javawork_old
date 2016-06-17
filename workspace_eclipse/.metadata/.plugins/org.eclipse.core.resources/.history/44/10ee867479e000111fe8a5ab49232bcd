@@ -1,0 +1,801 @@
+package com.marconi.fusion.tmf.i36PlugIn.converter;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36BackplaneTransponder;
+import com.marconi.fusion.X36.X36CardIdentification;
+import com.marconi.fusion.X36.X36ChannelIdentification;
+import com.marconi.fusion.X36.X36Frequency;
+import com.marconi.fusion.X36.X36G709CTPParameters;
+import com.marconi.fusion.X36.X36G709Parameters;
+import com.marconi.fusion.X36.X36MatrixInformation;
+import com.marconi.fusion.X36.X36NeInfo;
+import com.marconi.fusion.X36.X36ODUInfo;
+import com.marconi.fusion.X36.X36ODUStructure;
+import com.marconi.fusion.X36.X36ODUTimeSlot;
+import com.marconi.fusion.X36.X36PortIdentification;
+import com.marconi.fusion.X36.X36PortInformation;
+import com.marconi.fusion.X36.X36SetOfCardIdentification;
+import com.marconi.fusion.X36.X36SetOfMatrixInformation;
+import com.marconi.fusion.X36.X36SetOfODUInfo;
+import com.marconi.fusion.X36.X36SetOfODUPayloadType;
+import com.marconi.fusion.X36.X36SetOfTrafficType;
+import com.marconi.fusion.X36.X36TimeSlot;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.asn1.BooleanType;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.tmf.additionalInformation.NVAvailable;
+import com.marconi.fusion.tmf.additionalInformation.ODUTimeSlotRequired;
+import com.marconi.fusion.tmf.additionalInformation.OduFrameStrcutureSupporting;
+import com.marconi.fusion.tmf.additionalInformation.ProprietaryAdditionalInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AIPortType;
+import com.marconi.fusion.tmf.db.DBComponent;
+import com.marconi.fusion.tmf.db.DBConnectionTerminationPoint;
+import com.marconi.fusion.tmf.db.DBFtp;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.DBPortTp;
+import com.marconi.fusion.tmf.db.DBTp;
+import com.marconi.fusion.tmf.i36PlugIn.I36LayeredParameterManager;
+import com.marconi.fusion.tmf.i36PlugIn.I36Naming;
+import com.marconi.fusion.tmf.i36PlugIn.SBIClientI;
+import com.marconi.fusion.tmf.naming.Naming;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.TpType;
+import com.marconi.fusion.tmf.plugIn.TrafficInfo;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.Directionality;
+import com.marconi.fusion.tmf.plugIn.types.LayeredParameterList;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEId;
+import com.marconi.fusion.tmf.plugIn.types.NameAndStringValue;
+import com.marconi.fusion.tmf.plugIn.types.TPConnectionState;
+import com.marconi.fusion.tmf.plugIn.types.TPDn;
+import com.marconi.fusion.tmf.plugIn.types.TPProtectionAssociation;
+import com.marconi.fusion.tmf.plugIn.types.TPType;
+import com.marconi.fusion.tmf.plugIn.types.TerminationMode;
+import com.marconi.fusion.tmf.plugIn.types.TerminationPoint;
+import com.marconi.fusion.tmf.tmfFramework.TmfUtilities2;
+import com.marconi.fusion.tmf.tmfFramework.repository.AdditionalInfoManager;
+
+/**
+ * <p>
+ * Title: BackplaneTranspPortConverter
+ * </p>
+ * <p>
+ * Description: <br/>
+ * Converter used for processing of backplane transponders
+ * </p>
+ * 
+ * @author tcsapvi
+ * @version 3.5
+ * @since 3.5
+ */
+
+public class BackplaneTranspPortConverter extends WdmAdaptPortConverter {
+
+	private static Log log = LogFactory.getLog(BackplaneTranspPortConverter.class);
+	private DBFtp dbFtp;
+	private DBPortTp dbPtp;
+	private X36BackplaneTransponder backplaneTranspPort = null;
+	private TPDn tpDn = null;
+	private I36Naming i36Naming = null;
+	boolean isCascadedMux = false;
+	private final SBIClientI sbiClient = null;
+
+
+	@Override
+	public List<DBPortTp> processCTPs() throws PlugInException {
+		if (log.isDebugEnabled()) {
+			log.debug(new DumpInfo(portInfo, "Ready to process port...."));
+		}
+
+		final List<DBPortTp> processedPTPs = new ArrayList<DBPortTp>();
+
+		createPotentialCTPs();
+		processedPTPs.add(ptp);
+
+		return processedPTPs;
+	}
+
+	@Override
+	protected DBPortTp loadTP() {
+		backplaneTranspPort = getPortInfo().getSpecificPortInformation().getWdmAdaptationPort().getTranspInfo()
+				.getBackplaneTransponder();
+		isCascadedMux = backplaneTranspPort.isPresentCascadedMuxponderInfo();
+		i36Naming = getNaming();
+		// Calculates the corresponding tpDn (PtpDn or FtpDn)
+		tpDn = getTPDn();
+
+		// Gets the corresponding PTP or FTP object
+		final DBPortTp dbPortTp = (DBPortTp) dbManager.getTP(tpDn);
+		if (isCascadedMux) {
+			dbPtp = dbPortTp;
+		} else {
+			dbFtp = (DBFtp) dbPortTp;
+		}
+
+		if (isCascadedMux) {
+			dbPtp = dbPortTp;
+		} else {
+			dbFtp = (DBFtp) dbPortTp;
+		}
+
+		return dbPortTp;
+	}
+
+	/** This method is used to form the PtpDn or FtpDn based on the cascaded muxponder info
+	 * @return TPDn
+	 */
+	protected TPDn getTPDn() {
+		return makeTPDn();
+	}
+
+	/* This method is to form the PTPDn or FTPDn based on cascadedMuxponderInfo
+	 * @return TPDn
+	 */
+	protected TPDn makeTPDn() {
+		TPDn portDn = null;
+		if (isCascadedMux) {
+			portDn = makePTPDn();
+			if (log.isDebugEnabled()) {
+				log.debug(String.format("Formed PTPDn %s...", portDn));
+			}
+		} else {
+			portDn = getFTPDn();
+			if (log.isDebugEnabled()) {
+				log.debug(String.format("Formed FTPDn %s...", portDn));
+			}
+		}
+		return portDn;
+	}
+
+	/**
+	 * This method is used to retrieve FTP Dn.
+	 */
+	public TPDn getFTPDn() {
+		final X36Frequency frequency = getFrequency();
+		final MEDn reqMEDn = helper.getMEDn();
+		final TPDn ftpDn = i36Naming.makeFTPDn(reqMEDn, getShelfId(),
+				getSlotId(), getCardId(), getPortId(), frequency);
+		return ftpDn;
+	}
+
+
+	/**
+	 *  This method is used to evaluate the TpType of the FTP based on K level
+	 **/
+	@Override
+	protected TpType evaluateFtpTpType() {
+
+		final Integer kLevel = backplaneTranspPort.isPresentKLevel() ? backplaneTranspPort.getKLevel().getValue() : null;
+
+		return TpType.evaluatebackplaneOtuFtp(kLevel);
+
+	}
+
+	/**
+	 * This method is added to create the FTP of the aggregated port
+	 **/
+	@Override
+	protected void createPhysicalTP() throws PlugInException {
+		stats.start(PROCESS_FTP);
+		if (log.isDebugEnabled()) {
+			log.debug(String.format("Process Creation of FTP being started for backplaneTransponder...."));
+		}
+
+		X36G709Parameters otuParameters = new X36G709Parameters();
+		if (backplaneTranspPort.isPresentOtuParameters()) {
+			otuParameters = backplaneTranspPort.getOtuParameters();
+		}
+
+		final TerminationPoint tp = new TerminationPoint();
+		tp.setName(tpDn);
+
+		String nativeEMSName = makeNativeEMSName();
+		final X36Frequency frequency = getFrequency();
+
+		if (frequency != null) {
+			nativeEMSName += "-" + Naming.getFrequency(frequency.getValue()).getValue();
+		}
+		tp.setNativeEMSName(nativeEMSName);
+
+		if (helper.getSBIClient().getPlugIn().useNativeLabels()) {
+			tp.setUserLabel(tp.getNativeEMSName());
+		}
+
+		tp.setOwner("");
+		tp.getConnectionState().setTpcs_not_connected();
+		tp.setTpMappingMode(TerminationMode.TM_NA);
+		tp.setDirection(Directionality.D_BIDIRECTIONAL);
+
+		tp.setTpProtectionAssociation(TPProtectionAssociation.TPPA_NA);
+		tp.setEdgePoint(true);
+		final X36ChannelIdentification chId = new X36ChannelIdentification();
+		chId.setPort(portInfo.getPortIdentification());
+		chId.getTimeSlot().setNull();
+
+		final AIPortType aiPortType = AIPortType.PT_BACKPLANEODU;
+		final Profile profile = I36LayeredParameterManager.getManager().getProfile();
+		/*
+		 * If the backplaneTransponder has cascaded muxponder info, PTP is
+		 * created If the backplaneTransponder does not have cascaded muxponder
+		 * info, FTP is created
+		 */
+		if (isCascadedMux) {
+			tp.setType(TPType.TPT_PTP);
+			final TpType tpType = evaluatePtpTpType(backplaneTranspPort);
+
+			final LayeredParameterList lPList = I36LayeredParameterManager.getLayeredParameterList(tpType, profile, otuParameters);
+			tp.setTransmissionParams(lPList);
+			tp.setAdditionalInfo(addAdditionalInfo(getPortInfo(), tpType, tp.getType()));
+
+			dbPtp = createOrUpdatePTP(dbPtp, tp, tpType, chId, aiPortType, assocAlarmPortsInfo, portInfo.getNeInterfaceType(),
+					false);
+			if (log.isDebugEnabled()) {
+				log.debug(new DumpInfo(tp, String.format("Created/checked %s...", dbPtp.getName())));
+			}
+
+			ptp = dbPtp;
+
+			// Adds the entry of 'cascaded Mux link between AEnd and ZEnd connected Tps'
+			addCascadedMuxLink();
+		} else {
+			tp.setType(TPType.TPT_FTP);
+			final TpType tpType = evaluateFtpTpType();
+
+			final LayeredParameterList lPList = I36LayeredParameterManager.getLayeredParameterList(tpType, profile, otuParameters);
+			tp.setTransmissionParams(lPList);
+			tp.setAdditionalInfo(addAdditionalInfo(getPortInfo(),tpType,tp.getType()));
+
+			dbFtp = createOrUpdateFTP(dbFtp, tp, tpType, chId, aiPortType, assocAlarmPortsInfo, portInfo.getNeInterfaceType());
+			if (log.isDebugEnabled()) {
+				log.debug(new DumpInfo(tp, String.format("Created/checked %s...", dbFtp.getName())));
+			}
+
+			ptp = dbFtp;
+		}
+		stats.end(PROCESS_FTP);
+	}
+
+	/**
+	 * This method adds the entry of 'cascaded Mux link between AEnd and ZEnd connected Tps'
+	 * to the 'setOfCascadedMuxLinks' Map
+	 */
+	private void addCascadedMuxLink()
+	{
+		final X36PortIdentification portIdent = backplaneTranspPort.getCascadedMuxponderInfo().getConnectedPort();
+		final MEDn reqMEDn = helper.getMEDn();
+
+		final TPDn tpDn = helper.makeTPDn(portIdent, false, reqMEDn);
+		final DBTp dbtp = dbManager.getTP(tpDn);
+		final DBPortTp zEndPtp = (DBPortTp) dbtp;
+		if (zEndPtp != null) {
+			helper.getCascadedMuxLinks().put(dbPtp.getDn(), zEndPtp.getDn());
+			if (log.isDebugEnabled()) {
+				log.debug(String.format("aEnd of the link is %s...", dbPtp.getDn()));
+				log.debug(String.format("zEnd of the link is %s...", zEndPtp.getDn()));
+			}
+		}
+	}
+
+	/**
+	 * This method is used to evaluate the TpType for the PTP based on K level
+	 * @return
+	 */
+	protected TpType evaluatePtpTpType(final X36BackplaneTransponder backplaneTransponder) {
+
+		final Integer kLevel = backplaneTransponder.isPresentKLevel() ? backplaneTransponder.getKLevel().getValue() : 0;
+
+		return TpType.evaluatebackplanePtp(kLevel);
+
+	}
+
+	protected TpType formTpType(final int kLevel) {
+		switch (kLevel) {
+		case 0:
+			return TpType.odu0AggregateCtps;
+		case 1:
+			return TpType.odu1ChildCtp;
+		case 2:
+			return TpType.odu2ChildCtp;
+		case 3:
+			return TpType.odu3ChildCtp;
+		case 102:
+			return TpType.odu2eChildCtp;
+		case 103:
+			return TpType.odu3eChildCtp;
+		default:
+			log.error(new DumpInfo(kLevel, "KLevel unexpected! 1 is assumed..."));
+			return TpType.odu1ChildCtp;
+		}
+	}
+
+	protected TpType formAggrTpType(final int kLevel) {
+		switch (kLevel) {
+		case 1:
+			return TpType.backplaneOdu1Ctp;
+		case 2:
+			return TpType.backplaneOdu2Ctp;
+		case 3:
+			return TpType.backplaneOdu3Ctp;
+		case 102:
+			return TpType.backplaneOdu2eCtp;
+		case 103:
+			return TpType.backplaneOdu3eCtp;
+		default:
+			log.error(new DumpInfo(kLevel, "KLevel unexpected! 1 is assumed..."));
+			return TpType.backplaneOdu1Ctp;
+		}
+	}
+
+	/**
+	 * This method is used for the creation of CTP A of backplaneTransponder
+	 */
+	protected void createPotentialCTPs() {
+		final X36ODUInfo oduInfo = backplaneTranspPort.getOduInfo();
+		final int kLevel = oduInfo.getKLevel().getValue();
+
+		// For creating Aggregated CTP (CTP A) of backplane Transponder
+		createAggregatedCTP(oduInfo, kLevel);
+
+		if (!(backplaneTranspPort.getClientTrafficType().isCtt10GTransparent() && backplaneTranspPort
+				.getOduInfo().getOduStructure().isTerminated())) {
+		// For creating ODU1 CTPs (CTP Bs) of backplane Transponder
+		createOdu1CTPs(oduInfo, kLevel);
+	}
+
+	}
+
+	protected void createAggregatedCTP(final X36ODUInfo oduInfo, final int kLevel)
+	{
+		stats.start(PROCESS_CTP);
+		if (log.isDebugEnabled()) {
+			log.debug(String.format("Process Creation of Aggregated CTP being started for backplaneTransponder...."));
+		}
+
+		final TerminationPoint tp = new TerminationPoint();
+		tp.setNativeEMSName(i36Naming.makeNativeEMSName(getCardName(), getPortInfo()));
+		final MEDn meDn = helper.getMEDn();
+		final DBManagedElement dbMe = dbManager.getManagedElement(meDn);
+		if (dbMe == null) {
+			log.error("Cannot find DBManagedElement:");
+			throw PlugInExceptionHandler.entityNotFound("dbMe");
+		}
+
+		final MEId meID = dbMe.getDn().getMe();
+
+		if (isCascadedMux) {
+			tp.setName(i36Naming.makeAggregatedCTPDn(oduInfo, meID, dbPtp.getDn(), isCascadedMux));
+		} else {
+			tp.setName(i36Naming.makeAggregatedCTPDn(oduInfo, meID, dbFtp.getDn(), isCascadedMux));
+		}
+
+		if (helper.getSBIClient().getPlugIn().useNativeLabels()) {
+			tp.setUserLabel(tp.getNativeEMSName());
+		}
+
+		tp.setType(new TPType(TPType.tpt_ctp));
+		tp.setEdgePoint(true);
+		tp.setConnectionState(TPConnectionState.TPCS_NOT_CONNECTED);
+		tp.setTpMappingMode(TerminationMode.TM_NA);
+		tp.setDirection(Directionality.D_BIDIRECTIONAL);
+
+		X36G709CTPParameters oduParameters = new X36G709CTPParameters();
+		if (oduInfo.isPresentOduParameters()) {
+			oduParameters = new X36G709CTPParameters();
+			oduParameters.setParameters(oduInfo.getOduParameters());
+		}
+
+		final TpType tpType = formAggrTpType(kLevel);
+
+		boolean oduStructureSupporting = false;
+		if (backplaneTranspPort.isPresentOduStructureSupporting()) {
+			oduStructureSupporting = backplaneTranspPort.getOduStructureSupporting().getValue();
+		}
+
+		X36SetOfODUPayloadType supportedOduPayloadTypes = null;
+		if (backplaneTranspPort.isPresentSupportedOduPayloadTypes()) {
+			supportedOduPayloadTypes = backplaneTranspPort.getSupportedOduPayloadTypes();
+		}
+		// TODO: need to confirm pass true or flase as sixth orguments of below
+		// method
+		final LayeredParameterList lPList = I36LayeredParameterManager.getLayeredParameterListforOTM(tpType, oduParameters,
+				oduStructureSupporting, supportedOduPayloadTypes, oduInfo, true);
+		tp.setTransmissionParams(lPList);
+		tp.setAdditionalInfo(addAdditionalInfo(getPortInfo(), tpType, tp.getType()));
+
+		DBConnectionTerminationPoint ctp = null;
+
+		final X36ODUTimeSlot ts = new X36ODUTimeSlot();
+		ts.setOduId(oduInfo.getId());
+		final X36TimeSlot timeSlot = new X36TimeSlot();
+		timeSlot.setOduTimeSlot(ts);
+		final X36ChannelIdentification chId = new X36ChannelIdentification();
+		chId.setPort(portInfo.getPortIdentification());
+		chId.setTimeSlot(timeSlot);
+
+		try {
+			if (isCascadedMux) {
+				ctp = createOrUpdateCTP(dbPtp, tp, tpType, chId, assocAlarmPortsInfo);
+			} else {
+				ctp = createOrUpdateCTP(dbFtp, tp, tpType, chId, assocAlarmPortsInfo);
+			}
+
+			if (oduStructureSupporting) {
+				final OduFrameStrcutureSupporting oduFrameStrcutureSupporting = new OduFrameStrcutureSupporting(true);
+				ctp.addAdditionalInformation(oduFrameStrcutureSupporting);
+			}
+
+			if (backplaneTranspPort.isPresentOduTimeSlotRequired() && (backplaneTranspPort.getOduTimeSlotRequired().getValue())) {
+				final BooleanType value = new BooleanType(true);
+				final ODUTimeSlotRequired oduTimeSlotRequired = new ODUTimeSlotRequired(value);
+				ctp.addAdditionalInformation(oduTimeSlotRequired);
+			}
+			// TODO: need to add below addAdditionalInformation also
+			final NVAvailable nvAvailable = new NVAvailable(true);
+			ctp.addAdditionalInformation(nvAvailable);
+		} catch (final Exception ex) {
+			log.error("Exception occurred while creation of CTP: ", ex);
+		}
+		if (ctp == null) {
+			log.error(new DumpInfo(tp, String.format("Unable to create CTP A for ", dbFtp.getName())));
+		}
+		stats.end(PROCESS_CTP);
+	}
+
+	/**
+	 * This method is used for processing of CTP B of backplane transponder
+	 * @param oduInfo
+	 * @param kLevel
+	 */
+	protected void createOdu1CTPs(final X36ODUInfo oduInfo, final int kLevel) {
+		final X36ODUStructure structure = oduInfo.getOduStructure();
+			final X36SetOfODUInfo setOf = structure.getOdu();
+			for (final X36ODUInfo info : setOf) {
+			createOdu1CTP(info, kLevel);
+			final X36ODUStructure childStructure = info.getOduStructure();
+			if (childStructure != null && childStructure.isOdu()) {
+				final X36SetOfODUInfo setOfChildOduInfo = childStructure.getOdu();
+				for (final X36ODUInfo childInfo : setOfChildOduInfo) {
+					createChildCtps(childInfo, childInfo.getKLevel().getValue());
+				}
+			}
+
+		}
+	}
+
+	private void createChildCtps(final X36ODUInfo oduInfo, final int kLevel) {
+		createOdu1CTP(oduInfo, kLevel);
+		final X36ODUStructure childStructure = oduInfo.getOduStructure();
+		if (childStructure != null && childStructure.isOdu()) {
+			final X36SetOfODUInfo setOfChildOduInfo = childStructure.getOdu();
+			for (final X36ODUInfo childInfo : setOfChildOduInfo) {
+				createChildCtps(childInfo, childInfo.getKLevel().getValue());
+			}
+		}
+
+	}
+
+	/**
+	 * This method is used for the creation of CTP B's
+	 * @param oduInfo
+	 * @param kLevelTrans
+	 */
+	protected void createOdu1CTP(final X36ODUInfo oduInfo, final int kLevelTrans) {
+		stats.start(PROCESS_CTP);
+		if (log.isDebugEnabled()) {
+			log.debug(String.format("Process Creation of CTP B's being started for backplaneTransponder...."));
+		}
+
+		final TerminationPoint tp = new TerminationPoint();
+		tp.setNativeEMSName(i36Naming.makeNativeEMSName(getCardName(), getPortInfo()));
+
+		if (helper.getSBIClient().getPlugIn().useNativeLabels()) {
+			tp.setUserLabel(tp.getNativeEMSName());
+		}
+
+		tp.setType(new TPType(TPType.tpt_ctp));
+		tp.setConnectionState(TPConnectionState.TPCS_NOT_CONNECTED);
+		tp.setTpMappingMode(TerminationMode.TM_NA);
+		tp.setDirection(Directionality.D_BIDIRECTIONAL);
+		tp.setEdgePoint(true);
+
+		final int kLevel = oduInfo.getKLevel().getValue();
+		final TpType tpType = formTpType(kLevel);
+		final X36G709CTPParameters oduParameters = new X36G709CTPParameters();
+		if (oduInfo.getOduStructure().isNotTerminated() && oduInfo.getOduStructure().getNotTerminated().isPresentOduParameters()) {
+			oduParameters.setParameters(oduInfo.getOduStructure().getNotTerminated().getOduParameters().getParameters());
+		}
+
+		boolean oduStructureSupporting = false;
+		X36SetOfODUPayloadType supportedOduPayloadTypes = null;
+		if (backplaneTranspPort.isPresentOduStructureSupporting()) {
+			oduStructureSupporting = backplaneTranspPort.getOduStructureSupporting().getValue();
+
+		}
+		if (backplaneTranspPort.isPresentSupportedOduPayloadTypes()) {
+			supportedOduPayloadTypes = backplaneTranspPort.getSupportedOduPayloadTypes();
+		}
+
+		final LayeredParameterList lPList = I36LayeredParameterManager.getLayeredParameterListforOTM(tpType, oduParameters,
+				oduStructureSupporting, supportedOduPayloadTypes,
+				oduInfo, false);
+		tp.setTransmissionParams(lPList);
+
+		final MEDn meDn = helper.getMEDn();
+
+		final DBManagedElement dbMe = dbManager.getManagedElement(meDn);
+		if (dbMe == null) {
+			log.error("Cannot find DBManagedElement:");
+			throw PlugInExceptionHandler.entityNotFound("dbMe");
+		}
+
+
+		final MEId meID = dbMe.getDn().getMe();
+//		if (isCascadedMux) {
+//			tp.setName(i36Naming.makeBackplaneCTPDn(oduInfo, meID,
+//					dbPtp.getDn(), isCascadedMux));
+//		} else {
+//			tp.setName(i36Naming.makeBackplaneCTPDn(oduInfo, meID,
+//					dbFtp.getDn(), isCascadedMux));
+//		}
+
+		tp.setAdditionalInfo(addAdditionalInfo(getPortInfo(), tpType, tp.getType()));
+
+		final X36ODUTimeSlot ts = new X36ODUTimeSlot();
+		ts.setOduId(oduInfo.getId());
+		final X36TimeSlot timeSlot = new X36TimeSlot();
+		timeSlot.setOduTimeSlot(ts);
+		final X36ChannelIdentification chId = new X36ChannelIdentification();
+		final X36PortIdentification portIdentification = getPortIdentification();
+		chId.setPort(portIdentification);
+		chId.setTimeSlot(timeSlot);
+
+		DBConnectionTerminationPoint ctp = null;
+
+		try {
+			if (isCascadedMux) {
+				ctp = createOrUpdateCTP(dbPtp, tp, tpType, chId, assocAlarmPortsInfo);
+			} else {
+				ctp = createOrUpdateCTP(dbFtp, tp, tpType, chId, assocAlarmPortsInfo);
+			}
+			if (oduStructureSupporting) {
+				// TODO KP tell to set this oduFrameStrcutureSupporting instead
+				// of oduStructureSupporting
+				final OduFrameStrcutureSupporting oduFrameStrcutureSupporting = new OduFrameStrcutureSupporting(true);
+				ctp.addAdditionalInformation(oduFrameStrcutureSupporting);
+
+				final NVAvailable nvAvailable = new NVAvailable(true);
+				ctp.addAdditionalInformation(nvAvailable);
+			}
+			if (backplaneTranspPort.isPresentOduTimeSlotRequired() && (backplaneTranspPort.getOduTimeSlotRequired().getValue())) {
+				final BooleanType value = new BooleanType(true);
+				final ODUTimeSlotRequired oduTimeSlotRequired = new ODUTimeSlotRequired(value);
+				ctp.addAdditionalInformation(oduTimeSlotRequired);
+			}
+		} catch (final Exception ex) {
+			log.error("Exception occurred while creation of CTP: ", ex);
+		}
+		if (ctp == null) {
+			log.error(new DumpInfo(tp, String.format("Unable to create CTP B for ", dbFtp.getName())));
+		}
+		stats.end(PROCESS_CTP);
+		// fixes for backplane transponder odu - k level structuring
+
+		final X36ODUStructure structure = oduInfo.getOduStructure();
+		if (structure.isOdu()) {
+			final X36SetOfODUInfo setof = structure.getOdu();
+			for (final X36ODUInfo info : setof) {
+				final int newKlevel = info.getKLevel().getValue();
+				createOdu1CTP(info, newKlevel);
+
+			}
+
+		}
+
+	}
+
+	/**
+	 * This method is updated to add AdditionalInfo for a TP to check whether these TPs can be used for the crossConnection creation in
+	 * peripheral matrix or not
+	 * 
+	 * @param portInfo
+	 * @param tpType
+	 * @param terminationTpType
+	 * @return
+	 */
+	protected AdditionalInfo addAdditionalInfo(final X36PortInformation portInfo, final TpType tpType, final TPType terminationTpType) {
+		AdditionalInfo ai = new AdditionalInfo();
+
+		// To check whether the PortInformation contains accessibleMatrixes or not.
+		if (portInfo.isPresentAccessibleMatrixes()) {
+			final X36SetOfCardIdentification setOfCardIden = portInfo.getAccessibleMatrixes();
+
+			// Check if it is a main matrix
+			if (!isMainMatrix(setOfCardIden)) { // Process only if not main matrix
+
+				// Get list of TrafficTypes for which TP is registered
+				final List<String> trafficList = getTrafficList(tpType);
+
+				if (!trafficList.isEmpty()) {// Process only if 'trafficList' is not Empty
+
+					final X36NeInfo neInfo = getNeInfo().getNeInfo();
+					if (neInfo.isPresentAdditionalMatrixes()) {
+						ai = getMatrixAdditionalInfo(setOfCardIden, trafficList, neInfo, tpType, terminationTpType);
+					}
+				}
+			} else {
+				// If main matrix, then the "MatrixId" will not be set to the additionalInfo.
+				log.debug(new DumpInfo("Cannot set MatrixId since this is the main matrix"));
+			}
+		}
+		return ai;
+	}
+
+	/**
+	 * This method checks if main matrix or not.
+	 * If PortInformation.accessibleMatrixes is empty or containing just one item
+	 * with shelfId = 0 and cardId = 0 (that is main matrix)
+	 * @param setOfCardIden
+	 * @return boolean - 'true' if main matrix, otherwise 'false'
+	 */
+	private boolean isMainMatrix(final X36SetOfCardIdentification setOfCardIden)
+	{
+		final int cardIdenSize = setOfCardIden.size();
+
+		// Check if size is just one
+		if (cardIdenSize == 1) {
+			final int shelfId = setOfCardIden.get(0).getShelfId().getValue();
+			final int cardId = setOfCardIden.get(0).getCardId().getValue();
+
+			//If the cardIdentification has its shelfId and cardId as 0, then return true
+			return (shelfId == 0 && cardId == 0);
+		}
+		return false;
+	}
+
+	/**
+	 * This method gets the string list of traffic rates of the TP
+	 * @param tpType - TpType object
+	 * @return List<String> - trafficList
+	 */
+	private List<String> getTrafficList(final TpType tpType)
+	{
+		final List<String> trafficList = new ArrayList<String>();
+
+		final TrafficInfo[] trafficInfo = tpType.getTrafficInfo();
+		final int tpTrafficTypeSize = trafficInfo.length;
+
+		for (int i = 0; i < tpTrafficTypeSize; i++) {
+			final String traffic = trafficInfo[i].getTrType().getEnum();
+			trafficList.add(traffic);
+		}
+
+		return trafficList;
+	}
+
+	/**
+	 * This method gets the string list of matrix Traffic rates
+	 * @param matrixInfo - X36MatrixInformation object
+	 * @return List<String> - matrixTrafficList
+	 */
+	private List<String> getMatrixTrafficList(final X36MatrixInformation matrixInfo)
+	{
+		final List<String> matrixTrafficList = new ArrayList<String>();
+
+		final X36SetOfTrafficType setOfTrafficTypes = matrixInfo.getMatrixBehaviour().getSetOfTrafficType();
+		final int mbTrafficTypeSize = setOfTrafficTypes.size();
+
+		for (int j = 0; j < mbTrafficTypeSize; j++) {
+			matrixTrafficList.add(setOfTrafficTypes.get(j).getEnum());
+		}
+
+		return matrixTrafficList;
+	}
+
+	/**
+	 * This method tries to set the Matrix Additional info by looping over the setOfCardIden against the setOfMatrixInfo
+	 * and sets the Matrix Additional Info only (if one of the setOfCardIden matches with one of the setOfMatrixInfo
+	 * identification and (if intersection between the MatrixTraffic list and the list of TrafficTypes is not Empty).
+	 * @param setOfCardIden
+	 * @param trafficList
+	 * @param neInfo
+	 * @param tpType
+	 * @param terminationTpType
+	 * @return AdditionalInfo
+	 */
+	private AdditionalInfo getMatrixAdditionalInfo(final X36SetOfCardIdentification setOfCardIden, final List<String> trafficList,
+			final X36NeInfo neInfo, final TpType tpType, final TPType terminationTpType)
+	{
+		AdditionalInfo ai = new AdditionalInfo();
+
+		// Get NeInfo.additionalMatrixes
+		final X36SetOfMatrixInformation setOfMatrixInfo = neInfo.getAdditionalMatrixes();
+
+		for (final X36CardIdentification cardIden : setOfCardIden) {
+			boolean foundMatrixId = false;
+
+			final int shelfId = cardIden.getShelfId().getValue();
+			final int cardId = cardIden.getCardId().getValue();
+
+			// Check for CardIdentification with shelfId and cardId != 0
+			if ((shelfId != 0) && (cardId != 0)) {
+				List<String> result = new ArrayList<String>();
+
+				for (final X36MatrixInformation matrixInfo : setOfMatrixInfo) {
+
+					// Get matrixInfo.matrixIdentification
+					final X36CardIdentification matrixCardIden = matrixInfo.getMatrixIdentification();
+					final int matrixShelfId = matrixCardIden.getShelfId().getValue();
+					final int matrixCardId = matrixCardIden.getCardId().getValue();
+
+					// Check if matrixCardIden matches with cardIden
+					if (shelfId == matrixShelfId && cardId == matrixCardId) {
+						/*
+						 * Get list of TrafficTypes from MatrixInformation (from
+						 * MatrixInformation.matrixBehaviour.setOfTrafficType) and get the intersection between this MatrixTraffic
+						 * list and the list of TrafficTypes retrieved from the TpType. If the intersection is empty, then no
+						 * additionalInfo will be set. If the intersection is not empty, then the "MatrixId" will be added to the
+						 * AdditionalInfo
+						 */
+						result = (List<String>) TmfUtilities2.intersection(getMatrixTrafficList(matrixInfo),
+								trafficList);
+						if (!(result.isEmpty())) {
+							ai = setMatrixAdditionalInfo(terminationTpType, shelfId, cardId);
+							foundMatrixId = true;
+						}
+						break;
+					}
+				}
+			}
+			// Check if found MatrixId
+			if (foundMatrixId) {
+				break;
+			}
+		}
+		return ai;
+	}
+
+	/**
+	 * This method sets the AdditionalInfo 'MatrixId' to TP
+	 * @param terminationTpType
+	 * @param shelfId
+	 * @param cardId
+	 * @return AdditionalInfo
+	 */
+	private AdditionalInfo setMatrixAdditionalInfo(final TPType terminationTpType, final int shelfId, final int cardId)
+	{
+		AdditionalInfo ai = new AdditionalInfo();
+		final Profile profile = AdditionalInfoManager.getManager().getProfile();
+		final String shelf = String.valueOf(shelfId);
+		final String card = String.valueOf(cardId);
+		final String value = shelf + "," + card;
+		profile.setProperty(ProprietaryAdditionalInfo.MatrixId, value);
+		if (terminationTpType.isTpt_ctp()) {
+			ai = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.CTP, profile);
+			// Workaround for the Sirius problem that it gives ServerTP for all
+			// the
+			// CTP additional info. Removing teh serverTP as it is not
+			// applicable
+			// for this CTP
+			final Iterator<NameAndStringValue> aiItr = ai.iterator();
+			while (aiItr.hasNext()) {
+				final NameAndStringValue nav = aiItr.next();
+				if (nav.getName().getValue()
+						.equals(AdditionalInfoManager.Standard.serverTP.name())) {
+					aiItr.remove();
+					break;
+				}
+			}
+		} else if (terminationTpType.isTpt_ftp()) {
+			ai = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.FTP, profile);
+		}
+		return ai;
+	}
+}

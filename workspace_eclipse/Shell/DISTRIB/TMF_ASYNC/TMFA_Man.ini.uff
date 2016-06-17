@@ -1,0 +1,82 @@
+[TRACE]
+#Verbosity = kernel
+Verbosity = none
+#Verbosity = high
+#Verbosity = medium
+#Verbosity = low
+## disponibili: none low medium high all
+LogFilePathName = $(APP_ROOT)/LOG/TMFA.log
+LogWrapThreshold = 50
+
+Memory = NO
+
+#EchoMode = echo
+EchoMode = noEcho
+
+#
+# To write the hedaer for each log dump
+# Available: NO | YES
+HeaderOnce = YES
+
+#
+# To write the buffer at avery dump
+# Available: NO | YES
+FlushEveryTime = NO
+
+#
+# Dump line length
+LineMaxLen = 120
+
+#BuffMaxLen = 32768
+
+
+[Macro]
+APP_ROOT = AGENT_FULL_PATH
+APP_HOST = TMF_CURR_HOST
+APP_PORT = 39876
+APP_HTML = 39875
+
+[HTTP]
+Enable = YES
+HtmlDir = .
+Port = $(APP_HOST):$(APP_HTML)
+OnlyParameter = YES
+
+[TMFA]
+MainApplication = TMFA_Manager
+Address = $(APP_HOST):$(APP_PORT)
+ServerMode = YES
+ReconnectionDelay = 10
+ManageHeader = NO
+Timeout = 10
+
+[CHECK]
+CheckTimeout = 4
+CheckDirEveryCT = 15
+CheckNMDir = /opt/mv38
+CheckNMEnv = MV38env.csh
+CheckConfDir = DATA
+CheckConfFile = LH.conf
+CheckDataDir = LOG/RH_TRACE
+CheckOnlyLast = YES
+CheckDateFormat = %d-%m-%Y %T
+
+[CHECK_ULH]
+CheckUlhDataFile = ULHreport.*
+CheckUlhTag = MV38_ULH
+
+[CHECK_RH]
+CheckRhDataFile = RHreport.*
+CheckRhTag = MV38_RH
+
+[CHECK_ASTN]
+CheckAstnEnabled = YES
+CheckAstnNMDir = $(APP_ROOT)
+CheckAstnConfDir = CONF
+CheckAstnConfFile = ASTN.conf
+# relative to CheckNMDir + CheckDataDir
+CheckAstnDataDir = ../../../NMhist
+CheckAstnDataFile = ASTNDD_Monitor_*.log
+CheckAstnIDateFormat = %b %d, %Y %H:%M:%S %p
+CheckAstnEDateFormat = ASTNDD_Monitor_%m_%d_%y.log
+CheckAstnTag = Circuit ASTN

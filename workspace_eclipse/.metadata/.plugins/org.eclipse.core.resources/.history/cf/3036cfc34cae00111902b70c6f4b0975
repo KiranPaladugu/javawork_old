@@ -1,0 +1,181 @@
+/**
+ *
+ */
+package com.marconi.fusion.tmf.i38PlugIn.manager;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X38.X38SignalType;
+import com.marconi.fusion.base.asn1.PlainAnyType;
+import com.marconi.fusion.base.util.Holder;
+import com.marconi.fusion.tmf.db.DBSnc;
+import com.marconi.fusion.tmf.db.Session;
+import com.marconi.fusion.tmf.i38PlugIn.db2.SNCData;
+import com.marconi.fusion.tmf.i38PlugIn.db2.SNCHolder;
+import com.marconi.fusion.tmf.i38PlugIn.sbi.X38SBIClient;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.NameAndAnyValue;
+import com.marconi.fusion.tmf.plugIn.types.NameAndStringValue;
+import com.marconi.fusion.tmf.plugIn.types.ObjectName;
+import com.marconi.fusion.tmf.plugIn.types.SNCDn;
+import com.marconi.fusion.tmf.plugIn.types.StaticProtectionLevel;
+import com.marconi.fusion.tmf.tmfFramework.TmfFramework.I_Managers;
+import com.marconi.fusion.tmf.tmfFramework.delegates.Common;
+import com.marconi.fusion.tmf.tmfFramework.repository.AdditionalInfoManager.Standard;
+
+/**
+ * @author tcsragh
+ *
+ */
+public class CommonMgrImpl extends Common {
+	private static final Log LOG = LogFactory.getLog(CommonMgrImpl.class);
+	private final X38SBIClient sbi;
+
+	public CommonMgrImpl(final X38SBIClient sbi) {
+		super(I_Managers.EMS);
+		this.sbi = sbi;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.tmfFramework.delegates.Common#setAdditionalInfo(java.lang.String,
+	 * com.marconi.fusion.tmf.plugIn.types.ObjectName, com.marconi.fusion.base.util.Holder, java.lang.Object[])
+	 */
+	/*
+	 * This method allows to set AdditionalInformation SNC_Revertive to SNC object
+	 */
+	@Override
+	public void setAdditionalInfo(final String name, final ObjectName objectName, final Holder additionalInfoHolder, final Object... varargs) throws PlugInException {
+		final AdditionalInfo additionalInfo = (AdditionalInfo)additionalInfoHolder.getTarget();
+		final java.util.Iterator<NameAndStringValue> additionalInfoItr = additionalInfo.iterator();
+		while (additionalInfoItr.hasNext()) {
+			final NameAndStringValue additionalInfoStr = additionalInfoItr.next();
+			if (additionalInfoStr.getName().equals(Standard.SNC_REVERTIVE.name())) {
+				additionalInfoItr.remove();
+
+				Session session = null;
+				try {
+					session = sbi.getDatabase().beginSession(true);
+					final SNCDn sncDn = objectName.getSncDn();
+					final SNCHolder sncHolder = sbi.getDatabase().getSnc(sncDn);
+					final DBSnc dbSnc = sncHolder.getDBObject();
+					if (dbSnc == null) {
+						LOG.debug("Cannot find SubnetworkConnection : " + sncDn);
+						PlugInExceptionHandler.entityNotFound("Cannot find DBSnc : " + sncDn);
+					}
+					final StaticProtectionLevel staticProtLevel = dbSnc.getInformation().getStaticProtectionLevel();
+					if (staticProtLevel.isUnprotected()) {
+						throw PlugInExceptionHandler.unableToComply("Cannot modify SNC_REVERTIVE field as SNC is Unprotected");
+					} else {
+						final String sncRevertiveValue = additionalInfoStr.getValue().getValue();
+						final NameAndAnyValue revertive = new NameAndAnyValue();
+						revertive.setName(Standard.SNC_REVERTIVE.name());
+						final PlainAnyType plainAnyType = new PlainAnyType();
+						plainAnyType.setValue(sncRevertiveValue);
+						revertive.setValue(plainAnyType);
+						updateSNCAdditionalInfo(dbSnc, revertive);
+					}
+					session.commit();
+				} catch (final PlugInException ex) {
+					LOG.error(ex.getMessage());
+					throw ex;
+				} catch (final Exception e) {
+					LOG.error(e.getLocalizedMessage());
+					throw PlugInExceptionHandler.internalError(e.getLocalizedMessage());
+				} finally {
+					if (session != null){
+						session.terminate();
+					}
+				}
+			}
+
+		}
+
+	}
+
+	/**
+	 * This method is used to modify additionalInfo field "SNC_Revertive"
+	 *
+	 * @param sncDn
+	 * @param nameAndAnyValue
+	 * @param holder
+	 */
+	private void updateSNCAdditionalInfo(final DBSnc dbSnc, final NameAndAnyValue nameAndAnyValue) throws PlugInException {
+		try {
+			final X38SignalType signalType = new X38SignalType(getConverter().getSncConverter().toSignalType(dbSnc.getLayerRate()));
+			final SNCHolder sncHolder = sbi.getDatabase().getSnc(dbSnc.getInformation().getName());
+			if (sncHolder == null) {
+				throw PlugInExceptionHandler.entityNotFound("sncName");
+			}
+
+			final SNCData data = sncHolder.getData();
+			if (data.getPathId() == null) {
+				throw PlugInExceptionHandler.unableToComply("cannot modify SNC");
+			}
+
+			final String hostName = sbi.getHostDetails(sncHolder);
+
+			final Boolean revertiveValue = Boolean.valueOf(retreiveRevertiveValue(dbSnc, nameAndAnyValue));
+			sbi.getMessageHandler().modifyPath(signalType, data.getPathId(),
+					revertiveValue, hostName);
+			final String revertive = nameAndAnyValue.getValue().getObject().toString();
+			updateAdditionalInfo(dbSnc, revertive);
+			LOG.debug("Updated SNC_REVERTIVE value : " + revertive);
+		} catch (final PlugInException ex) {
+			LOG.error(ex.getMessage());
+			throw ex;
+		} catch (final Exception e) {
+			throw PlugInExceptionHandler.internalError(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * This method returns SNC_Revertive value which is set to SNC
+	 *
+	 * @param dbSnc
+	 * @return String value
+	 */
+	public String retreiveRevertiveValue(final DBSnc dbSnc,final NameAndAnyValue nameAndAnyValue) {
+		String revertiveValue = "false";
+		final AdditionalInfo additionalInfo = dbSnc.getInformation().getAdditionalInfo();
+		final java.util.Iterator<NameAndStringValue> nameAndStringValueIterator = additionalInfo.iterator();
+		while (nameAndStringValueIterator.hasNext()) {
+			final NameAndStringValue additionalInfoField = nameAndStringValueIterator.next();
+			if (additionalInfoField.getName().equals(Standard.SNC_REVERTIVE.name())) {
+				additionalInfoField.setValue(nameAndAnyValue.getValue().getObject().toString());
+
+			}
+		}
+		dbSnc.getInformation().setAdditionalInfo(additionalInfo);
+		revertiveValue = nameAndAnyValue.getValue().getObject().toString();
+		LOG.debug("Revertive Value : "+ revertiveValue);
+		return revertiveValue;
+	}
+
+	/**
+	 * Updates AdditionalInformation of DBSNC
+	 *
+	 * @param dbSnc
+	 * @param nameAndAnyValue
+	 */
+	private void updateAdditionalInfo(final DBSnc dbSnc, final String sncRevertiveValue) {
+		final AdditionalInfo additionalInfo = dbSnc.getInformation().getAdditionalInfo();
+		final java.util.Iterator<NameAndStringValue> nameAndStringValueIterator = additionalInfo.iterator();
+		while (nameAndStringValueIterator.hasNext()) {
+			final NameAndStringValue additionalInfoField = nameAndStringValueIterator.next();
+			if (additionalInfoField.getName().equals(Standard.SNC_REVERTIVE.name())) {
+				additionalInfoField.setValue(sncRevertiveValue);
+			}
+		}
+		LOG.debug("#### Updated additionalInfo ### ");
+		dbSnc.setAdditionalInfo(additionalInfo);
+	}
+
+	private com.marconi.fusion.tmf.i38PlugIn.converter2.Converter getConverter() {
+		return com.marconi.fusion.tmf.i38PlugIn.converter2.Converter.getDefault();
+	}
+}

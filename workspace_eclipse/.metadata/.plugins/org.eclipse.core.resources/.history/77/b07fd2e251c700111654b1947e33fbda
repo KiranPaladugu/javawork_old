@@ -1,0 +1,5 @@
+package com.marconi.tmp.tools;
+
+public interface BERConversionEventListener {
+	public void onRealignmentEvent(BERConversionEvent event);
+}

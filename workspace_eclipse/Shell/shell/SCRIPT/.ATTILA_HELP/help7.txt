@@ -1,0 +1,2 @@
+This command allows the restoration of a previously saved database, 
+to replace the database for the selected TMFAgent installation.

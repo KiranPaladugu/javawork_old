@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename local variable &apos;strings&apos; in &apos;com.app.rename.Renamer.getNewName(...)&apos; to &apos;removablePatterns&apos;&#x0D;&#x0A;- Original project: &apos;javaWork&apos;&#x0D;&#x0A;- Original element: &apos;com.app.rename.Renamer.getNewName(String, String[], String...).strings&apos;&#x0D;&#x0A;- Renamed element: &apos;strings&apos;&#x0D;&#x0A;- Update references to refactored element" description="Rename local variable &apos;strings&apos;" id="org.eclipse.jdt.ui.rename.local.variable" input="/renamer&lt;com.app.rename{Renamer.java[Renamer~getNewName~QString;~\[QString;~\[QString;@strings!169!185!179!185!\[QString;!0!true" name="removablePatterns" references="true" stamp="1333031732226" version="1.0"/>
+</session>

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Copy 3 elements to &apos;framework/ideas/com.framework.reg&apos;&#x0D;&#x0A;- Original project: &apos;MyWork&apos;&#x0D;&#x0A;- Destination element: &apos;framework/ideas/com.framework.reg&apos;&#x0D;&#x0A;- Original elements:&#x0D;&#x0A;     com.mex.reg.RegisterException.java&#x0D;&#x0A;     com.mex.reg.NameRegister.java&#x0D;&#x0A;     com.mex.reg.Register.java" description="Copy compilation units" destination="=framework/ideas&lt;com.framework.reg" element1="/Mex&lt;com.mex.reg{RegisterException.java" element2="/Mex&lt;com.mex.reg{NameRegister.java" element3="/Mex&lt;com.mex.reg{Register.java" files="0" flags="589830" folders="0" id="org.eclipse.jdt.ui.copy" policy="org.eclipse.jdt.ui.copyResources" stamp="1335176862753" units="3" version="1.0"/>
+</session>

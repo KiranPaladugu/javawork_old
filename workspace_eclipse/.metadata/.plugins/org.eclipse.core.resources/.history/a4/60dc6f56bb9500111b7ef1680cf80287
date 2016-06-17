@@ -1,0 +1,1760 @@
+/*
+ * I36PlugIn.java
+ *
+ * Created on 18 dicembre 2001, 18.16
+ */
+
+package com.marconi.fusion.tmf.i36PlugIn;
+
+import static com.marconi.fusion.tmf.exportimport.ExportImportConstants.EI_CUSTOMER_DATA;
+import static com.marconi.fusion.tmf.exportimport.ExportImportConstants.EI_SLASH;
+
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+import org.apache.commons.lang.time.StopWatch;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36;
+import com.marconi.fusion.X36.X36ChannelIdentification;
+import com.marconi.fusion.X36.X36InterCardCoord;
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.X36.X36NetworkElement;
+import com.marconi.fusion.X36.X36ODUId;
+import com.marconi.fusion.X36.X36ODUTimeSlot;
+import com.marconi.fusion.X36.X36PortIdentification;
+import com.marconi.fusion.X36.X36SetOfNeId;
+import com.marconi.fusion.X36.X36SetOfNetworkElement;
+import com.marconi.fusion.X36.X36SpecificPortInformation;
+import com.marconi.fusion.X36.X36TimeSlot;
+import com.marconi.fusion.base.application.BaseApplication;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.application.WrongInitializationException;
+import com.marconi.fusion.base.context.Context;
+import com.marconi.fusion.base.context.IContext;
+import com.marconi.fusion.base.licensing.LicenseEvent;
+import com.marconi.fusion.base.licensing.LicenseManagerFactory;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.util.FileChangeListener;
+import com.marconi.fusion.base.util.FileMonitor;
+import com.marconi.fusion.base.util.FileUtils;
+import com.marconi.fusion.base.util.Utility;
+import com.marconi.fusion.tmf.SBI.SBIKey;
+import com.marconi.fusion.tmf.additionalInformation.AdditionalInfoUtils;
+import com.marconi.fusion.tmf.additionalInformation.AssociatedAlarmPorts;
+import com.marconi.fusion.tmf.additionalInformation.ChannelInformation;
+import com.marconi.fusion.tmf.additionalInformation.DBAdditionalInfoUtilities;
+import com.marconi.fusion.tmf.additionalInformation.EmSystemProfile;
+import com.marconi.fusion.tmf.additionalInformation.PortInformation;
+import com.marconi.fusion.tmf.additionalInformation.ProprietaryAdditionalInfo;
+import com.marconi.fusion.tmf.additionalInformation.TimeSlotInformation;
+import com.marconi.fusion.tmf.agnosticInfo.AIPortCoord;
+import com.marconi.fusion.tmf.agnosticInfo.AIPortInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AIPortType;
+import com.marconi.fusion.tmf.agnosticInfo.AISetOfAssociatedAlarmPort;
+import com.marconi.fusion.tmf.agnosticInfo.AITimeSlotInfo;
+import com.marconi.fusion.tmf.db.DBConnectionTerminationPoint;
+import com.marconi.fusion.tmf.db.DBCtp;
+import com.marconi.fusion.tmf.db.DBException;
+import com.marconi.fusion.tmf.db.DBFtp;
+import com.marconi.fusion.tmf.db.DBIterator;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.DBPortTp;
+import com.marconi.fusion.tmf.db.DBPtp;
+import com.marconi.fusion.tmf.db.Session;
+import com.marconi.fusion.tmf.i36PlugIn.MEInfos.MEState;
+import com.marconi.fusion.tmf.i36PlugIn.converter.AbstractPortConverter.AssociatedAlarmPortsInfo;
+import com.marconi.fusion.tmf.i36PlugIn.converter.PluginSupportedConfigurator;
+import com.marconi.fusion.tmf.i36PlugIn.converter.TDMMuxponderPortConverter;
+import com.marconi.fusion.tmf.i36PlugIn.keys.IndexesHelper;
+import com.marconi.fusion.tmf.i36PlugIn.objectManagement.I36ObjectActivityListener;
+import com.marconi.fusion.tmf.i36PlugIn.objectManagement.TpHelper;
+import com.marconi.fusion.tmf.i36PlugIn.performance.GranularityFileLoader;
+import com.marconi.fusion.tmf.i36PlugIn.performance.MeasureFileLoader;
+import com.marconi.fusion.tmf.i36PlugIn.performance.SignalTypeFileLoader;
+import com.marconi.fusion.tmf.i36PlugIn.protection.I36ProtectionStatusSelector;
+import com.marconi.fusion.tmf.i36PlugIn.protection.ProtectionCommandDescriptor;
+import com.marconi.fusion.tmf.i36PlugIn.protection.SwitchReasonDescriptor;
+import com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient;
+import com.marconi.fusion.tmf.information.MEInformation;
+import com.marconi.fusion.tmf.information.MEInformation.MEDn2Id;
+import com.marconi.fusion.tmf.keys.KeysHelper;
+import com.marconi.fusion.tmf.naming.Naming;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.TPSupportedOperations;
+import com.marconi.fusion.tmf.plugIn.TpType;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.CommunicationState;
+import com.marconi.fusion.tmf.plugIn.types.CtpNameComponent;
+import com.marconi.fusion.tmf.plugIn.types.EMSDn;
+import com.marconi.fusion.tmf.plugIn.types.LayeredParameterList;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEDnList;
+import com.marconi.fusion.tmf.plugIn.types.MEId;
+import com.marconi.fusion.tmf.plugIn.types.ManagedElement;
+import com.marconi.fusion.tmf.plugIn.types.ManagedElementList;
+import com.marconi.fusion.tmf.plugIn.types.MultiLayerSubnetwork;
+import com.marconi.fusion.tmf.plugIn.types.SNDn;
+import com.marconi.fusion.tmf.plugIn.types.SNId;
+import com.marconi.fusion.tmf.plugIn.types.TerminationPoint;
+import com.marconi.fusion.tmf.plugIn.types.Topology;
+import com.marconi.fusion.tmf.realignmentHandler.rh.IRealignmentHandler;
+import com.marconi.fusion.tmf.realignmentHandler.rh.RealignmentEvent;
+import com.marconi.fusion.tmf.sbi.em.SBIInitializationException;
+import com.marconi.fusion.tmf.tmfFramework.EmsInformation;
+import com.marconi.fusion.tmf.tmfFramework.TmfNameUtilities;
+import com.marconi.fusion.tmf.tmfFramework.delegates.AbstractPlugIn;
+import com.marconi.fusion.tmf.utils.AIHelper;
+import com.marconi.fusion.tmf.utils.CommonProperties;
+import com.marconi.fusion.tmf.utils.LayeredParametersUtils;
+import com.marconi.fusion.tmf.utils.LicenseUtils;
+
+public class I36PlugIn extends AbstractPlugIn implements FileChangeListener, PropertyChangeListener {
+	private static final Log LOG = LogFactory.getLog(I36PlugIn.class);
+
+	public static final String MEDNLIST_PROPERTY = "MEDnList";
+	public static final String UPDATEME_PROPERTY = "UpdateME";
+	public static final String START_PROVISION = "StartProvision";
+
+	private String emId = ""; // e' il nome del MV36
+	private final SNDn snDn = new SNDn();
+	private boolean standAlone = true;
+	private boolean beginningUnacknowledged = true;
+	private MEDnList managedElementList = null;
+
+	/** Map which stores 'neModel' against the key 'neId' */
+	private final NeModelMapper neModelMapper = new NeModelMapper();
+
+	private SBIClientI sbiClient = null;
+	// SXU3B
+	private boolean backPlaneNaming;
+	// SXU3B
+	private boolean useNativeLabels = false;
+
+	private LicenseUtils licUtil = null;
+	private boolean licCheckEnabled = false;
+	private MECache meCache;
+	private static int threadCount = 0;
+	/**
+	 * Boolean which specifies if the post realignment (Links,Circuits and
+	 * Paths) of I38SBI is in progress
+	 **/
+	private boolean isInPostRealignment = false;
+
+	Map<String, EmDetails> hostDetails = new HashMap<String, EmDetails>();
+	Map<String, X36SetOfNeId> emNEDetails = new HashMap<String, X36SetOfNeId>();
+
+	/**
+	 * @return the emNEDetails
+	 */
+	public Map<String, X36SetOfNeId> getEmNEDetails() {
+		return emNEDetails;
+	}
+
+	List neList = null;
+
+	// Boolean to identify First Time connection handling scenario
+	private boolean firstConnect = true;
+
+	// Property change support used for internal I36Plugin property change
+	// handling
+	private static PropertyChangeSupport pcs;
+
+	MEDnList meDnList = new MEDnList();
+	/**
+	 * @return the neList
+	 */
+	public List getNeList() {
+		return neList;
+	}
+
+
+
+	public MEDnList getmeDnList() {
+		return meDnList;
+	}
+
+	/*
+	 * TODO Properties used also by I38Plugin shold be moved in CommonProperties
+	 * class
+	 */
+	public enum PluginProperty {
+		standAlone("standAlone"),
+		// matrixBehaviour("matrixBehaviour"),
+		alarmConfiguration("alarmConfiguration"), layerRateToI36SignalType("layerRateToI36SignalType"), layerRateToI36Measure(
+				"layerRateToI36Measure"), granularityToI36Granularity("granularityToI36Granularity"), equipmentInfo(
+						"equipmentInfo"), onlyStmOptical("onlyStmOptical"), supportedProtectionInfo("supportedProtectionInfo"), synchronousStart(
+								"synchronousStart"), synchronousNodeRealignment("synchronousNodeRealignment"), timeoutOnFirstConnection(
+										"timeoutOnFirstConnection"), tpSupportedOperations("tpSupportedOperations"),
+										// databaseManager
+										databaseManagerConfiguration("databaseManager.configuration"),
+										// realignment
+										realignmentOnModification("realignment.realignmentOnModification"), realignmentOnLinkup("realignment.realignmentOnLinkup"), realignmentAtBoot(
+												"realignment.realignmentAtBoot"), realignmentDelay("realignment.delay"), realignmentConcurrentRealignment(
+														"realignment.concurrentRealignment"), realignmentLivingThread("realignment.livingThread"), realignmentMsgTimeout(
+																"realignment.msgTimeout"), realignmentCollection("realignment.collection"), realignmentBerHome(
+																		"realignment.berHome"),
+
+																		linkupUpDelay("ME.event.linkUp.delay"), linkupDownDelay("ME.event.linkDown.delay"),
+
+																		// naming
+																		namingMEFormat("naming.ME.format"), namingEQUseSlotId("naming.EQ.useSlotId"), namingPTPUseSlotId("naming.PTP.useSlotId"), namingPTPNativeNameFormat(
+																				"naming.PTP.nativeEMSName.format"), namingCTPNativeNameSeparator("naming.CTP.nativeEMSName.separator"), namingHolderNativeNameFormat(
+																						"naming.EH.nativeEMSName.format"), namingEqNativeNameFormat("naming.EQ.nativeEMSName.format"), namingPGNativeNameFormat(
+																								"naming.PG.nativeEMSName.format"), namingEPGNativeNameFormat("naming.EPG.nativeEMSName.format"), namingEqCardNameAsCardTypeIfEmpty(
+																										"naming.EQ.eqCardNameAsCardTypeIfEmpty"),
+																										// TR HL37850 & HL37856
+																										namingAIDNativeNameFormat("naming.AID.nativeEMSName.format"),
+
+																										// for setting the user label of ME (it is set to nativeEmsName of the
+																										// ME)
+																										namingMENativeNameFormat("naming.ME.nativeEMSName.format"),
+
+																										fdNameFormat("FD.name.format"), mfdNameFormat("MFD.name.format"), fdFrNameFormat("FDFr.name.format"),
+
+																										// protection synch
+																										protectionSynchEnabled("protectionSynch.enabled"), sncpSynch("protectionSynch.sncp"), pgSynch(
+																												"protectionSynch.protectionGroup"), epgSynch("protectionSynch.eProtectionGroup"),
+
+																												// SNC Layer rates
+																												sncLayerRates("subNetworkConnection.layerRates"),
+
+																												// layeredParams
+																												layeredParamsLocationUseSlotId("layeredParams.location.useSlotId"), layeredParamsLocationUseOuterReceivingCard(
+																														"layeredParams.location.useOuterReceivingCard"), layeredParamsMaxLaserDistance("layeredParams.maxLaserDistance"), layeredParamsOscPattern(
+																																"layeredParams.oscPattern"), layeredParamsInBandPattern("layeredParams.inBandPattern"), layeredParamsInBandCentralFreq(
+																																		"layeredParams.inBandCentralFreq"), layeredParamsInBandFreqSpacing("layeredParams.inBandFreqSpacing"), layeredParamsSetParamForOscOutOfBand(
+																																				"layeredParams.setParamForOscOutOfBand"), layeredParamsOutOfBandCentralFreq("layeredParams.outOfBandCentralFreq"), layeredParamsOutOfBandFreqSpacing(
+																																						"layeredParams.outOfBandFreqSpacing"),
+
+																																						// Performance in PEN is managed on Ethernet and FibreChannel layerrates
+																																						ethernetSupportedLayerRates("ethernetSupported.layerRates"),
+
+																																						// debug
+																																						debugNEIdList("debug.neIdList"),
+																																						// alarms
+																																						alarmsBeginningUnacknowledged("alarms.beginningUnacknowledged"), tcaUnitIdEnable("alarms.tcaUnitIdEnable"), alarmSuppressionOnPortWithoutConnections(
+																																								"alarm.suppressionOnPortWithoutConnections"),
+
+																																								// MSPProtection
+																																								MSPProtection("Protection.mspProtection"), ProtectionStatusSelector("Protection.ProtectionStatusSelector"), ProtectionTimeOutSetAndGet(
+																																										"Protection.TimeOutSetAndGet"), ProtectionSkipTimeOutSetAndGet("Protection.SkipTimeOutSetAndGet"), ProtectionSwitchThreads(
+																																												"Protection.ProtectionSwitchThreads"), ProtectionSwitchAttempts("Protection.ProtectionSwitchAttempts"), ProtectionSwitchDelay(
+																																														"Protection.ProtectionSwitchDelay"), ActionSwitchAttempts("Action.ActionSwitchAttempts"), ActionSwitchDelay(
+																																																"Action.ActionSwitchDelay"),
+
+																																																MspRealign("Protection.MspRealign"), EquipmentProtectionRealign("Protection.EquipmentProtectionRealign"), SwitchDuplicate(
+																																																		"Protection.SwitchDuplicate"), SwitchDataHome("Protection.SwitchDataHome"),
+
+																																																		// SncProtection
+																																																		ProtectionSwitchEventsBufferSize("Protection.ProtectionSwitchEventsBufferSize"), BufferedProtectionSwitchEventTimeOut(
+																																																				"Protection.BufferedProtectionSwitchEventTimeOut"), ProtectionBufferFlushDelay(
+																																																						"Protection.ProtectionBufferFlushDelay"),
+
+																																																						// Provisioning
+
+																																																						doProvisioning("provisioning"),
+
+																																																						// support the property which specifies the delay after which NE should
+																																																						// be deleted from the TMF DB
+																																																						meDeletionDelay("ME.deletion.delay"), doProvisioningRetrialInterval("provisioning.alarmRetrialInterval"), doProvisioningMaxRetrials(
+																																																								"provisioning.alarmMaxRetrials"),
+
+																																																								// SXU3B
+																																																								BackPlaneNaming("SXU3B.BackPlaneNaming"),
+																																																								// SXU3B
+
+																																																								// getTP from DB
+																																																								getTPFromDB("I36.getTPFromDB"),
+
+																																																								// updateIndex for tp's in DB
+																																																								updateTPIndex("SBI.updateTPIndex"), setAlarmTpIndex("SBI.setAlarmTpIndex"),
+
+																																																								// get fast realignment for TR HM14896
+																																																								getFastRealign("realignment.fastRealignment"),
+
+																																																								// For negative values of frequency we use this property to configure
+																																																								negativeFreqeuncyForFTP("naming.PTP.negativeFrequency.label"), negativeFreqeuncyForCTP(
+																																																										"naming.CTP.negativeFrequency.label"),
+
+																																																										/*
+																																																										 * below I36 properties are used to Build StepByStepConverter object for
+																																																										 * I36 which is used for conversion of I36 messages between two versions
+																																																										 * to support Backward Compatability
+																																																										 */
+																																																										i36SyntaxTag("I36SyntaxTag"), i36SyntaxSeparator("I36SyntaxSeparator"), latestI36Index("LatestI36Index"),
+
+																																																										/*
+																																																										 * below PEN properties are used to Build StepByStepConverter object for
+																																																										 * PEN which is used for conversion of PEN messages between two versions
+																																																										 * to support Backward Compatability
+																																																										 */
+																																																										penSyntaxTag("PENSyntaxTag"), penSyntaxSeparator("PENSyntaxSeparator"), latestPENIndex("LatestPENIndex"),
+
+																																																										/*
+																																																										 * below X36 properties are used to Build StepByStepConverter object for
+																																																										 * X36 which is used for conversion of X36 messages between two versions
+																																																										 * to support Backward Compatability
+																																																										 */
+																																																										x36SyntaxTag("X36SyntaxTag"), x36SyntaxSeparator("X36SyntaxSeparator"), latestX36Index("LatestX36Index"),
+
+																																																										SORelease("ber.SORelease"), ethBackplaneGetTps("ethBackplane.getTps"), snclabelFile("ber.SNCLabelFile"), fdfrTypeFile(
+																																																												"ber.FDFrTypeFile"), sncSyntax("sncs.exportFile"), tlSyntax("topologicalLink.exportFile"), tcaPP("ber.TCAPPFile"), ControlplaneManagement(
+																																																														"ControlplaneManagement"), meQueryGranularity("meGranularity"),
+
+																																																														sbiOAPortModelStrategy("SBI.OpticalAmplifierPortModelStrategy"), maxParallelPMPRealignments("MaxParallelPMPRealignments"), pmpSourceSpecSize(
+																																																																"pmpSourceSpecSize"),
+
+																																																																// Performance. The following property values will be overridden by
+																																																																// I38Plugin
+																																																																PMM_DELETE_FILE_AFTER_SEND("PlugIn.performance.deleteFileAfterSend"), PMM_DELETE_TEMPORARY_FILES(
+																																																																		"PlugIn.performance.deleteTemporaryFiles"),
+																																																																		/*
+																																																																		 * Added as part of MPLS_TP modelling of Cross connection.
+																																																																		 */
+																																																																		findLspTpWithLogicalIndex("findLspTpWithLogicalIndex");
+		private final String value;
+
+		private PluginProperty(final String value) {
+			this.value = value;
+		}
+
+		@Override
+		public String toString() {
+			return "PlugIn." + value;
+		}
+	}
+
+	/* ************************************************************************** */
+	public String getEmsName() {
+		return EmsInformation.getEmsInstance(getName(), profile);
+	}
+
+	/* ************************************************************************** */
+	public EMSDn getEMSDn() {
+		return new EMSDn();
+	}
+
+	/* ************************************************************************** */
+	public String getEMId() {
+		return emId;
+	}
+
+	/* ************************************************************************** */
+	private SNDn getSNDn() {
+		return snDn;
+	}
+
+	/* ************************************************************************** */
+	public String getVendor() {
+		return EmsInformation.getVendor(profile);
+	}
+
+	/**
+	 * @return Returns the standAlone.
+	 */
+	public boolean isStandAlone() {
+		return standAlone;
+	}
+
+	public boolean isInPostRealignment() {
+		return isInPostRealignment;
+	}
+
+	public void setInPostRealignment(final boolean isInPostRealignment) {
+		this.isInPostRealignment = isInPostRealignment;
+	}
+
+	// SXU3B
+	public boolean isBackPlaneNaming() {
+		return backPlaneNaming;
+	}
+
+	// SXU3B
+	protected void setStandAlone(final boolean v) {
+		standAlone = v;
+	}
+
+	public boolean isAlarmsUnacknowledged() {
+		return beginningUnacknowledged;
+	}
+
+	public boolean useNativeLabels() {
+		return useNativeLabels;
+	}
+
+	protected void setAlarmsUnacknowledged(final boolean v) {
+		beginningUnacknowledged = v;
+	}
+
+	/*
+	 * ** I36PlugIn/IPlugIn
+	 * *****************************************************
+	 */
+	@Override
+	public void initPlugIn() throws WrongInitializationException {
+		/* ************************************************************************** */
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("Initializing I36 Plugin <%s>....", getName()));
+		}
+		if (getProfile() == null) {
+			LOG.error("Undefined profiler");
+			throw new WrongInitializationException("Undefined Profiler");
+		}
+		if (LOG.isInfoEnabled()) {
+			LOG.info("Initializing MECache");
+		}
+		meCache = new MECache();
+		managedElementList = new MEDnList();
+		pcs = new PropertyChangeSupport(this);
+		Utility.dumpProfile(getProfile(), "PROFILE for plugin " + getName(), LOG);
+		standAlone = getProfile().getBoolProperty(PluginProperty.standAlone, true);
+		// SXU3B
+		backPlaneNaming = getProfile().getBoolProperty(PluginProperty.BackPlaneNaming, true);
+		// SXU3B		
+		// Set emId and snDn
+		setEmIdAndSnDn();
+		useNativeLabels = getProfile().getBoolProperty(CommonProperties.PluginProperties.objectCreationSetUserLabel, false);
+		// Load Alarm Configuration Properties
+		loadAlarmConfProps();
+		// acknowledge indication
+		beginningUnacknowledged = getProfile().getBoolProperty(PluginProperty.alarmsBeginningUnacknowledged, true);
+		// Load Supported Protection Info Properties
+		loadSupportedProtInfoProps();	
+		// Load LayerRateToI36Measure Properties
+		loadPerfLayerRateToI36MeasureProps();
+		// Load LayerRateToI36SignalType Properties
+		loadPerfLayerRateToI36SigTypeProps();
+		// Load GranularityTOI36Granularity Properties
+		loadPerfGranToI36GranProps();
+		// Load MSP Protection Properties (load ProtectionCommand Table and
+		// SwitchReason Table)
+		loadMSPProtectionProps();
+		// Load Protection Status Selector Properties
+		loadProtectionStatusSelectorProps();
+		// Load TP Supported Operations Properties
+		loadTPSupportedOperationsProps();
+		/*
+		 * Quello specifico dell'i36Plug-In puo' aver bisogno di essere
+		 * inizializzato anche dall'i36Plug-In
+		 */
+		IndexesHelper.init(getDatabaseManager().getDatabase());
+		/*
+		 * Quello utilizzato da entrambi i Plug-In
+		 */
+		KeysHelper.init(getDatabaseManager().getDatabase());
+
+		TpHelper.init(getDatabaseManager().getDatabase());
+
+		// License check
+		checkLIC();
+
+		initDBObject();
+
+		// Initialize sbiClient
+		initSBI();
+
+		I36ObjectActivityListener.init(getDatabaseManager().getDatabase(), this);
+
+		//TMFObjectActivityListener.init(getDatabaseManager().getDatabase());
+
+		// Set ForceNeIdList
+		setForceNEIdList();
+
+		/**
+		 * Load SNC LayerRates from I36Plugin.properties
+		 */
+		try {
+			if (sbiClient != null) {
+				com.marconi.fusion.tmf.i36PlugIn.SubnetworkRates.getDefault().init(sbiClient);
+			}
+		} catch (final Exception e) {
+			LOG.error(e);
+		}
+
+		// Added as part of CR 375 WI 1.3, loading FDFrHelper class, which is
+		// used to load data present in the file to a map
+		if (isStandAlone() && BaseApplication.getApplication().getCommandLine().hasOption("readBer")) {
+			final String defaultDir = sbiClient.getProfile().getProperty("Framework.home") + EI_SLASH + EI_CUSTOMER_DATA
+					+ EI_SLASH;
+			final String fdfrtypeFileLoc = getProfile().getProperty(PluginProperty.fdfrTypeFile, defaultDir);
+			FDFrHelper.init(fdfrtypeFileLoc);
+		}
+
+		// Assign Plugin as property change listener to Realignment Handler
+		final IContext iContext = Context.getApplicationContext();
+		final IRealignmentHandler RH = (IRealignmentHandler) iContext.get("RealignmentHandler");
+		RH.addPropertyChangeListener(this);
+	}
+
+	/**
+	 * This method sets emId and snDn
+	 */
+	private void setEmIdAndSnDn() {
+		final String nmName = getProfile().getProperty(EmsInformation.PropertyName.EMS_NM_NAME, "");
+		final String emName = getProfile().getProperty(EmsInformation.PropertyName.EMS_EM_NAME, "");
+		final String snName = getProfile().getProperty(EmsInformation.PropertyName.EMS_SN_NAME, emName);
+
+		LOG.info(new DumpInfo(String.format("Loaded: nmName: <%s>\n" + "        emName: <%s>\n" + "        snName: <%s>", nmName,
+				emName, snName)));
+
+		if (nmName.length() > 0) {
+			emId = nmName + Naming.separator + emName;
+		} else {
+			emId = emName;
+		}
+		final SNId snId = new SNId();
+		snId.setMlsnId(nmName + ":" + snName);
+		snDn.setSn(snId);
+	}
+
+	/**
+	 * This method loads Alarm.properties
+	 */
+	private void loadAlarmConfProps() {
+		/**
+		 * AlarmConfiguration
+		 */
+		final String fileName = profile.getProperty(PluginProperty.alarmConfiguration, "defaultAlarmConf.cfg");
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("For property <%s> loading file <%s>", PluginProperty.alarmConfiguration, fileName));
+		}
+
+		try {
+			FileMonitor.getInstance().addFileChangeListener(this, fileName, 120000);
+			AlarmConfiguration.load(fileName);
+		} catch (final Exception ex) {
+			final String message = String.format("Failed loading AlarmConfiguration for EM <%s> from file <%s>", getName(),
+					fileName);
+			LOG.error(new DumpInfo(message, ex));
+			throw new WrongInitializationException(message);
+		}
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("AlarmConfiguration for EM <%s> loaded form file <%s>.", getName(), fileName));
+		}
+	}
+
+	/**
+	 * This method loads SupportedProtectionInfo.properties
+	 */
+	private void loadSupportedProtInfoProps() {
+		/**
+		 * SupportedProtection Leggo la mappa NeModel <--> EM-Plugin
+		 */
+		final String fileName = profile.getProperty(PluginProperty.supportedProtectionInfo,
+				"./SupportedProtectionInfo.properties");
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("For property <%s> loading file <%s>", PluginProperty.supportedProtectionInfo, fileName));
+		}
+
+		try {
+			FileMonitor.getInstance().addFileChangeListener(this, fileName, 120000);
+			PluginSupportedConfigurator.load(fileName);
+		} catch (final Exception ex) {
+			final String message = String.format("Failed loading PluginSupportedConfigurator for EM <%s> from file <%s>",
+					getName(), fileName);
+			LOG.error(new DumpInfo(message, ex));
+			throw new WrongInitializationException(message);
+		}
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("PluginSupportedConfigurator for EM <%s> loaded form file <%s>.", getName(), fileName));
+		}
+	}
+
+	/**
+	 * This method loads LayerRateToI36Measure.properties
+	 */
+	private void loadPerfLayerRateToI36MeasureProps() {
+		/**
+		 * PERFORMANCES
+		 */
+		final String fileName = profile.getProperty(PluginProperty.layerRateToI36Measure, "./LayerRateToI36Measure.properties");
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("For property <%s> loading file <%s>", PluginProperty.layerRateToI36Measure, fileName));
+		}
+
+		// leggo il file di mappaggio per le misure I36
+		try {
+			MeasureFileLoader.load(fileName);
+		} catch (final Exception ex) {
+			final String message = String.format("Failed loading LayerRateToMeasure for EM <%s> from file <%s>.", getName(),
+					fileName);
+			LOG.error(new DumpInfo(message, ex));
+			throw new WrongInitializationException(message);
+		}
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("LayerRateToMeasure loaded for EM <%s> from file <%s>.", getName(), fileName));
+		}
+
+	}
+
+	/**
+	 * This method loads LayerRateToI36SignalType.properties
+	 */
+	private void loadPerfLayerRateToI36SigTypeProps() {
+		final String fileName = profile.getProperty(PluginProperty.layerRateToI36SignalType,
+				"./LayerRateToI36SignalType.properties");
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("For property <%s> loading file <%s>", PluginProperty.layerRateToI36SignalType, fileName));
+		}
+
+		// leggo il file di mappaggio per i signal type I36
+		try {
+			SignalTypeFileLoader.load(fileName);
+		} catch (final Exception ex) {
+			final String message = String.format("Failed loading SignalType for EM <%s> from file <%s>.", getName(), fileName);
+			LOG.error(message);
+			throw new WrongInitializationException(message);
+		}
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("SignalType for EM <%s> loaded from file <%s>.", getName(), fileName));
+		}
+	}
+
+	/**
+	 * This method loads GranularityToI36Granularity.properties
+	 */
+	private void loadPerfGranToI36GranProps() {
+		// leggo il file di mappaggio per la granularity I36
+		final String fileName = profile.getProperty(PluginProperty.granularityToI36Granularity,
+				"./GranularityToI36Granularity.properties");
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("For property <%s> loading file <%s>", PluginProperty.granularityToI36Granularity, fileName));
+		}
+
+		try {
+			GranularityFileLoader.load(fileName);
+		} catch (final Exception ex) {
+			final String message = String.format("Failed loading Granularity for EM <%s> from file <%s>.", getName(), fileName);
+			LOG.error(message);
+			throw new WrongInitializationException(message);
+		}
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("Granularity for EM <%s> loaded from file <%s>.", getName(), fileName));
+		}
+	}
+
+	/**
+	 * This method loads ProtectionCommand Table and SwitchReason Table from
+	 * MSPProtection.properties
+	 */
+	private void loadMSPProtectionProps() {
+		// MSP Protection
+		final String fileName = profile.getProperty(PluginProperty.MSPProtection, "./MSPProtection.properties");
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("For property <%s> loading file <%s>", PluginProperty.MSPProtection, fileName));
+		}
+
+		try {
+			// ProtectionCommand
+			ProtectionCommandDescriptor.load(fileName);
+		} catch (final Exception ex) {
+			final String message = String.format("Failed loading ProtectionCommand Table for EM <%s> from file <%s>.", getName(),
+					fileName);
+			LOG.error(message);
+			throw new WrongInitializationException(message);
+		}
+
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("ProtectionCommand Table for EM <%s> loaded from file <%s>.", getName(), fileName));
+		}
+
+		try {
+			// SwitchReason
+			SwitchReasonDescriptor.load(fileName);
+		} catch (final Exception ex) {
+			final String message = String.format("Failed loading SwitchReason Table for EM <%s> from file <%s>.", getName(),
+					fileName);
+			LOG.error(message);
+			throw new WrongInitializationException(message);
+		}
+
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("SwitchReason Table for EM <%s> loaded from file <%s>.", getName(), fileName));
+		}
+	}
+
+	/**
+	 * This method loads ProtectionStatusSelector.properties
+	 */
+	private void loadProtectionStatusSelectorProps() {
+		// I36ProtectionStatusSelector
+		final String fileName = profile.getProperty(PluginProperty.ProtectionStatusSelector,
+				"./ProtectionStatusSelector.properties");
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("For property <%s> loading file <%s>", PluginProperty.ProtectionStatusSelector, fileName));
+		}
+
+		try {
+			I36ProtectionStatusSelector.load(fileName);
+		} catch (final Exception ex) {
+			final String message = String.format("Failed loading I36ProtectionStatusSelector Table for EM <%s> from file <%s>.",
+					getName(), fileName);
+			LOG.error(message);
+			throw new WrongInitializationException(message);
+		}
+
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("I36ProtectionStatusSelector Table for EM <%s> loaded from file <%s>.", getName(), fileName));
+		}
+	}
+
+	/**
+	 * This method loads TPSupportedOperations.properties
+	 */
+	private void loadTPSupportedOperationsProps() {
+		final String fileName = profile.getProperty(PluginProperty.tpSupportedOperations, "./TPSupportedOperations.properties");
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("For property <%s> loading file <%s>", PluginProperty.ProtectionStatusSelector, fileName));
+		}
+
+		try {
+			FileMonitor.getInstance().addFileChangeListener(this, fileName, 30000);
+			TPSupportedOperations.load(fileName);
+		} catch (final Exception ex) {
+			final String message = String.format("Failed loading TPSupportedOperations Table for EM <%s> from file <%s>.",
+					getName(), fileName);
+			LOG.error(message, ex);
+			throw new WrongInitializationException(message);
+		}
+
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("TPSupportedOperations for EM <%s> loaded from file <%s>.", getName(), fileName));
+		}
+	}
+
+	/**
+	 * This method checks Licenses
+	 */
+	private void checkLIC()
+	{
+		final Properties properties = Utility.getProperties(profile.getProperty("Orchestrator.PlugIn", "UNDEFFINED"));
+
+		final String property = new Profile(properties).getProperty("plugIn.installed");
+
+		if (property.equals(getClass().getName())) {
+			licCheckEnabled = true;
+			LOG.info(String.format("License for %s is: %s", getClass().getName(), licCheckEnabled ? "Enabled" : "Disabled"));
+		}
+
+		if (licCheckEnabled) {
+			try {
+				licUtil = new LicenseUtils(super.profile);
+			} catch (final Exception e) {
+				final String msg = e.getMessage().toString();
+				throw new WrongInitializationException(msg);
+			}
+
+			super.initLicenseManager();
+			checkCXC();
+		}
+	}
+
+	/**
+	 * This method initializes sbiClient
+	 */
+	private void initSBI()
+	{
+		try {
+			sbiClient = new SBIClient(this);
+			sbiClient.init(getEventConsumer());
+		} catch (final SBIInitializationException sbiEx) {
+			final String message = String.format("Failed to initialize SBI" + sbiEx.getMessage());
+			LOG.error(message, sbiEx);
+			throw new WrongInitializationException(message);
+		}
+	}
+
+	/**
+	 * This method sets forceNeIdList if has property debugNEIdList set.
+	 */
+	private void setForceNEIdList()
+	{
+		final String value = getProfile().getProperty(I36PlugIn.PluginProperty.debugNEIdList);
+		if (value != null) {
+			final X36SetOfNeId list = new X36SetOfNeId();
+			try {
+				list.parse(value);
+				// x36Sbi.setMEDnList(list);
+				sbiClient.forceNEIdList(list);
+				// setStandAlone(false);
+			} catch (final Exception e) {
+				LOG.error(e);
+			}
+		}
+	}
+
+	/* ** I36PlugIn/IPlugIn ***************************************************** */
+	@Override
+	public void startPlugIn() throws PlugInException {
+		/* ************************************************************************** */
+		final StopWatch watch = new StopWatch();
+		watch.start();
+
+		sbiClient.start();
+
+		watch.stop();
+
+		LOG.info("*** I36Plugin " + getName() + " started in " + watch.toString());
+
+		final boolean synchroStart = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.synchronousStart, false);
+		if (BaseApplication.getApplication().getCommandLine().hasOption("readBer") && synchroStart && standAlone) {
+			if (sbiClient.getRealignmentManager().getPostedNes() == 0
+					&& sbiClient.getRealignmentManager().getInRealignmentNes() == 0) {
+				LOG.info("Realignment of NEs in BER realignment mode is done successfully, shutdown of application is started");
+				BaseApplication.getApplication().exitApplication();
+			}
+		}
+	}
+
+	/* ** I36PlugIn/IPlugIn ***************************************************** */
+	@Override
+	public void shutdownPlugIn() {
+		/* ************************************************************************** */
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("I36Plugin " + getName() + " shuttingDown");
+		}
+		try {
+			if (sbiClient != null) {
+				sbiClient.shutdown();
+			}
+		} catch (final Exception ex) {
+			LOG.error(new DumpInfo(ex));
+		}
+	}
+
+	/**
+	 * @return the sbiClient
+	 */
+	public SBIClientI getSBIClient() {
+		return sbiClient;
+	}
+
+	/* ** I36PlugIn/IPlugIn ***************************************************** */
+	@Override
+	public String getSBIInfo() {
+		/* ************************************************************************** */
+		return X36.getModule().getName() + " version " + X36.getModule().getVersion();
+	}
+
+	/* ************************************************************************** */
+	public String getNeLocator(final X36NeId neId) {
+		return getName() + "-neId(" + neId.getValue() + ")";
+	}
+
+	public MultiLayerSubnetwork allocateSN(final SNDn dn) {
+		final String vendor = EmsInformation.getVendor(profile);
+
+		final MultiLayerSubnetwork mls = new MultiLayerSubnetwork();
+
+		mls.setName(dn);
+		mls.setOwner(vendor);
+
+		final Topology topology = new Topology();
+		topology.setTopo_singleton();
+		mls.setSubnetworkType(topology);
+		return mls;
+	}
+
+	public SNDn getSNDnFor(final X36NeId neId) {
+		final MEId meId = (sbiClient).getNaming().makeMEId(neId);
+
+		return getSNDnFor(meId);
+	}
+
+	public SNDn getSNDnFor(final MEDn meDn) {
+		return getSNDnFor(meDn.getMe());
+	}
+
+	public SNDn getSNDnFor(final MEId meId) {
+		if (!isStandAlone()) {
+			return getSNDn();
+		}
+		final String name = meId.getValue();
+
+		final SNDn dn = new SNDn();
+		final SNId snId = new SNId();
+		snId.setMlsnId(name);
+		dn.setSn(snId);
+
+		return dn;
+	}
+
+	public MEDnList getManagedElementList() {
+		return managedElementList;
+	}
+
+	public void setManagedElementList(final MEDnList list) {
+		final MEDnList old = managedElementList;
+		managedElementList = list;
+
+		pcSupport.firePropertyChange(MEDNLIST_PROPERTY, old, managedElementList);
+	}
+
+	public void addManagedElementList(final MEDnList list,final int neIdInEM) {
+		final MEDnList old = new MEDnList(managedElementList);
+		if (neIdInEM != 0) {
+			getSBIClient().getMeInfos().setState(MEState.linkup, new X36NeId(neIdInEM), true);
+		}
+		managedElementList.addAll(list);
+		pcSupport.firePropertyChange(MEDNLIST_PROPERTY, old, managedElementList);
+	}
+
+
+	public void removeManagedElementList(final MEDnList list) {
+		final MEDnList old = managedElementList;
+		managedElementList.removeAll(list);
+		// Fix for TR HP28633
+		for (final MEDn removedME : list) {
+			getMECache().uncache(removedME);
+		}
+		// Dump MECache
+		getMECache().dump();
+		LOG.info(new DumpInfo(getMECache(), "MECache value : "));
+		pcSupport
+		.firePropertyChange(MEDNLIST_PROPERTY, old, managedElementList);
+	}
+
+	public static void updateManagedElement(final MEDn me) {
+		pcs.firePropertyChange(UPDATEME_PROPERTY, null, me);
+	}
+
+	/*
+	 * This method will build the all ManagedElement in cache
+	 */
+	public ManagedElementList buildMECache() throws Exception {
+
+		if (!meCache.isEmpty()) {
+			LOG.warn("MECache already loaded.");
+		}
+
+		LOG.info("Building ManagedElement cache...");
+
+		ManagedElementList meList = new ManagedElementList();
+
+		// In case of TMF over EM all the MEs can be loaded from the database
+		if (isStandAlone()) {
+			meList = getSBIClient().getAllDBManagedElements();
+		} else {
+			// Incase of TMF over NM, the MEs managed by this i36Plugin can be retrieved from the list managedElementList
+			if (managedElementList == null || managedElementList.size() == 0) {
+				LOG.debug("There are no MEs managed by this plugin");
+				return meList;
+			} else {
+				// Read information of every ME from the database
+				readMEInfoFromDB(meList);
+			}
+		}
+
+		if (meList == null || meList.size() == 0) {
+			LOG.debug("There are no elements in the Database");
+			return meList;
+		}
+
+		/** Commented as updateTpIndex is only applicable for 10.2 and updateAlarmTpIndex is only applicable for 10.3
+		 * they are only useful for 10.2/10.3 patches
+		 */
+		//check whether indexes should be updated for tp's present in DB
+		/*boolean updateTPIndex = getSBIClient().getPlugIn().getProfile().getBoolProperty(PluginProperty.updateTPIndex, false);
+		if (updateTPIndex) {
+			updateTPIndex(meList);
+		}
+		boolean setAlarmTpIndex = getSBIClient().getPlugIn().getProfile().getBoolProperty(PluginProperty.setAlarmTpIndex, false);
+
+		if (setAlarmTpIndex) {
+			updateAlarmIndex(meList);
+		}*/
+
+		// Builds all ManagedElement in cache
+		buildMECache(meList);
+
+		return meList;
+
+	}
+
+	/**
+	 * This method read information of every ME from the database
+	 * @param meList - ManagedElementList
+	 */
+	private void readMEInfoFromDB(final ManagedElementList meList) {
+		// Reading the information of every ME from the database
+		Session session = null;
+		try {
+			final I36DatabaseManager dbManager = getSBIClient().getDbManager();
+			session = dbManager.beginSession(false);
+			for (final MEDn meDn : managedElementList) {
+				final ManagedElement me = dbManager.getManagedElementInfo(meDn);
+				if (me != null) {
+					meList.add(me);
+				}
+			}
+		} catch (final DBException dbExce) {
+			LOG.error(new DumpInfo("Unable to load the info of all the MEs from the database : ", dbExce));
+		} finally {
+			if (session != null) {
+				session.terminate();
+			}
+		}
+	}
+
+	/**
+	 * This method builds all ManagedElement in cache
+	 * @param meList - ManagedElementList
+	 */
+	private void buildMECache(final ManagedElementList meList) {
+		final Iterator<ManagedElement> meIter = meList.iterator();
+		while (meIter.hasNext()) {
+			final ManagedElement me = meIter.next();
+			final MEDn meDn = me.getName();
+			final String address = MECache.formKey(me);
+			if (address == null) {
+				/*
+				 * It indicates that the additionalInfos related tio SOEM parameters are not present on the ME. This could happen
+				 * in case of seamless Upgrade where the versions lower than 3.2 doesn'ty contain this info.
+				 */
+				if (LOG.isDebugEnabled()) {
+					LOG.debug("AdditionalInfo related to SOEM params doesn't exist in the DB");
+				} else if (LOG.isInfoEnabled()) {
+					LOG.info("AdditionalInfo related to SOEM params doesn't exist in the DB");
+				}
+				break;
+			}
+			meCache.put(address, meDn);
+			final int meId = MECache.getMEIdOnEM(me);
+			meCache.put(meId, meDn);
+		}
+
+		meCache.dump();
+	}
+
+	public void updateAlarmIndex(final ManagedElementList meList) {
+
+		LOG.info("Updating AlarmIndex Indexing for tp's present in DB");
+		for (final ManagedElement managedElement : meList) {
+			Session session = null;
+			final MEDn meDn = managedElement.getName();
+			try {
+				final I36DatabaseManager dbManager = getSBIClient().getDbManager();
+				session = dbManager.beginSession(true);
+				final DBManagedElement dbManagedElement = dbManager.getManagedElement(meDn);
+				final DBIterator<DBPortTp> ptps = dbManagedElement.getPTPs().iterator();
+
+				setTpAlarmIndex(ptps, meDn, dbManager);
+				if (session != null && session.isOpen()) {
+					session.commit();
+				}
+			} catch (final Exception e) {
+				LOG.info("Exception while Retriving the tp" + e);
+			} finally {
+				if (session != null && !session.isTerminated()) {
+					session.terminate();
+					session = null;
+				}
+			}
+		}
+	}
+
+	private void setTpAlarmIndex(final DBIterator<DBPortTp> ptps, final MEDn meDn, final I36DatabaseManager dbManager) {
+		while (ptps.hasNext()) {
+			final DBPortTp dbPortTp = ptps.next();
+			if (dbPortTp instanceof DBPtp) {
+				final AssociatedAlarmPortsInfo oldAssocAlarmPortsInfo = setAssociatedAlarmPorts(dbPortTp);
+
+				final PortInformation portInformation = (PortInformation) dbPortTp.getAdditionalInformation(PortInformation.NAME);
+				if (portInformation != null) {
+					final AIPortInfo aiPortInfo = portInformation.getSyntax();
+					final String tpType = aiPortInfo.getDescriptor().getValue();
+
+					setTpAlarmIndex(aiPortInfo, oldAssocAlarmPortsInfo, tpType, meDn, dbManager, dbPortTp);
+
+				}
+
+			} else if (dbPortTp instanceof DBFtp) {
+				final AssociatedAlarmPortsInfo oldAssocAlarmPortsInfo = setAssociatedAlarmPorts(dbPortTp);
+
+				final DBFtp ftp = (DBFtp) dbPortTp;
+				final ChannelInformation chInfo = (ChannelInformation) ftp.getAdditionalInformation(ChannelInformation.NAME);
+				if (chInfo != null && chInfo.getSyntax() != null && chInfo.getSyntax().getPortInfo() != null) {
+					final AIPortInfo aiPortInfo = chInfo.getSyntax().getPortInfo();
+					final String tpType = aiPortInfo.getDescriptor().getValue();
+
+					setTpAlarmIndex(aiPortInfo, oldAssocAlarmPortsInfo, tpType, meDn, dbManager, dbPortTp);
+				}
+			}
+		}
+	}
+
+	private AssociatedAlarmPortsInfo setAssociatedAlarmPorts(final DBPortTp dbPortTp) {
+		final AssociatedAlarmPorts oldAssocAlarmPorts = (AssociatedAlarmPorts) dbPortTp
+				.getAdditionalInformation(AssociatedAlarmPorts.NAME);
+		final AssociatedAlarmPortsInfo oldAssocAlarmPortsInfo = new AssociatedAlarmPortsInfo();
+		if (oldAssocAlarmPorts != null) {
+			oldAssocAlarmPortsInfo.setNewAssociatedAlarmPorts(oldAssocAlarmPorts.getSyntax());
+		}
+		return oldAssocAlarmPortsInfo;
+	}
+
+	private void setTpAlarmIndex(final AIPortInfo aiPortInfo, final AssociatedAlarmPortsInfo oldAssocAlarmPortsInfo, final String tpType,
+			final MEDn meDn, final I36DatabaseManager dbManager, final DBPortTp dbPortTp) {
+
+		TpType tptype = null;
+		if (tpType.equalsIgnoreCase("radioPort_dsr2M")) {
+			tptype = TpType.radioPort_dsr2M;
+		} else if (tpType.equalsIgnoreCase("radioPort_dsr8M")) {
+			tptype = TpType.radioPort_dsr8M;
+		} else if (tpType.equalsIgnoreCase("radioPort_dsr34M")) {
+			tptype = TpType.radioPort_dsr34M;
+		} else if (tpType.equalsIgnoreCase("radioPort_dsr")) {
+			tptype = TpType.radioPort_dsr;
+		}
+
+		if (tptype != null) {
+			final X36PortIdentification portIdentification = new X36PortIdentification();
+			final AIPortCoord aiPortCoord = aiPortInfo.getCoord();
+			portIdentification.setShelfId(aiPortCoord.getShelfId().getValue());
+			portIdentification.setCardId(aiPortCoord.getCardId().getValue());
+			portIdentification.setPortId(aiPortCoord.getPortId().getValue());
+			final X36ChannelIdentification chId = new X36ChannelIdentification();
+			chId.setPort(portIdentification);
+			chId.getTimeSlot().setNull();
+
+			IndexesHelper.setAlarmTpIndex(meDn, dbPortTp, dbManager, chId, tptype,
+					oldAssocAlarmPortsInfo.getNewAssociatedAlarmPortsItr());
+		}
+	}
+
+	/**
+	 * Builds the MECache in case of Non-Synchronous Start. First tries to build the ME Cache using the additionalInfos present
+	 * in the DB. If additionalInfos are not present in the DB, builds the MECache by requesting the SOEM parameters from the
+	 * beneath system
+	 */
+	public void buildCacheOnNoSynchStart(final X36SetOfNetworkElement neList) throws Exception {
+
+		ManagedElementList meList = new ManagedElementList();
+
+		/* Build the MECache using the AdditionalInfos present in the DB */
+		try {
+			meList = buildMECache();
+			if (meList.size() == 0) {
+				LOG.info("There are no MEs in the database");
+				return;
+			}
+		} catch (final Exception e) {
+			LOG.error(new DumpInfo("Exception while Building MECahce", e));
+		}
+
+		if (meCache.isEmpty()) {
+			/*
+			 * The following code will be executed when Me Cache couldn't be built successfully using the additionalInfos in the
+			 * DB. This indicates that the DB doesn't contain the additionalInfos related to SOEM parameters. (When the DB is
+			 * restored from the versions lower than 3.1) Build the MECache by requesting the SOEM parameters from the beneath
+			 * system.
+			 */
+			LOG.info("Building ManagedElement cache with node list got from the Beneath system...");
+
+			final List<MEDn> meDnList = new ArrayList<MEDn>();
+			for (final ManagedElement me : meList) {
+				meDnList.add(me.getName());
+			}
+
+			for (final X36NetworkElement networkElement : neList) {
+				final MEDn meDn = sbiClient.getNaming().makeMEDn(networkElement);
+				final X36NeId neId = networkElement.getNeId();
+				if (meDnList.contains(meDn)) {
+					final String address = meCache.formKey(networkElement);
+					meCache.put(address, meDn);
+					meCache.put(networkElement.getNeId().getValue(), meDn);
+					sbiClient.addNeIdOnEmList(neId);
+				}
+			}
+			meCache.dump();
+		} else {
+			/*
+			 * If the ME Cache is successfully built with the additionalInfos in the DB, no need of building it again.
+			 */
+			LOG.info("MECache is built successfully using the AdditionalInfos");
+			return;
+		}
+	}
+
+	public MECache getMECache() {
+		return meCache;
+	}
+
+	/**
+	 * @param meList
+	 * This method updates indexing for all tp's i.e ftps and ctps for all Managed Elements
+	 */
+	public void updateTPIndex(final ManagedElementList meList) {
+
+		LOG.info("Updating Indexing for tp's present in DB");
+		for (final ManagedElement managedElement : meList) {
+			Session session = null;
+			final MEDn meDn = managedElement.getName();
+			try {
+				final I36DatabaseManager dbManager = getSBIClient().getDbManager();
+				session = dbManager.beginSession(true);
+				final DBManagedElement dbManagedElement = dbManager.getManagedElement(meDn);
+
+				// Get FileName
+				final String fileName = getFileName(dbManagedElement);
+
+				final DBIterator<DBPortTp> ptps = dbManagedElement.getPTPs().iterator();
+
+				while (ptps.hasNext()) {
+					final DBPortTp dbPortTp = ptps.next();
+					if (dbPortTp instanceof DBFtp) {
+						final DBFtp ftp = (DBFtp) dbPortTp;
+						final ChannelInformation chInfo = (ChannelInformation) ftp.getAdditionalInformation(ChannelInformation.NAME);
+						if (chInfo != null && chInfo.getSyntax() != null && chInfo.getSyntax().getPortInfo() != null) {
+							final AIPortInfo aiPortInfo = chInfo.getSyntax().getPortInfo();
+							if (isvalidatePortTypeforIndex(aiPortInfo.getType())) {
+								final LayeredParameterList layeredParameterList = ftp.getInformation().getTransmissionParams();
+								if (LayeredParametersUtils.hasOCHLayer(layeredParameterList)
+										|| LayeredParametersUtils.hasODULayer(layeredParameterList)) {
+									final X36PortIdentification portIdentification = new X36PortIdentification();
+									portIdentification.setShelfId(aiPortInfo.getCoord().getShelfId().getValue());
+									portIdentification.setCardId(aiPortInfo.getCoord().getCardId().getValue());
+									portIdentification.setPortId(aiPortInfo.getCoord().getPortId().getValue());
+									final X36ChannelIdentification chId = new X36ChannelIdentification();
+									chId.setPort(portIdentification);
+									chId.getTimeSlot().setNull();
+									final TpType tpType = TpType.valueOf(aiPortInfo.getDescriptor().getValue());
+									KeysHelper.addConnectableTpIndex(meDn, ftp, dbManager.getDatabase(),
+											AIHelper.buildXConnectableTpCoord(chId), tpType);
+									dbManager.getSession().checkpoint();
+
+								}
+								final DBIterator<DBConnectionTerminationPoint> ctps = ftp.getCTPs().iterator();
+								while (ctps.hasNext()) {
+									final DBCtp ctp = (DBCtp)ctps.next();
+									final TimeSlotInformation ts = (TimeSlotInformation) ctp.getAdditionalInformation(TimeSlotInformation.NAME);
+									final AITimeSlotInfo aiTsInfo = ts.getSyntax();
+									final TpType ctptpType = TpType.valueOf(aiTsInfo.getDescriptor().getValue());
+									if (LayeredParametersUtils.hasODULayer(ctp.getInformation().getTransmissionParams())) {
+										final TerminationPoint tp = ctp.getInformation();
+										if (tp.getName().getCtp() != null && tp.getName().getCtp().getComponents() != null) {
+											final CtpNameComponent ctpNameComponent = tp.getName().getCtp().getComponents()
+													.get(0);
+											if (ctpNameComponent.getOdu1() != null) {
+												final AIPortInfo ctpAiPortInfo = DBAdditionalInfoUtilities.getPortInfo(ctp);
+												final X36PortIdentification ctpportIdentification = new X36PortIdentification();
+												ctpportIdentification
+												.setShelfId(ctpAiPortInfo.getCoord().getShelfId().getValue());
+												ctpportIdentification.setCardId(ctpAiPortInfo.getCoord().getCardId().getValue());
+												final int ctpklevel = LayeredParametersUtils
+														.getKlevel(tp.getTransmissionParams());
+												if (ctpklevel == 1
+														&& ctpNameComponent.getOdu1().getValue() != ctpAiPortInfo.getCoord()
+														.getPortId().getValue()
+														&& ctpNameComponent.getOdu1().getValue() != 0) {
+													ctpportIdentification.setPortId(ctpNameComponent.getOdu1().getValue());
+												} else if (ctpklevel == 2
+														&& ctpNameComponent.getOdu2().getValue() != ctpAiPortInfo.getCoord()
+														.getPortId().getValue()
+														&& ctpNameComponent.getOdu2().getValue() != 0) {
+													ctpportIdentification.setPortId(ctpNameComponent.getOdu2().getValue());
+												} else {
+													ctpportIdentification.setPortId(ctpAiPortInfo.getCoord().getPortId()
+															.getValue());
+												}
+
+												/*
+												 * if port is involved in inter
+												 * card or inter port protection
+												 * indexing protected client
+												 * port cordinates and
+												 * protecting client port
+												 * cordinates with the protected
+												 * client port tp's
+												 */
+												final TDMMuxponderPortConverter portConverter = new TDMMuxponderPortConverter();
+												final X36PortIdentification interCardCordinates = portConverter
+														.getProtectingPortCordinates(fileName, ctpAiPortInfo.getCoord()
+																.getPortId().getValue(), ctpportIdentification);
+												// TR HO46360 - Creating an
+												// empty object of
+												// AssociatedAlarmPortsInfo
+												// which is used for alarm
+												// indexing of ctp
+												// The protecting port may not
+												// be stored in db, so the
+												// protecting port coordinates
+												// is required to be added as
+												// associated alarm port of
+												// protected port so that alarm
+												// on protecting port will be
+												// raised on protected port in
+												// TMF.
+												final AssociatedAlarmPortsInfo assocAlarmPortsInfo = new AssociatedAlarmPortsInfo();
+												final AISetOfAssociatedAlarmPort out = new AISetOfAssociatedAlarmPort();
+												if (interCardCordinates != null) {
+													final X36ChannelIdentification protectingctpchId = new X36ChannelIdentification();
+													protectingctpchId.setPort(interCardCordinates);
+													setODUTimeSlot(protectingctpchId, ctpklevel, interCardCordinates.getPortId()
+															.getValue());
+													KeysHelper.addConnectableTpIndex(meDn, ctp, dbManager.getDatabase(),
+															AIHelper.buildXConnectableTpCoord(protectingctpchId), ctptpType);
+
+													LOG.debug("This port is involved in protection : "+ctp);
+													LOG.debug("The protecting port coordinate is : "+interCardCordinates);
+													final X36SpecificPortInformation specificPortInformation = portConverter
+															.getSpecificPortInfo(fileName, ctpAiPortInfo.getCoord().getPortId()
+																	.getValue(), ctpportIdentification);
+													final X36InterCardCoord interCardCoord = portConverter
+															.getInterCardCoord(specificPortInformation);
+													boolean isIntraCardProt = false;
+													if (interCardCoord != null && interCardCoord.isSupportingPortCoord()) {
+														isIntraCardProt = true;
+													}
+													out.add(AIHelper.buildAssociatedAlarmPort(interCardCordinates,
+															isIntraCardProt));
+													LOG.debug("Added the protecting port coordinates to AISetOfAssociatedAlarmPort to "
+															+ "add as associated alarms while indexing the protected ctp.." + out);
+												}
+												assocAlarmPortsInfo.evaluateAssociatedAlarmPorts(null, out);
+												final X36ChannelIdentification ctpchId = new X36ChannelIdentification();
+												ctpchId.setPort(ctpportIdentification);
+												setODUTimeSlot(ctpchId, ctpklevel, ctpportIdentification.getPortId().getValue());
+												KeysHelper.addConnectableTpIndex(meDn, ctp, dbManager.getDatabase(),
+														AIHelper.buildXConnectableTpCoord(ctpchId), ctptpType);
+												// TR HO46360 - Updating alarm
+												// index for ODU ctp with 'null'
+												// Timeslot
+												// since 'oduTimeslot' is
+												// required only for xconn
+												// indexing which is used
+												// for odu path creation
+												final X36ChannelIdentification protectingctpchIdForAlarm = new X36ChannelIdentification();
+												protectingctpchIdForAlarm.setPort(ctpportIdentification);
+												protectingctpchIdForAlarm.getTimeSlot().setNull();
+												IndexesHelper.setAlarmTpIndex(meDn, ctp, dbManager.getDatabase(),
+														protectingctpchIdForAlarm, ctptpType,
+														assocAlarmPortsInfo.getNewAssociatedAlarmPortsItr());
+												LOG.debug("Updated alarm index for odu ctp over ftp with null Timeslot.."+ctp);
+												dbManager.getSession().checkpoint();
+
+											}
+
+										}
+
+									}
+
+								}
+
+							}
+						}
+					} else {
+						final DBPtp dbPtp = (DBPtp) dbPortTp;
+						final PortInformation portInfo = (PortInformation) dbPtp.getAdditionalInformation(PortInformation.NAME);
+						if (portInfo != null && portInfo.getSyntax() != null) {
+							final AIPortInfo aiPortInfo = portInfo.getSyntax();
+							if (isvalidatePortTypeforIndex(aiPortInfo.getType())) {
+								final DBIterator<DBConnectionTerminationPoint> ctps = dbPtp.getCTPs().iterator();
+								while (ctps.hasNext()) {
+									final DBConnectionTerminationPoint ctp = ctps.next();
+									final LayeredParameterList layeredParameterList = dbPtp.getInformation()
+											.getTransmissionParams();
+									if (LayeredParametersUtils.hasODULayer(layeredParameterList)) {
+										final TerminationPoint tp = ctp.getInformation();
+										final TimeSlotInformation ts = (TimeSlotInformation) ctp
+												.getAdditionalInformation(TimeSlotInformation.NAME);
+										final AITimeSlotInfo aiTsInfo = ts.getSyntax();
+										final TpType ctptpType = TpType.valueOf(aiTsInfo.getDescriptor().getValue());
+										if (tp.getName().getCtp() != null && tp.getName().getCtp().getComponents() != null) {
+											final CtpNameComponent ctpNameComponent = tp.getName().getCtp().getComponents()
+													.get(0);
+											if (ctpNameComponent.getOdu1() != null) {
+												final AIPortInfo ctpAiPortInfo = DBAdditionalInfoUtilities.getPortInfo(ctp);
+												final X36PortIdentification ctpportIdentification = new X36PortIdentification();
+												ctpportIdentification
+												.setShelfId(ctpAiPortInfo.getCoord().getShelfId().getValue());
+												ctpportIdentification.setCardId(ctpAiPortInfo.getCoord().getCardId().getValue());
+												final int ctpklevel = LayeredParametersUtils
+														.getKlevel(tp.getTransmissionParams());
+												if (ctpklevel == 1
+														&& ctpNameComponent.getOdu1().getValue() != ctpAiPortInfo.getCoord()
+														.getPortId().getValue()
+														&& ctpNameComponent.getOdu1().getValue() != 0) {
+													ctpportIdentification.setPortId(ctpNameComponent.getOdu1().getValue());
+												} else if (ctpklevel == 2
+														&& ctpNameComponent.getOdu2().getValue() != ctpAiPortInfo.getCoord()
+														.getPortId().getValue()
+														&& ctpNameComponent.getOdu2().getValue() != 0) {
+													ctpportIdentification.setPortId(ctpNameComponent.getOdu2().getValue());
+												} else {
+													ctpportIdentification.setPortId(ctpAiPortInfo.getCoord().getPortId()
+															.getValue());
+												}
+												final X36ChannelIdentification ctpchId = new X36ChannelIdentification();
+												ctpchId.setPort(ctpportIdentification);
+												setODUTimeSlot(ctpchId, ctpklevel, ctpportIdentification.getPortId().getValue());
+												KeysHelper.addConnectableTpIndex(meDn, (DBCtp) ctp, dbManager.getDatabase(),
+														AIHelper.buildXConnectableTpCoord(ctpchId), ctptpType);
+												dbManager.getSession().checkpoint();
+
+											}
+
+										}
+
+									}
+
+								}
+
+							}
+						}
+					}
+
+				}
+				session.commit();
+			} catch (final Exception e) {
+				LOG.error(new DumpInfo("Exception  while updating tpIndex", e));
+
+			} finally {
+				if (session != null && !session.isTerminated()) {
+					session.terminate();
+					session = null;
+				}
+			}
+
+		}
+		LOG.info("Updated Indexing for tp's present in DB");
+	}
+
+	private String getFileName(final DBManagedElement dbManagedElement) {
+		final StringBuffer fileName = new StringBuffer(profile.getProperty(I36PlugIn.PluginProperty.realignmentBerHome));
+		if (fileName != null) {
+			final AdditionalInfo ai = dbManagedElement.getAdditionalInfo();
+			final String neIdInEm = AdditionalInfoUtils.find(ai, ProprietaryAdditionalInfo.MEIDOnEM.name());
+			final String meNm = FileUtils.normalize(getSBIClient().getEMId()) + "_" + neIdInEm + "_"
+					+ getSBIClient().getX36Version().replace(".", "_") + ".ber";
+			fileName.append(File.separator);
+			fileName.append(meNm);
+		}
+		return fileName.toString();
+	}
+
+	/**
+	 * @param chId
+	 * @param kLevel
+	 * @param value
+	 */
+	public void setODUTimeSlot(final X36ChannelIdentification chId,final int kLevel,final int value) {
+		final X36ODUTimeSlot oduTimeSlot = new X36ODUTimeSlot();
+		final X36ODUId oduid = new X36ODUId();
+		switch (kLevel) {
+		case 1:
+			oduid.setOdu1(value);
+			break;
+		case 2:
+			oduid.setOdu2(value);
+			break;
+		case 3:
+			oduid.setOdu3(value);
+			break;
+		}
+		oduTimeSlot.setOduId(oduid);
+		final X36TimeSlot timeslot = new X36TimeSlot();
+		timeslot.setOduTimeSlot(oduTimeSlot);
+		chId.setTimeSlot(timeslot);
+	}
+
+	/**
+	 * @param aiPortType
+	 * @return This method checks whether port is wdmadaptationport
+	 */
+	private boolean isvalidatePortTypeforIndex(final AIPortType aiPortType) {
+		return aiPortType.isPt_aSideRmTransponder() || aiPortType.isPt_bSideRmTransponder()
+				|| aiPortType.isPt_genericTransponder() || aiPortType.isPt_lmTransponder()
+				|| aiPortType.isPt_lmTransponderIngress() || aiPortType.isPt_lmTransponderEgress()
+				|| aiPortType.isPt_muxponderAggregated() || aiPortType.isPt_muxponderClientLM()
+				|| aiPortType.isPt_muxponderClientTM() || aiPortType.isPt_stmTransponder();
+	}
+
+	@Override
+	public void fileChanged(final String fileName) {
+
+		final String tempfileName = fileName.trim();
+
+		try {
+			if (tempfileName.contains("larm".trim())) {
+				AlarmConfiguration.reLoad(tempfileName);
+			} else if (tempfileName.contains("SupportedProtection".trim())) {
+				PluginSupportedConfigurator.reload(tempfileName);
+			} else if (tempfileName.contains("TPSupportedOperat".trim())) {
+				TPSupportedOperations.reload(tempfileName);
+			}
+			LOG.info("File " + tempfileName + " reloaded.");
+
+		} catch (final Exception e) {
+			LOG.error(e);
+		}
+
+	}
+
+	@Override
+	public void checkCXC() {
+		if (!licCheckEnabled) {
+			return;
+		}
+
+		final boolean checkDisabled = profile.getBoolProperty(LicenseManagerFactory.Properties.CHECK_DISABLED, true);
+		if (checkDisabled) {
+			return;
+		}
+
+		if (licUtil == null) {
+			final String msg = String.format("LicenseUtils is null");
+			LOG.error(msg);
+			throw new WrongInitializationException(msg);
+		}
+
+		// parameter added to check which plugin is calling checkCapacity method
+		licUtil.checkCapacity(this.getClass().getSimpleName());
+
+	}
+
+	@Override
+	public void checkProductType() {
+		if (!licCheckEnabled) {
+			return;
+		}
+		final boolean checkDisabled = profile.getBoolProperty(LicenseManagerFactory.Properties.CHECK_DISABLED, true);
+		if (checkDisabled) {
+			return;
+		}
+		if (licUtil == null) {
+			final String msg = String.format("LicenseUtils is null");
+			LOG.error(msg);
+			throw new WrongInitializationException(msg);
+		}
+
+		// parameter added to check which plugin is calling checkCapacity method
+		licUtil.checkProductType(this.getClass().getSimpleName());
+
+	}
+
+	@Override
+	public void onEndDate(final LicenseEvent arg0) {
+		if (!licCheckEnabled) {
+			return;
+		}
+		if (sbiClient != null) {
+			sbiClient.shutdown();
+		}
+		if (licUtil != null) {
+			licUtil.onEndDate(arg0);
+		}
+	}
+
+	/**
+	 * @return the neModelMap
+	 */
+	public NeModelMapper getNeModelMapper() {
+		return this.neModelMapper;
+	}
+
+	/**
+	 * Method to update the ME Communication state
+	 * 
+	 * @param Commstate
+	 *            , CommunicationState of the ME, based on state of EM
+	 */
+	public void updateMECommState(final CommunicationState Commstate) {
+		final MEDnList meLst = getManagedElementList();
+		Session session = null;
+		try {
+			final I36DatabaseManager dbManager = getSBIClient().getDbManager();
+			session = dbManager.beginSession(true);
+			for (final MEDn me : meLst) {
+				final DBManagedElement dbMe = dbManager.getManagedElement(me);
+				if (dbMe != null) {
+					dbMe.setCommunicationState(Commstate);
+				} else {
+					LOG.error(String.format("Couldn't find ME <%s> in the database. Cannot update the communication state.",
+							TmfNameUtilities.toString(me)));
+				}
+			}
+			if (session != null && session.isOpen()) {
+				session.commit();
+			}
+		} catch (final Exception e) {
+			LOG.error(new DumpInfo(e, "Exception while setting communication state of ME"));
+		} finally {
+			if (session != null && !session.isTerminated()) {
+				session.terminate();
+				session = null;
+			}
+		}
+
+	}
+
+	@Override
+	public void propertyChange(final PropertyChangeEvent event) {
+
+		LOG.info(" Recieved " + event.getPropertyName() + " Property Change Event");
+		if (event.getPropertyName().equalsIgnoreCase("NEList")) {
+
+			final MEDnList modifiedMEDnList = (MEDnList) event.getNewValue();
+			final MEDnList oldMEDnList = (MEDnList) event.getOldValue();
+
+			if ((oldMEDnList == null || oldMEDnList.isEmpty()) && (modifiedMEDnList == null || modifiedMEDnList.isEmpty())) {
+				notifyRealignmentEnd("RealignmentEnd");
+				return;
+			}
+			final MEDnList newMeDnList = getNewMEDnList(oldMEDnList,
+					modifiedMEDnList);
+
+			getManagedElementList().clear();
+			getManagedElementList().addAll(modifiedMEDnList);
+
+			// if modifiedMEDnlist size is less than oldMEDnList size then ME is
+			// deleted.
+			if (oldMEDnList != null
+					&& (modifiedMEDnList.size() < oldMEDnList.size())) {
+				// Fix for TR HP28633
+				final MEDnList list = getNewMEDnList(modifiedMEDnList,
+						oldMEDnList);
+				for (final MEDn removedME : list) {
+					getMECache().uncache(removedME);
+				}
+				// Dump MECache
+				getMECache().dump();
+				LOG.info(new DumpInfo(getMECache(), "MECache value : "));
+			}
+
+			final Iterator<MEDn> neListItr = newMeDnList.iterator();
+
+			SBIKey sbiKey = null;
+			EmSystemProfile emSystemProfile = null;
+			EmDetails emDetails = null;
+
+			final I36DatabaseManager dbManager = sbiClient.getDbManager();
+			final Session session = dbManager.beginSession(false);
+
+			while (neListItr.hasNext()) {
+				final MEDn medn = neListItr.next();
+				final DBManagedElement dbME = dbManager.getManagedElement(medn);
+				if (dbME == null) {
+					LOG.error(" DBManagedElement is null ");
+					return;
+				}
+				emSystemProfile = sbiClient.getEmSystemProfile(dbME);
+				final String hostName = emSystemProfile.getSyntax().getHostId().getValue();
+				sbiKey = new SBIKey(this.getClass().getSimpleName(), hostName);
+				emDetails = new EmDetails(sbiKey, emSystemProfile.getSyntax().getSbiId().getValue());
+				final MEDn2Id dn2Id = MEInformation.getMeDn2Id();
+				final int id = dn2Id.get(medn);
+				if (hostDetails.get(hostName) == null) {
+					hostDetails.put(hostName, emDetails);
+					final X36SetOfNeId setOfNeId = new X36SetOfNeId();
+
+					setOfNeId.add(new X36NeId(id));
+					emNEDetails.put(hostName, setOfNeId);
+					sbiClient.startListenerAndPerformOnconnect(hostName);
+				} else {
+					emNEDetails.get(hostName).add(new X36NeId(id));
+				}
+			}
+			if (session != null) {
+				session.terminate();
+			}
+
+			if (firstConnect) {
+				firstConnect = false;
+			}
+
+			// Fire Property Change event to SBIClient to initate realign of
+			// Network Elements
+
+			LOG.info(" Firing old MEDnList of size :" + oldMEDnList == null ? 0
+					: meDnList.size()
+					+ " and modified MEDnList of size : "
+					+ modifiedMEDnList.size()
+					+ " to SBIClient");
+			pcs.firePropertyChange(I36PlugIn.MEDNLIST_PROPERTY, oldMEDnList,
+					modifiedMEDnList);
+
+		} else if (event.getPropertyName() == RealignmentEvent.START_PROVISIONING) {
+			LOG.info("Provisioning start");
+			pcs.firePropertyChange(I36PlugIn.START_PROVISION, null, hostDetails);
+		}
+	}
+
+	/**
+	 * Returns the new MEDnList by comparing old and modified MEDnLists
+	 *
+	 * @param oldMEDnList
+	 * @param modifiedMEDnList
+	 * @return
+	 */
+	private MEDnList getNewMEDnList(final MEDnList oldMEDnList,
+			final MEDnList modifiedMEDnList) {
+		final MEDnList newMEDnList = new MEDnList();
+		if (oldMEDnList != null && oldMEDnList.size() != 0) {
+			final Iterator<MEDn> itrMEDnList = modifiedMEDnList.iterator();
+			while (itrMEDnList.hasNext()) {
+				final MEDn meDn = itrMEDnList.next();
+				if (!oldMEDnList.contains(meDn)) {
+					newMEDnList.add(meDn);
+				}
+			}
+		} else {
+			newMEDnList.set(modifiedMEDnList);
+		}
+		return newMEDnList;
+	}
+
+	/**
+	 * @return the neList
+	 */
+	public Map<String, EmDetails> gethostIds() {
+		return hostDetails;
+	}
+
+	/**
+	 * Method to Notify Realignment Handler about Realignment End Event
+	 *
+	 * @param eventType
+	 */
+	public void notifyRealignmentEnd(final String eventType) {
+
+		final Thread notifyRH = new Thread((new StringBuilder())
+				.append(com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient.class.getSimpleName()).append("-EMEventNotifer")
+				.append(threadCount).toString()) {
+
+			@Override
+			public void run() {
+				I36PlugIn.LOG.info(" Invoking RH ");
+				pcSupport.firePropertyChange(eventType, null, null);
+			}
+		};
+		threadCount++;
+		if (threadCount >= Integer.MAX_VALUE) {
+			threadCount = 0;
+		}
+		notifyRH.start();
+	}
+
+	public void addHostId(final String hostName, final EmDetails emDetails) {
+		hostDetails.put(hostName, emDetails);
+	}
+
+	public void addInternalPropertyChangeListener(final PropertyChangeListener listener) {
+		pcs.addPropertyChangeListener(listener);
+	}
+
+	public void removeInternalPropertyChangeListener(final PropertyChangeListener listener) {
+		pcs.removePropertyChangeListener(listener);
+	}
+}
+

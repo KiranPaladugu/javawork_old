@@ -1,0 +1,275 @@
+#!/bin/sh
+
+###############################################################################
+#
+#  Update_Lic
+#
+#  This script contains a TMF License Update Utility.
+#
+###############################################################################
+
+###############################################################################
+#
+# @(#) Revision: 1.02 "
+#
+# NOTE:    This script is not configurable!  Any changes made to this
+#          script will be overwritten when you upgrade to the next
+#          release of FULLNAME application.
+#
+# WARNING: Changing this script in any way may lead to all
+#          FULLNAME application.
+#          Do not modify this script.
+#
+##############################################################################
+
+ErrExit()
+{
+  rval=$1
+
+  exit ${rval}
+}
+
+######################
+#Check Parameter     #
+######################
+
+if [ $# -ge 1 ];
+then
+   echo ""
+   echo "Usage $0"
+   echo ""
+   exit 1
+fi
+
+######## Welcome
+echo ""
+echo "========================================================="
+echo "   FULLNAME - UPDATE LICENSE UTILITY"
+echo "========================================================="
+echo ""
+
+######## AGENT_USER only may run the script...
+if [ -x /usr/bin/whoami ];
+then
+  if [ $(/usr/bin/whoami) != "AGENT_USER" -a $(/usr/bin/whoami) != "root" ];
+  then
+    echo "\nSorry, you must be AGENT_USER or root user to run this script!"
+    echo ""
+    exit 1
+  fi
+fi
+
+######## Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+######## Set env for AGENT
+
+curr_os=$(uname -s)
+
+if [ -x "${AGENT_DIR}/SCRIPT/GetFingerprint" ];
+then
+  "${AGENT_DIR}"/SCRIPT/GetFingerprint
+else
+  echo ""
+  echo "Cannot find file ${AGENT_DIR}/SCRIPT/GetFingerprint"
+  echo "Cannot show Fingerprint..."
+  echo ""
+fi
+
+######## Last notice
+echo ""
+echo "WARNING: This operation will update current FULLNAME's license!"
+answer=""
+while [ "${answer}" != "y" -a "${answer}" != "n" ];
+do
+  echo "Are you sure you want to do this? [y/n] [default: n]: "
+  read answer
+  if [ "${answer}" = "" ];
+  then
+    answer="n"
+  fi
+done
+if [ ${answer} = "n" ];
+then
+  echo ""
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "Remember that you need to restart FULLNAME application to enable this License Update"
+echo ""
+
+######## Gets target
+answer=""
+while [ "${answer}" = "" ];
+do
+  echo ""
+  echo "Insert full License file pathname"
+  echo "[full path name]: "
+  read answer
+done
+licFile=${answer}
+
+if [ ! -r "${licFile}" ];
+then
+  echo ""
+  echo "The License filename is not valid!"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+baseLicFile=$(basename "${licFile}")
+if [ "${baseLicFile}" = "" ];
+then
+  echo ""
+  echo "Cannot get base License filename from ${licFile}!"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+######## Update License
+echo ""
+echo "Updating FULLNAME's license from ${licFile}, please wait..."
+
+conf_file="${AGENT_DIR}/CONF/Application.properties"
+
+if [ ! -e "${conf_file}" ];
+then
+  echo ""
+  echo "The configuration file ${conf_file} is not valid!"
+  echo "Please check your installation"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+curr_host=$(hostname | cut -d '.' -f 1)
+trueLicFile="${AGENT_DIR}/CONF/License.xml"
+newLicFile="${trueLicFile}.${curr_host}"
+if [ -e "${newLicFile}" ];
+then
+  cp -f "${newLicFile}" "${newLicFile}.bak"
+fi
+
+cp -f "${licFile}" "${newLicFile}"
+chown AGENT_USER:AGENT_GROUP "${newLicFile}" > /dev/null 2>&1
+chmod 644 "${newLicFile}" > /dev/null 2>&1
+
+if [ ! -r "${newLicFile}" ];
+then
+  echo ""
+  echo "Cannot update ${baseLicFile} in CONF dir!"
+  echo "Please check your installation"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+if [ -e "${trueLicFile}" ];
+then
+  rm -f "${trueLicFile}"
+fi
+
+ln -f -s "${newLicFile}" "${trueLicFile}"
+
+################ Checking Jlima
+JLIMA_JAR=""
+if [ -x "${AGENT_DIR}/SCRIPT/CheckJlima" ];
+then
+    		. "${AGENT_DIR}/SCRIPT/CheckJlima"
+    		if [ $? -ne  0 ]
+       		then
+       		    echo ""
+       			echo "Cannot update license..."
+			    echo "Check your LIMA configuration!"
+			    echo ""
+			    exit 1
+       		fi
+    		CheckJlima
+	   if [ $? -ne  0 ]
+       then
+       		JLIMA_JAR=${Lima_jlima}
+       else
+       		JLIMA_JAR="${AGENT_DIR}/LIB/jlima.jar"
+       fi
+fi
+if [ ! -r "${JLIMA_JAR}" ];
+then
+  echo ""
+  echo "Missing file jlima.jar"
+  echo "Please check your installation"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+curr_dir=$(pwd)
+tmp_dir=tmpj_$$
+mkdir ./${tmp_dir}
+
+if [ -x "${JAVA_HOME}/jre/bin/java" ];
+then
+  "${JAVA_HOME}/jre/bin/java" -jar "${JLIMA_JAR}"  -i "${licFile}" "${curr_dir}/${tmp_dir}"
+elif [ -x "${JAVA_HOME}/bin/java" ];
+then
+  "${JAVA_HOME}/bin/java" -jar "${JLIMA_JAR}"  -i "${licFile}" "${curr_dir}/${tmp_dir}"
+else
+  echo ""
+  echo "Cannot find java on your server!"
+  echo "Please check your installation"
+  echo "Exiting..."
+  echo ""
+  rmdir -fR ./${tmp_dir}
+  exit 1
+fi
+
+lic_found="0"
+file_list=$(ls -1d "${curr_dir}/${tmp_dir}/"*)
+for item in ${file_list};
+do
+  diff "${licFile}" "${item}" > /dev/null 2>&1
+  if  [ $? -eq 0 ];
+  then
+   newfile=$(basename "${item}")
+   cp -f "${item}" "${AGENT_DIR}/CONF/${newfile}"
+   chown AGENT_USER:AGENT_GROUP "${AGENT_DIR}/CONF/${newfile}" > /dev/null 2>&1
+   chmod 644 "${AGENT_DIR}/CONF/${newfile}" > /dev/null 2>&1
+   cleanNewFile=$(echo "${AGENT_DIR}/CONF/${newfile}" | sed -e "s?\/?\\\/?g")
+   ex << ++ "${AGENT_DIR}/CONF/Application.properties" > /dev/null
+     g/^LicenseManager.licenseFile/s/LicenseManager.licenseFile.*/LicenseManager.licenseFile = ${cleanNewFile}/
+   w!
+++
+   lic_found="1"
+   break
+  fi
+done
+
+rm -fR ./${tmp_dir}
+
+if [ "${lic_found}" = "0" ];
+then
+  echo ""
+  echo "Failure during License update"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "Successfully done"
+echo ""
+
+exit 0

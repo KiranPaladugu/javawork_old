@@ -1,0 +1,45 @@
+#!/bin/awk -f
+#CVS KEYWORD
+# $Author: ferioli $
+# $Date: 2005/10/20 09:59:41 $
+# $Name: rel-moved-clerCase $
+# $Revision: 1.2 $
+# $Source: /disk1/local_user/cvs/TMF_V30_C2_PROJECT/TMF_V30_C2/TMF_V30_C2/DISTRIB/UTIL/getTag,v $
+# $State: Exp $
+#END CVS KEYWORD
+#sed -n -e "/Name:.*\$/p" getident
+#awk -f sedscript getident 
+
+BEGIN { FS = "[-$]" }
+/.*\$Nam(e):.*\$$/  {
+
+  gsub(" ","",$3);
+  gsub("_",".",$3);
+
+  tmp2 = $3;
+  n    = split(tmp2, a, ".");
+
+  drop = a[4];
+#  print drop;
+
+  i       = match($3, drop);
+  version = substr(tmp2, 1, i-2);
+#  print version;
+
+  release = sprintf("%s.%s", version, drop);
+#  print release;
+
+  for (i = 1; i <= n; i++)
+    if (match(a[i], "patch") != 0)
+      {
+	gsub("patch","", a[i]);
+	patch = a[i];
+#	print patch;
+	print patch > ".patch";	
+	break;
+      }
+
+  print release > ".release";
+  print version > ".version";
+  print drop > ".drop";
+}

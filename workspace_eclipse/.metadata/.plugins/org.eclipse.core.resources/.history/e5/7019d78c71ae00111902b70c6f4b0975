@@ -1,0 +1,420 @@
+package com.marconi.fusion.tmf.sbi.nm;
+/**
+ * File: AbstractBasePipe.java
+ */
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.ericsson.oss.slc.ClassConvertionException;
+import com.ericsson.oss.slc.IClassConverter;
+import com.marconi.fusion.base.asn1.ASN1Obj;
+import com.marconi.fusion.base.asn1.msg.Message;
+import com.marconi.fusion.base.asn1.msg.MessageFactory;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.messagePipe.PipeDriver;
+import com.marconi.fusion.tmf.plugIn.ImpossibleConvertionException;
+import com.marconi.fusion.tmf.plugIn.InvalidX3xMessageException;
+import com.marconi.fusion.tmf.plugIn.adapter.support.IncompleteSyntaxException;
+import com.marconi.fusion.tmf.plugIn.adapter.support.TMFConverterX38;
+import com.marconi.fusion.tmf.sbi.nm.I38Support.GenericChannel;
+import com.marconi.fusion.tmf.sbi.nm.I38Support.GenericPipe;
+
+/**
+ * <p> Title: AbstractBasePipe</p>
+ * <p> Description: <br/>
+ * 	This is the abstract pipe class which represents the basic object used to send message
+ *  to the underlying MV38. Inside there is a translator from the X38 into the I38 syntax.
+ * </p>
+ *
+ * <p>Copyright: Copyright (c) 2008</p>
+ * <p>Company: Ericsson </p>
+ *
+ * @author Francesco Mercurio and Luca Vassalli
+ * @version 1.5.1
+ * @since 1.1
+ */
+public abstract class AbstractBasePipe<T extends Message<?>> extends AbstractBase
+{
+	private static Log log = LogFactory.getLog(AbstractBasePipe.class);
+
+	private IPipe<T>      pipe       = null;
+	private final AtomicInteger reqId      = new AtomicInteger(0);
+	private PipeProfiler  profiler   = null;
+	private boolean       dumpSyntax = true;
+
+	/**
+	 * This enum is used to understand what kind of messages are sent throught this pipe, if internal for the async
+	 * manager (Async) or those used to communicate with the MV38 (Sync)
+	 */
+	public enum PipeType { Async, Sync	}
+	/** the pipe type of this object */
+	private PipeType pipeType = null;
+
+	/**
+	 *  This map contains the correspondence from a X38 message class name (fully qualified) and the
+	 *  correspondent Class object which is needed during conversion. This object is obtaine by means of
+	 *  reflection
+	 */
+	private static Map <String, Class<?>> reflectionMap = new HashMap <String, Class<?>>();
+
+	/**
+	 *  The class converter which converts from X38 to I38 the messages send to the underlying channel
+	 */
+	protected static IClassConverter converter;
+
+	private StateEventDispatcher stateEventDispatcher = null;
+	private EventProvider<T> eventProvider        = null;
+
+	/** StepByStepConverter to convert I38 messages from one version to another version **/
+	private IClassConverter stepByStepConverter = null;
+
+	public AbstractBasePipe() {
+
+	}
+
+	public AbstractBasePipe(final PipeDriver driver) {
+		pipe = new GenericPipe<T>(driver);
+
+		stateEventDispatcher = new StateEventDispatcher();
+		pipe.setStateEventDispatcher(stateEventDispatcher);
+
+		eventProvider = new EventProvider <T>(this);
+		pipe.setEventProvider(eventProvider);
+
+		profiler = new PipeProfiler(this);
+	}
+
+	protected AbstractBasePipe(final IPipe<T> pipe) {
+		this.pipe = pipe;
+
+		stateEventDispatcher = new StateEventDispatcher();
+		pipe.setStateEventDispatcher(stateEventDispatcher);
+
+		eventProvider = new EventProvider <T>(this);
+		pipe.setEventProvider(eventProvider);
+
+		profiler = new PipeProfiler(this);
+	}
+
+	/**
+	 * This method is used to set the StepByStepConverter object to convert the
+	 * message from one version to other version and set this object to
+	 * EventProvider class setter method
+	 * 
+	 * @param stepByStepConverter
+	 */
+	public void setStepByStepConverter(final IClassConverter stepByStepConverter) {
+		this.stepByStepConverter = stepByStepConverter;
+		if (this.eventProvider != null) {
+			this.eventProvider.setStepByStepConverter(stepByStepConverter);
+		}
+	}
+
+	/**
+	 * The method initializes the converter to convert from X38 into I38 messages.
+	 * This operation is done only if the converter is not already initialized.
+	 * The parameter is the location of the directory which contains the CONF directory which contains the configuration
+	 * files needed by the converter class.
+	 * @param loc the location of the directory which contains the CONF directory with the configuration files
+	 * @throws ClassConvertionException in case of any error initializing the converter
+	 */
+	public static void initConverter (final String loc) throws ClassConvertionException {
+		converter = TMFConverterX38.getInstance (loc);
+	}
+
+	/**
+	 * The method checks that the converter was correctly initialized
+	 * @return true if the converter was initialized, false otherwise
+	 * @throws X38ConverterException in case the converter was not initialized yet
+	 */
+	protected static boolean checkConverter () {
+		if (converter == null) {
+			return false;
+		}
+		return true;
+	}
+
+	public static <T extends Message<?>> IPipe<T> getPipe(final PipeDriver driver) {
+		return new GenericPipe<T>(driver);
+	}
+	public static <T extends Message<?>> IPipe<T> getPipe(final MessageFactory<T> factory, final String driverName, final int offset) {
+		return new GenericChannel<T>(factory, driverName, offset);
+	}
+
+	/* (non-Javadoc)
+	 * @see com.marconi.fusion.tmf.i38PlugIn.AbstractBase#name()
+	 */
+	@Override
+	public String name() {
+		return pipe.getName();
+	}
+
+	public boolean isConnected() {
+		return pipe.isConnected();
+	}
+
+	public StateEventDispatcher getStateEventDispatcher() {
+		return pipe.getStateEventDispatcher();
+	}
+
+	public EventProvider<T> getEventProvider() {
+		return pipe.getEventProvider();
+	}
+
+	public int reqId() {
+		return reqId.incrementAndGet();
+	}
+
+	public boolean isDumpSyntax() {
+		return dumpSyntax;
+	}
+	public void setDumpSyntax(final boolean dumpSyntax) {
+		this.dumpSyntax = dumpSyntax;
+	}
+
+	public PipeProfiler getProfiler() {
+		return profiler;
+	}
+
+	public void init(final int connTimeout, final int connRetry,
+			final IPipe<T> pipe) throws Exception {
+
+		this.pipe = pipe;
+
+		stateEventDispatcher = new StateEventDispatcher();
+		pipe.setStateEventDispatcher(stateEventDispatcher);
+
+		eventProvider = new EventProvider<T>(this);
+		pipe.setEventProvider(eventProvider);
+
+		profiler = new PipeProfiler(this);
+
+		pipe.init(connTimeout, connRetry);
+	}
+
+	public void start(final String hostName, final int port, final PipeType pipeTypeSrc ) throws Exception {
+		pipeType = pipeTypeSrc;
+		pipe.start(hostName, port);
+	}
+
+	public void shutdown() {
+		if (log.isDebugEnabled()) {
+			log.debug(format("Enter..."));
+			log.debug(format("Shutdown Pipe..."));
+		}
+		pipe.shutdown();
+		if (log.isDebugEnabled()) {
+			log.debug(format("StateEventDispatcher.removeAllListeners..."));
+		}
+		getStateEventDispatcher().removeAllListeners();
+		if (log.isDebugEnabled()) {
+			log.debug(format("EventProvider.removeAllConsumers..."));
+		}
+		getEventProvider().removeAllConsumers();
+		if (log.isDebugEnabled()) {
+			log.debug(format("Exit..."));
+		}
+	}
+
+	public void setTimeout(final long millis) {
+		pipe.setTimeout(millis);
+	}
+
+	/**
+	 * This class uses the converter package to convert from a X38Message into a I38Message
+	 * @param src an X38Message which has to be converted to a I38Message
+	 * @return a I38 complaint message
+	 * @throws InvalidX38MessageException in case of not valid X38 Message
+	 * @throws ImpossibleConvertionException in case it was not possible to convert the message, for instance due to a lack of rules in the Converter configuration file
+	 */
+	@SuppressWarnings("unchecked")
+	private T convertFromX38toI38 (final T src) throws InvalidX3xMessageException, ImpossibleConvertionException, IncompleteSyntaxException{
+		//TMF38A messages don't need convertion
+		if (this.pipeType == PipeType.Async) {
+			return src;
+		}
+
+		//I retrieve the target I38 name substituting the "X38" string with "I38"
+		final String x38ClassName 	= src.getClass().getName();
+		final String i38MsgClassName	= x38ClassName.replaceAll("X38", "I38");
+
+		//the target class of the I38 message
+		Class<?> targetI38MsgClass = null;
+		// the target objects
+		Object obj = null;
+
+		try {
+			//check if the reflection has to be used or can be exploited a previous run
+			targetI38MsgClass = reflectionMap.get(i38MsgClassName);
+			if (targetI38MsgClass == null) {
+				targetI38MsgClass  = Class.forName(i38MsgClassName);
+				reflectionMap.put(i38MsgClassName, targetI38MsgClass);
+			}
+			//I convert the message from a X38 message into a I38 message
+			obj = converter.convert(src, targetI38MsgClass);
+		} catch (final ClassConvertionException e) {
+			log.error(e);
+			log.info("Not possible to cast the message to the target message type.("+i38MsgClassName+")");
+		} catch (final ClassNotFoundException e) {
+			// this means that a X38 message does not have the correspondent I38 message (maybe used in the PEN/PDM protocol)
+			log.error("The X38 message "+src.asn1ClassName()+" does not have a correspondent I38 name.");
+			log.error(src);
+			throw new IncompleteSyntaxException ("The X38 message "+src.asn1ClassName()+" does not have a correspondent I38 name.");
+		} catch (final SecurityException e) {
+			log.error(e);
+			log.error(e);
+			throw new ImpossibleConvertionException ("Not possible to create the Method object to set the body of the I38 message to the correct ASN1Obj.");
+		}
+
+		//the result message
+		final T i38Msg = (T) obj;
+		return i38Msg;
+	}
+
+	/**
+	 * This class uses the converter package to convert from a I38Message into a X38Message.
+	 * @param msg an I38Message which has to be converted to a X38Message
+	 * @param targetClass the target type of class once the message is converted
+	 * @return a X38 complaint message
+	 * @throws ImpossibleConvertionException in case of impossibility to convert the message
+	 */
+	@SuppressWarnings("unchecked")
+	private <A extends Message<?>> A convertFromI38toX38 (final T msg, final Class<A> targetClass) throws ImpossibleConvertionException {
+		//TMF38A messages don't need conversion
+		if (this.pipeType == PipeType.Async) {
+			return (A) msg;
+		}
+
+		A x38Msg = null;
+		try {
+			x38Msg = converter.convert(msg, targetClass);
+		} catch (final ClassConvertionException e) {
+			log.error(e);
+			log.error("Not possible to cast the message to the target message type.("+targetClass.getName()+")");
+			log.error(msg);
+		}
+		return x38Msg;
+	}
+
+	/**
+	 * Send a synchronous message. The X38 message is automatically translated from
+	 * X38 syntax into the I38 syntax to send it through the pipe channel.
+	 * @param <R> the type of the request object
+	 * @param <A> the type of the answer object
+	 * @param request the request message  (X38)
+	 * @param answer the answer class type (X38)
+	 * @return the response to the request (X38)
+	 * @throws Exception
+	 */
+	@SuppressWarnings("unchecked")
+	public <A extends Message<?> >A sendRequest(final T request, final Class<A> response)
+			throws Exception {
+		if (profiler != null) {
+			profiler.start();
+		}
+		A out = null;
+
+		try {
+			//convert the X38Message into a I38Message<?> of the type which parameters this class
+			T i38Msg = this.convertFromX38toI38(request);
+
+			// If the converter is not null, convert the I38 message from the latest version to the version used by SO-NM
+			if (this.stepByStepConverter != null) {
+				Message<?> i38Message=i38Msg;
+				i38Message = stepByStepConverter.convert(i38Message, null);
+				i38Msg=(T)i38Message;
+			}
+
+			//send the message over the pipe channel
+			T answerMsg = pipe.sendRequest(i38Msg);
+
+			// If the converter is not null, convert the I38 response message from the version used by SO-NM to the latest version
+			if (this.stepByStepConverter != null) {
+				Message<?> i38answerMsg=answerMsg;
+				i38answerMsg = stepByStepConverter.convert(i38answerMsg, null);
+				answerMsg=(T)i38answerMsg;
+			}
+
+			//convert back the message into an X38Message
+			out = this.convertFromI38toX38(answerMsg, response);
+		} catch (final IncompleteSyntaxException ex) {
+			//TODO handle this better ... missing ASN1OBJ in I38 syntax
+			log.error("A message which is not allowed in this I38 syntax has been handled.");
+			log.error(ex);
+			throw ex;
+		}
+
+		if (profiler != null) {
+			profiler.stop();
+		}
+		return out;
+	}
+
+	protected final void event(final Log log, final ASN1Obj message) {
+		if (dumpSyntax && log.isDebugEnabled()) {
+			log.debug(new DumpInfo(message, "%s\n%s", new Object[] {name(), "<<< Event " + message.asn1ClassName()}));
+		}
+	}
+
+	public final void send(final Log log, final ASN1Obj message) {
+		if (dumpSyntax && log.isDebugEnabled()) {
+			log.debug(fmt(message, ">>> Sending " + message.asn1ClassName()));
+		}
+	}
+
+	protected final void sendAsync(final Log log,  final ASN1Obj message) {
+		if (dumpSyntax && log.isDebugEnabled()) {
+			log.debug(fmt(message, ">>> Sending Async" + message.asn1ClassName()));
+		}
+	}
+
+	public final void sendb(final Log log, final ASN1Obj message) {
+		if (dumpSyntax && log.isDebugEnabled()) {
+			log.debug(new DumpInfo("%s\n%s", new Object[] {name(), ">>> Sending* " + message.asn1ClassName()}));
+		}
+	}
+
+	public final void recv(final Log log, final ASN1Obj message) {
+		if (dumpSyntax && log.isDebugEnabled()) {
+			log.debug(fmt(message, "<<< Received " + message.asn1ClassName()));
+		}
+	}
+
+	protected final void recvb(final Log log,  final ASN1Obj message) {
+		if (dumpSyntax && log.isDebugEnabled()) {
+			log.debug(new DumpInfo("%s\n%s", new Object[] {name(), "<<< Received* " + message.asn1ClassName()}));
+		}
+	}
+
+	private DumpInfo fmt(final ASN1Obj asn1, final String text) {
+		return new DumpInfo(asn1, "%s\n%s", new Object[] {name(), text});
+	}
+
+	protected final void event(final Log log, final T message) {
+		event(log,message.getBody());
+	}
+
+	public final void send(final Log log, final T message) {
+		send(log,message.getBody());
+	}
+
+	protected final void sendAsync(final Log log, final T message) {
+		sendAsync(log,message.getBody());
+	}
+
+	protected final void sendb(final Log log, final T message) {
+		sendb(log,message.getBody());
+	}
+
+	public final void recv(final Log log, final T message) {
+		recv(log,message.getBody());
+	}
+
+	public final void recvb(final Log log, final T message) {
+		recvb(log,message.getBody());
+	}
+}

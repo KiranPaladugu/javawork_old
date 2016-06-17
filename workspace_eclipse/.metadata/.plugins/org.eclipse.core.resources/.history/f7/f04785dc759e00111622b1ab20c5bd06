@@ -1,0 +1,946 @@
+package com.marconi.fusion.tmf.i36PlugIn.converter;
+
+/*
+ * SBIConverter.java
+ * ex
+ * TmfConverter.java
+ *
+ * Created on 20 dicembre 2001, 15.47
+ */
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
+import java.util.TreeMap;
+
+import org.apache.commons.lang.mutable.MutableBoolean;
+import org.apache.commons.lang.time.StopWatch;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36CardId;
+import com.marconi.fusion.X36.X36CardIdentification;
+import com.marconi.fusion.X36.X36CardInformation;
+import com.marconi.fusion.X36.X36EquipmentInstallState;
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.X36.X36NodePossibleConfiguration;
+import com.marconi.fusion.X36.X36PhysicalCardInfo;
+import com.marconi.fusion.X36.X36PhysicalSlotState;
+import com.marconi.fusion.X36.X36SetOfAssociatedCard;
+import com.marconi.fusion.X36.X36SetOfGraphicString;
+import com.marconi.fusion.X36.X36SetOfShelfInformation;
+import com.marconi.fusion.X36.X36SetOfShelfPossibleConfiguration;
+import com.marconi.fusion.X36.X36SetOfSlotPossibleConfiguration;
+import com.marconi.fusion.X36.X36ShelfId;
+import com.marconi.fusion.X36.X36ShelfInformation;
+import com.marconi.fusion.X36.X36ShelfPossibleConfiguration;
+import com.marconi.fusion.X36.X36SlotPossibleConfiguration;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.asn1.StringType;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.util.ASN1Comparator;
+import com.marconi.fusion.base.util.Utility;
+import com.marconi.fusion.tmf.additionalInformation.AdditionalInfoUtils;
+import com.marconi.fusion.tmf.additionalInformation.EQCoord;
+import com.marconi.fusion.tmf.additionalInformation.ProprietaryAdditionalInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AIEquipmentCoord;
+import com.marconi.fusion.tmf.db.DBComponent;
+import com.marconi.fusion.tmf.db.DBEquipment;
+import com.marconi.fusion.tmf.db.DBEquipmentHolder;
+import com.marconi.fusion.tmf.db.DBIdentifier;
+import com.marconi.fusion.tmf.db.DBIterator;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.Index;
+import com.marconi.fusion.tmf.i36PlugIn.I36DatabaseManager;
+import com.marconi.fusion.tmf.i36PlugIn.I36Naming;
+import com.marconi.fusion.tmf.i36PlugIn.I36PlugIn;
+import com.marconi.fusion.tmf.i36PlugIn.I36PluginConstants.TMFProvisioningStatus;
+import com.marconi.fusion.tmf.i36PlugIn.NeHelper;
+import com.marconi.fusion.tmf.i36PlugIn.SBIClientI;
+import com.marconi.fusion.tmf.i36PlugIn.keys.IndexesHelper;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.Equipment;
+import com.marconi.fusion.tmf.plugIn.types.EquipmentDn;
+import com.marconi.fusion.tmf.plugIn.types.EquipmentHolder;
+import com.marconi.fusion.tmf.plugIn.types.EquipmentObjectType;
+import com.marconi.fusion.tmf.plugIn.types.EquipmentObjectTypeList;
+import com.marconi.fusion.tmf.plugIn.types.HolderDn;
+import com.marconi.fusion.tmf.plugIn.types.HolderDnList;
+import com.marconi.fusion.tmf.plugIn.types.HolderId;
+import com.marconi.fusion.tmf.plugIn.types.HolderState;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.tmfFramework.TmfFramework;
+import com.marconi.fusion.tmf.tmfFramework.repository.AdditionalInfoManager;
+import com.marconi.fusion.tmf.utilities.Stats;
+
+/**
+ * @author guargua
+ * @version
+ */
+
+/* ************************************************************************** */
+public class PhysicalConverter {
+	/* ************************************************************************** */
+
+	private static final Log LOG = LogFactory.getLog(PhysicalConverter.class);
+
+	static public final String PROCESS_PHYSICAL = "Process Physical";
+	static public final String PROCESS_HOLDER = "Process Holder";
+	static public final String PROCESS_EQUIPMENT = "Process Equipment";
+
+	private NeHelper helper = null;
+
+	private Properties xmlInfos = null;
+	private I36DatabaseManager dbManager = null;
+	private DBManagedElement me = null;
+	// private X36NeId neId = null;
+	protected String neLocator = "";
+
+	private SBIClientI sbiClient = null;
+	private HolderDnList holderDnList = new HolderDnList();
+
+	/*
+	 * to link card on backplane
+	 */
+	private final Map<EquipmentDn, X36SetOfAssociatedCard> associatedCards = new HashMap<EquipmentDn, X36SetOfAssociatedCard>();
+
+	private final Map<HolderDn, DBEquipmentHolder> oldHolders = new TreeMap<HolderDn, DBEquipmentHolder>(new ASN1Comparator());
+
+	// private EquipmentOrHolderList eohList = null;
+
+	// Commented as part of Scalability as this is not being used for any specific purpose.
+	// private CrossReference crossReference = null;
+	protected Stats stats = new Stats();
+
+	/**
+	 * Default constructor
+	 */
+	public PhysicalConverter() {
+
+	}
+	/**
+	 * @param sbiClient
+	 * @param dbManager
+	 */
+	public PhysicalConverter(final SBIClientI sbiClient, final I36DatabaseManager dbManager ) {
+
+		this.dbManager = dbManager;
+		this.sbiClient = sbiClient;
+	}
+
+	/* ************************************************************************** */
+	public I36Naming getNaming() {
+		return sbiClient.getNaming();
+	}
+
+	/* ************************************************************************** */
+	public String getEMId() {
+		return getNaming().getEMId();
+	}
+
+	/* ************************************************************************** */
+	// Commented as part of Scalability as this method is never being called from anywhere.
+	/*public CrossReference getCrossReference() {
+		return crossReference;
+	}*/
+
+	/* ************************************************************************** */
+	public Stats process(final NeHelper helper) throws PlugInException {
+		stats.start(PROCESS_PHYSICAL);
+
+		this.helper = helper;
+		try {
+			final StopWatch watch = new StopWatch();
+			watch.start();
+
+			// Commented as part of Scalability as this is not being used for any specific purpose.
+			// crossReference = new CrossReference();
+			sbiClient = helper.getSBIClient();
+			dbManager = sbiClient.getDbManager();
+			neLocator = sbiClient.getNeLocator(helper.getNeId());
+
+			final MEDn meDn = helper.getMEDn();
+			me = dbManager.getManagedElement(meDn);
+
+			if (me == null) {
+				me = dbManager.getManagedElement(meDn);
+				/**
+				 * TODO ma basta questo? forse e' meglio farlo sui singoli shelf...
+				 */
+			}
+
+			final DBIterator<DBEquipmentHolder> holders = me.getHolders().iterator();
+			while (holders.hasNext()) {
+				final DBEquipmentHolder item = holders.next();
+				oldHolders.put(item.getDn(), item);
+			}
+			holders.close();
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(String.format("Process physical configuration on ME <%s>: start....", neLocator));
+			}
+
+			if (me == null) {
+				LOG.error(String.format("Unable to locate ME <%s> on DB", neLocator));
+				return stats;
+			}
+			xmlInfos = sbiClient.getInventorySupport().getInventoryInfo(meDn.getMe(), true);
+			if(LOG.isTraceEnabled()) {
+				Utility.dumpProfile(xmlInfos, "XML infos for <" + neLocator + ">", LOG);
+			}
+
+			process();
+			helper.setHolderDnList(holderDnList);
+
+			// linkEquipments();
+
+			discardOldies();
+
+			watch.stop();
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(String.format("Process physical configuration on ME <%s>: end in %s.", neLocator, watch.toString()));
+			}
+
+			// closeStats(stats, watch.getTime());
+			return stats;
+		} finally {
+			stats.end(PROCESS_PHYSICAL);
+		}
+	}
+
+	private void discardOldies() {
+		/**
+		 * cancello i vecchi holder
+		 */
+
+		final int size = oldHolders.values().size();
+		if (size == 0) {
+			return;
+		}
+
+		final DBEquipmentHolder[] holders = oldHolders.values().toArray(new DBEquipmentHolder[size]);
+
+		dbManager.delete(holders);
+		LOG.info(String.format("Removed %d Holders on ME <%s>", size, neLocator));
+	}
+
+
+	/* ************************************************************************** */
+	public void process() {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("Process holders and equipments for ME <%s>: START...", neLocator));
+		}
+
+		final X36SetOfShelfInformation setOf = helper.getShelves();
+		// HolderDnList list = new HolderDnList();
+		for (final X36ShelfInformation shelf : setOf) {
+			/**
+			 * 06/09/2005 in teoria si potrebbe dare anche un holder che reppresenta il rack riempendo le info un po' a sentimento
+			 * ma siccome poi non si sa come ripescarlo per adesso soprassediamo
+			 * 
+			 *if (shelf.isPresentrack()) tmfEHList.add(createRack(neId, shelf));
+			 */
+
+			final DBEquipmentHolder holder = createShelf(shelf);
+			// list.addElement(holder.getDn());
+			createSlotsAndCards(holder, shelf);
+			// list.addElements();
+		}
+		//update Equipment Node Possible configuration
+		if (helper.getNodePossibleConfiguration() != null) {
+
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(String.format(" Processing  NodePossibleConfiguration for <%s>.",helper.getNeId()));
+			}
+			if (helper.getNodePossibleConfiguration().getNeConfig().size() != 0) {
+				processNodePossibleConfiguration(helper.getNeId(), helper
+						.getNodePossibleConfiguration().getNeConfig().get(0));
+			} else {
+
+				processNodePossibleConfiguration(helper.getNeId(),
+						new X36NodePossibleConfiguration());
+			}
+			LOG.info(String.format(" Processing  NodePossibleConfiguration completed for <%s>.", helper.getNeId()));
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("Process holders and equipments for ME <%s>: DONE.", neLocator));
+		}
+		// return list;
+	}
+
+	// /* ***************************************************************************/
+	// private void linkEquipments() {
+	// if (associatedCards.size() == 0)
+	// return;
+	// Iterator<Map.Entry<EquipmentDn, X36SetOfAssociatedCard>> itr = associatedCards.entrySet().iterator();
+	//
+	// while (itr.hasNext()) {
+	// Map.Entry<EquipmentDn, X36SetOfAssociatedCard> item = itr.next();
+	// EquipmentDn dn = item.getKey();
+	// X36SetOfAssociatedCard setOf = item.getValue();
+	//
+	// linkEquipments(dn, setOf);
+	// }
+	// }
+	//
+	// /* ***************************************************************************/
+	// private void linkEquipments(EquipmentDn dn, X36SetOfAssociatedCard setOf) {
+	// DBEquipment equipment = dbManager.getEquipment(dn);
+	//
+	// /**
+	// * il link lo faccio considerando equipment primary
+	// * quindi uso l'associazione supporting
+	// */
+	// equipment.clearSupportingEquipments();
+	//
+	// for (Iterator<X36AssociatedCard> itr = setOf.iterator();itr.hasNext();) {
+	// X36AssociatedCard item = itr.next();
+	// if (item.isPrimaryCard())
+	// continue;
+	// EquipmentDn eqDn = makeEquipmentDn(item.getSecondaryCard());
+	// DBEquipment secondary = dbManager.getEquipment(eqDn);
+	// if (secondary != null)
+	// equipment.addSupportingEquipment(secondary);
+	// }
+	// }
+
+	/*
+	 * Equipment Inventory: create an equipmentOrHolder(SHELF)
+	 */
+	/* ************************************************************************** */
+	private DBEquipmentHolder createShelf(final X36ShelfInformation shelf) {
+		stats.start(PROCESS_HOLDER);
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(shelf, "Creating shelf under ME<%s> for ...", new Object []{neLocator}));
+		}
+
+		final EquipmentHolder eh = new EquipmentHolder();
+		final X36ShelfId shelfId = shelf.getShelfId();
+
+		eh.setName(getNaming().makeShelfDn(helper.getNeId(), shelfId));
+
+		eh.setNativeEMSName("shelf:" + shelfId.getValue());
+		// eh.setuserLabel(eh.getnativeEMSName());
+		if (sbiClient.getPlugIn().useNativeLabels()) {
+			eh.setUserLabel(eh.getNativeEMSName());
+		}
+		else {
+			eh.setUserLabel("");
+		}
+		eh.setOwner(new StringType());
+		eh.setHolderType(TmfFramework.SHELF_HOLDER_TYPE);
+		// eh.setexpectedOrInstalledEquipment(new StringType());
+		eh.setAcceptableEquipmentTypeList(new EquipmentObjectTypeList());
+		eh.getHolderState().setEmpty(); // see EquipmentModel.pdf
+		// eh.setadditionalInfo(new NVSList());
+
+		if (xmlInfos != null) {
+			sbiClient.getInventorySupport().fillInventoryInfo(xmlInfos, eh);
+		}
+
+		final MutableBoolean created = new MutableBoolean();
+		final DBEquipmentHolder holder = createOrUpdateHolder(me, eh, created);
+		// DBEquipmentHolder holder = dbManager.put(me, eh, transaction);
+
+		stats.end(PROCESS_HOLDER);
+
+		return holder;
+	}
+
+	/* ************************************************************************** */
+	private void createSlotsAndCards(final DBEquipmentHolder holder, final X36ShelfInformation x36Shelf) {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("createSlotsAndCards: creating slot and cards under ME <%s>...", neLocator));
+		}
+
+		holder.getContainedHolders().clear();
+
+		for (final X36CardInformation x36Card : x36Shelf.getCards()) {
+			final DBEquipmentHolder card = createSlot(x36Shelf, x36Card);
+			holder.getContainedHolders().add(card);
+			holderDnList.add(card.getDn());
+
+		}
+	}
+
+	/* ************************************************************************** */
+	private DBEquipmentHolder createSlot(final X36ShelfInformation shelf, final X36CardInformation card) {
+
+		stats.start(PROCESS_HOLDER);
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(card, "Creating slot under ME<%s> for...", new Object []{neLocator}));
+		}
+
+		// SLOT
+		final EquipmentHolder holder = new EquipmentHolder();
+		final X36ShelfId shelfId = shelf.getShelfId();
+		final X36CardId cardId = card.getCardId();
+
+		final EquipmentDn eqDn = helper.makeSlotDn(shelfId, cardId);
+		final HolderDn holderDn = holder.getName();
+
+		// holderDn.setems(eqDn.getems());
+		holderDn.setMe(eqDn.getMe());
+		holderDn.setHolder(eqDn.getHolder());
+
+		holder.setNativeEMSName("shelf:" + shelfId.getValue() + "-slot:" + cardId.getValue());
+		// holder.setuserLabel(holder.getnativeEMSName());
+		if (sbiClient.getPlugIn().useNativeLabels()) {
+			holder.setUserLabel(holder.getNativeEMSName());
+		} else {
+			holder.setUserLabel("");
+		}
+		holder.setOwner(new StringType());
+		holder.setHolderType(TmfFramework.SLOT_HOLDER_TYPE);
+
+		final X36PhysicalCardInfo physicalCard = card.getPhysicalCardInfo();
+		X36PhysicalSlotState nePhysicalslotState = null;
+		if (physicalCard != null) {
+			final StringType cardType = physicalCard.getCardType();
+
+			holder.getExpectedOrInstalledEquipment().setEquipment(eqDn);
+
+			final EquipmentObjectTypeList cardTypeList = new EquipmentObjectTypeList();
+			cardTypeList.add(new EquipmentObjectType(cardType.getValue()));
+
+			holder.setAcceptableEquipmentTypeList(cardTypeList);
+
+			nePhysicalslotState = physicalCard.getPhysicalSlotState();
+
+			// TR HO86299 Fix
+			if (nePhysicalslotState != null) {
+
+				addEquipmentProvisioningInfo(holder, nePhysicalslotState);
+
+				final X36EquipmentInstallState equipInstallState = nePhysicalslotState.getEquipInstallState();
+
+				switch (equipInstallState.getValue()) {
+
+				case 1:
+					holder.getHolderState().setEmpty();
+					break;
+				case 2:
+					holder.getHolderState().setInstalled_and_not_expected();
+					break;
+				case 3:
+					holder.getHolderState().setExpected_and_not_installed();
+					break;
+				case 4:
+					holder.getHolderState().setInstalled_and_expected();
+					break;
+				case 5:
+					holder.getHolderState().setMismatch_of_installed_and_expected();
+					break;
+				case 6:
+					holder.getHolderState().setUnavailable();
+					break;
+				case 7:
+					holder.getHolderState().setUnknown();
+					break;
+
+				}
+			}
+		}
+		if (xmlInfos != null) {
+			sbiClient.getInventorySupport().fillInventoryInfo(xmlInfos, holder);
+		}
+
+		final MutableBoolean created = new MutableBoolean();
+		final DBEquipmentHolder dbEh = createOrUpdateHolder(me, holder, nePhysicalslotState, created);
+
+		if (created.booleanValue()) {
+			final X36CardIdentification cardIden = new X36CardIdentification();
+			cardIden.setShelfId(shelfId.getValue());
+			cardIden.setCardId(cardId.getValue());
+
+			final DBIdentifier index = sbiClient.getIndexesMaker().makeSlotIndex(helper.getNeId(), cardIden);
+
+			if (index != null) {
+				// dbManager.setIndex("", index, dbEh);
+				final String indexName = IndexesHelper.makeAlarmIndexName(dbEh.getMe().get().getDn());
+				final Index dbIndex = dbManager.getDatabase().getIndex(indexName);
+				dbIndex.setIndex(index, dbEh);
+			}
+		}
+
+		// dbManager.put(me, holder, transaction);
+
+		final String tmfProvisioningStatus = getTmfProvisioningStatus(holder);
+
+		if (!(tmfProvisioningStatus.equals(TMFProvisioningStatus.Unprovisioned.name()))) {
+			createCard(dbEh, shelf, card);
+		}
+
+		stats.end(PROCESS_HOLDER);
+
+		return dbEh;
+	}
+
+	/* ************************************************************************** */
+	private DBEquipment createCard(final DBEquipmentHolder holder, final X36ShelfInformation shelf, final X36CardInformation card) {
+
+		stats.start(PROCESS_EQUIPMENT);
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(card, "Creating card under ME<%s> for...", new Object []{neLocator}));
+		}
+
+		// CARD
+		final Equipment equipment = new Equipment();
+
+		equipment.setName(helper.makeSlotDn(shelf.getShelfId(), card.getCardId()));
+
+		final X36PhysicalCardInfo physicalCard = card.getPhysicalCardInfo();
+
+		String cardName = "";
+		if (card.isPresentCardName()) {
+			cardName = card.getCardName().getValue() + " ";
+		}
+
+		final String cardType = (physicalCard != null) ? physicalCard.getCardType().getValue() : "";
+
+		final boolean f = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingEqCardNameAsCardTypeIfEmpty, true);
+
+		if ((cardName.length() == 0) && f) {
+			cardName = cardType;
+		}
+
+		final String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.namingEqNativeNameFormat, "%s");
+
+		final String nativeEMSName = String.format(format, cardName, cardType);
+		equipment.setNativeEMSName(nativeEMSName);
+
+		if (sbiClient.getPlugIn().useNativeLabels()) {
+			equipment.setUserLabel(equipment.getNativeEMSName());
+		} else {
+			equipment.setUserLabel("");
+		}
+
+		equipment.setOwner(new StringType());
+
+		final HolderState holderState = holder.getHolderState();
+		// fix for TR HO90338 :: service state is updating based on holder state
+		if (holderState.isEmpty()) {
+			equipment.getServiceState().setServ_na();
+		} else if (holderState.isExpected_and_not_installed()) {
+			equipment.getServiceState().setOut_of_service();
+		} else {
+			equipment.getServiceState().setIn_service();
+		}
+
+		/*
+		 * the following field may be modified by PIC
+		 */
+		// EquipmentObjectType cardObjectType = new EquipmentObjectType(cardType.getValue());
+
+		final String tmfProvisioningStatus = getTmfProvisioningStatus(holder.getInformation());
+		if (physicalCard != null) {
+			final X36PhysicalSlotState nePhysicalSlotState = physicalCard.getPhysicalSlotState();
+			if (nePhysicalSlotState != null) {
+
+				if (!(tmfProvisioningStatus.equals(TMFProvisioningStatus.Provisioned.name()) || tmfProvisioningStatus
+						.equals(TMFProvisioningStatus.Provisioning.name()))) {
+					if (nePhysicalSlotState.isPresentExpectedModule()) {
+						equipment.setExpectedEquipmentObjectType(nePhysicalSlotState.getExpectedModule().getValue());
+					}
+				}
+				if (nePhysicalSlotState.isPresentInstalledModule()) {
+					equipment.setInstalledEquipmentObjectType(nePhysicalSlotState.getInstalledModule().getValue());
+				}
+
+				addEquipmentProvisioningInfo(equipment, nePhysicalSlotState);
+			}
+		}
+
+		equipment.setInstalledPartNumber(""); // from PIC
+		equipment.setInstalledVersion(""); // from PIC
+		equipment.setInstalledSerialNumber("");
+
+		// from PIC
+		// NVSList nvsList = new NVSList();
+		//
+		// equipment.setadditionalInfo(nvsList);
+
+		/**
+		 * memorizzo le associated cards se ci sono e contengono elementi
+		 */
+		fillAssociatedCards(equipment, card);
+
+		final int shelfId = shelf.getShelfId().getValue();
+		final int cardId = card.getCardId().getValue();
+
+		// Added new argument as part of fix for TR HO38182
+		fillInventory(equipment, shelfId, cardId);
+
+		// DBEquipment obj = dbManager.put(holder, equipment);
+		final DBEquipment obj = getDBEquipmentObject(holder, equipment, shelfId, cardId);
+
+		stats.end(PROCESS_EQUIPMENT);
+
+		return obj;
+	}
+
+	/**
+	 * This method fills the associatedCards Map if card had associated cards.
+	 * @param equipment - Equipment object
+	 * @param card - X36CardInformation object
+	 */
+	private void fillAssociatedCards(final Equipment equipment, final X36CardInformation card)
+	{
+		if (card.isPresentAssociatedCards() && (card.getAssociatedCards().size() > 0)) {
+			associatedCards.put(equipment.getName(), card.getAssociatedCards());
+		}
+	}
+
+	/**
+	 * This method fills inventory information
+	 * @param equipment - Equipment object
+	 * @param shelfId
+	 * @param cardId
+	 */
+	private void fillInventory(final Equipment equipment, final int shelfId, final int cardId)
+	{
+		if (xmlInfos != null) {
+			sbiClient.getInventorySupport().fillInventoryInfo(equipment, cardId, shelfId, xmlInfos);
+		}
+	}
+
+	/**
+	 * This method creates a DB equipment object and sets its additional information and returns the DB equipment object
+	 * @param holder - DBEquipmentHolder object
+	 * @param equipment - Equipment object
+	 * @param shelfId
+	 * @param cardId
+	 * @return DBEquipment object
+	 */
+	private DBEquipment getDBEquipmentObject(final DBEquipmentHolder holder, final Equipment equipment, final int shelfId, final int cardId)
+	{
+		final MutableBoolean created = new MutableBoolean();
+		final DBEquipment obj = createOrUpdateCard(holder, equipment, created);
+
+		if (created.booleanValue()) {
+			final X36CardIdentification cardIden = new X36CardIdentification();
+			cardIden.setShelfId(shelfId);
+			cardIden.setCardId(cardId);
+
+			final DBIdentifier index = sbiClient.getIndexesMaker().makeCardIndex(helper.getNeId(), cardIden);
+
+			if (index != null) {
+				// dbManager.setIndex("", index, obj);
+				final String indexName = IndexesHelper.makeAlarmIndexName(obj.getHolder().get().getMe().get().getDn());
+				final Index dbIndex = dbManager.getDatabase().getIndex(indexName);
+				dbIndex.setIndex(index, obj);
+			}
+
+			final AIEquipmentCoord aiCoord = new AIEquipmentCoord();
+			aiCoord.setShelfId(shelfId);
+			aiCoord.setCardId(cardId);
+
+			obj.addAdditionalInformation(new EQCoord(aiCoord));
+		}
+		return obj;
+	}
+
+	// private EquipmentDn makeEquipmentDn(X36CardIdentification cardId) {
+	// EquipmentDn dn = helper.makeSlotDn(cardId.getShelfId(), cardId.getCardId());
+	// return dn;
+	// }
+
+	/* ************************************************************************** */
+	protected DBEquipmentHolder createOrUpdateHolder(final DBManagedElement me, final EquipmentHolder info, final MutableBoolean created) {
+
+		DBEquipmentHolder holder = oldHolders.remove(info.getName());
+
+		if (holder == null) {
+			info.setAlarmReportingIndicator(true);
+			holder = dbManager.createHolder(info);
+			created.setValue(true);
+		} else {
+			final boolean ari = holder.getEquipmentOrHolder().getHolder().getAlarmReportingIndicator().getValue();
+			info.setAlarmReportingIndicator(ari);
+			dbManager.update(holder, info, false);
+			created.setValue(false);
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(info, String.format("Created/checked %s...", holder.getName())));
+		}
+
+		return holder;
+	}
+
+	/**
+	 * Creates or updates the holder with TMF provisioning status
+	 * @param me
+	 * @param info
+	 * @param nePhysicalSlotState
+	 * @param created
+	 * @return DBEquipmentHolder
+	 */
+	protected DBEquipmentHolder createOrUpdateHolder(final DBManagedElement me, final EquipmentHolder info,
+			final X36PhysicalSlotState nePhysicalSlotState, final MutableBoolean created) {
+
+		DBEquipmentHolder holder = oldHolders.remove(info.getName());
+
+		if (holder == null) {
+			info.setAlarmReportingIndicator(true);
+			updateProvisioningStatus(info.getAdditionalInfo(), TMFProvisioningStatus.NA.name());
+
+			holder = dbManager.createHolder(info);
+			created.setValue(true);
+		} else {
+			final boolean ari = holder.getEquipmentOrHolder().getHolder().getAlarmReportingIndicator().getValue();
+			info.setAlarmReportingIndicator(ari);
+
+			final AdditionalInfo ai = holder.getAdditionalInfo();
+
+			final HolderState neEquipmnetHolderState = info.getHolderState();
+			updateNEHolderState(info.getAdditionalInfo(), neEquipmnetHolderState.getEnum());
+
+			final String tmfProvisioningStatus = AdditionalInfoUtils.find(ai, ProprietaryAdditionalInfo.TMFProvisioningStatus
+					.name());
+
+			if (tmfProvisioningStatus != null) {
+				updateProvisioningStatus(info.getAdditionalInfo(), tmfProvisioningStatus);
+				if (nePhysicalSlotState != null) {
+
+					info.setUserLabel(holder.getUserLabel());
+					info.setOwner(holder.getOwner());
+					// Fix for tr HP25365/HP25380 :: updating holderstate also if tmf provisioning status is not applicable
+					if (!tmfProvisioningStatus.equals("NA")) {
+						info.setHolderState(holder.getHolderState());
+
+					}
+				}
+			}
+
+			dbManager.update(holder, info, false);
+
+			created.setValue(false);
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(info, String.format("Created/checked %s...", holder.getName())));
+		}
+		return holder;
+	}
+
+	/*
+	 * This method is used to update NEHolderState in Additional Info with neEquipmnetHolderState
+	 */
+	private void updateNEHolderState(final AdditionalInfo additionalInfo, final String neEquipmnetHolderState) {
+		// TODO Auto-generated method stub
+		AdditionalInfoUtils.update(additionalInfo, DBComponent.TMFObject.EquipmentHolder,
+				ProprietaryAdditionalInfo.NEEquipmnetHolderState.name(), neEquipmnetHolderState);
+	}
+	/**
+	 * @param info
+	 * @param nePhysicalSlotState
+	 * @param equipmentDnOrNull
+	 * @param holderState
+	 * @param installModule
+	 */
+	private void addEquipmentProvisioningInfo(final EquipmentHolder info, final X36PhysicalSlotState nePhysicalSlotState) {
+
+		String neExpectedOrinstallModule = nePhysicalSlotState.getInstalledModule() != null ? nePhysicalSlotState
+				.getInstalledModule().getValue() : "";
+
+				if (neExpectedOrinstallModule == null || neExpectedOrinstallModule.equals("")) {
+					neExpectedOrinstallModule = nePhysicalSlotState.getExpectedModule() != null ? nePhysicalSlotState.getExpectedModule()
+							.getValue() : "";
+				}
+
+				final Profile profile = AdditionalInfoManager.getManager().getProfile();
+
+				profile.setProperty(ProprietaryAdditionalInfo.NEExpectedOrInstalledEquipment.toString(), neExpectedOrinstallModule);
+
+				if (nePhysicalSlotState.getEquipInstallState() != null) {
+					profile.setProperty(ProprietaryAdditionalInfo.NEEquipmnetHolderState.toString(), nePhysicalSlotState
+							.getEquipInstallState().getEnum().toString());
+				}
+				profile.setProperty(ProprietaryAdditionalInfo.EquipmentConfigurableStatus.toString(), "false");
+
+				final AdditionalInfo additionalInfo = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.EquipmentHolder,
+						profile);
+				info.setAdditionalInfo(additionalInfo);
+
+	}
+	/**
+	 * updates Expected module information in equipment object
+	 * @param info
+	 * @param nePhysicalCardinfo
+	 */
+	private void addEquipmentProvisioningInfo(final Equipment info, final X36PhysicalSlotState nePhysicalSlotState) {
+
+		final String expectedModule = nePhysicalSlotState.getExpectedModule() != null ? nePhysicalSlotState
+				.getExpectedModule().getValue() : "";
+				final Profile profile = AdditionalInfoManager.getManager().getProfile();
+
+				profile.setProperty(ProprietaryAdditionalInfo.NEExpectedEquipmentObjectType.toString(), expectedModule);
+				final AdditionalInfo additionalInfo = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.Equipment, profile);
+				info.setAdditionalInfo(additionalInfo);
+
+	}
+	/*
+	 * This method is used to update provisioningStatus in Additional Info with provisioningStatus
+	 */
+	private void updateProvisioningStatus(final AdditionalInfo ai, final String provisioningStatus) {
+		AdditionalInfoUtils.update(ai, DBComponent.TMFObject.EquipmentHolder,
+				ProprietaryAdditionalInfo.TMFProvisioningStatus.name(), provisioningStatus);
+	}
+
+	/* ************************************************************************** */
+	protected DBEquipment createOrUpdateCard(final DBEquipmentHolder holder, final Equipment info, final MutableBoolean created) {
+		// DBIdentifier id = NameIdentifier.build(info.getname());
+
+		DBEquipment equipment = holder.getEquipment().get();
+
+		if (equipment == null) {
+			info.setAlarmReportingIndicator(true);
+			equipment = dbManager.createEquipment(info);
+			created.setValue(true);
+		} else {
+			final boolean ari = equipment.getEquipmentOrHolder().getEquip().getAlarmReportingIndicator().getValue();
+			info.setAlarmReportingIndicator(ari);
+			final String tmfProvisioningStatus = getTmfProvisioningStatus(holder.getInformation());
+			if (tmfProvisioningStatus.equals(TMFProvisioningStatus.Provisioned.name())
+					|| tmfProvisioningStatus.equals(TMFProvisioningStatus.Provisioning.name())) {
+				info.setExpectedEquipmentObjectType(equipment.getExpectedEquipmentObjectType());
+			}
+			// info.getServiceState().set(equipment.getInformation().getServiceState());
+			info.getUserLabel().set(equipment.getInformation().getUserLabel());
+			info.getOwner().set(equipment.getInformation().getOwner());
+
+			dbManager.update(equipment, info, false);
+			created.setValue(false);
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(info, String.format("Created/checked %s...", holder.getName())));
+		}
+
+		return equipment;
+	}
+
+	/**
+	 * @param list
+	 *            the list to set
+	 */
+	public void setList(final HolderDnList list) {
+		this.holderDnList = list;
+	}
+
+	/**
+	 * @return the list
+	 */
+	public HolderDnList getList() {
+		return holderDnList;
+	}
+	/**
+	 * This method updates NodePossibleConfiguration info in Database EquipHolder objects
+	 * @param neId
+	 * @param nodePossibleConf
+	 * @param sbiClient
+	 * @param dbManager
+	 */
+	public void processNodePossibleConfiguration(final X36NeId neId,
+			final X36NodePossibleConfiguration nodePossibleConf) {
+
+
+		final X36SetOfShelfPossibleConfiguration setOfShelfPossibleConfig = nodePossibleConf
+				.getShelfConfig();
+		for (final X36ShelfPossibleConfiguration shelf : setOfShelfPossibleConfig) {
+			final X36ShelfId shelfId = shelf.getShelfId();
+
+			final X36SetOfSlotPossibleConfiguration setOfSlotPossibleConfig = shelf
+					.getSlotConfig();
+
+			for (final X36SlotPossibleConfiguration slot : setOfSlotPossibleConfig) {
+
+				updateEquipmentHolder(neId, shelfId, slot);
+
+			}
+
+		}
+
+	}
+	/**
+	 * updates Equipment Holder object with NodePossibleConfigruation
+	 * @param neId
+	 * @param shelfId
+	 * @param slot
+	 */
+	private void updateEquipmentHolder(final X36NeId neId, final X36ShelfId shelfId,
+			final X36SlotPossibleConfiguration slot) {
+
+		final X36CardId cardId = slot.getCardId();
+		final MEDn meDn = sbiClient.getNaming().makeMEDn(neId);
+
+		final HolderDn holderDn = new HolderDn();
+		holderDn.setMe(meDn.getMe());
+
+		final HolderId holderId = new HolderId();
+		holderId.setShelf(String.valueOf(shelfId.getValue()));
+
+		holderId.setSlot(String.valueOf(cardId.getValue()));
+		holderDn.setHolder(holderId);
+
+		final DBEquipmentHolder dbEquipHolder = dbManager
+				.getEquipmentHolder(holderDn);
+
+		if (dbEquipHolder != null) {
+
+			final EquipmentHolder equipmentHolder = dbEquipHolder
+					.getInformation();
+
+			final EquipmentObjectTypeList equipmentTypeList = new EquipmentObjectTypeList();
+
+			updateAcceptableCardTypeList(slot, equipmentTypeList);
+
+			equipmentHolder
+			.setAcceptableEquipmentTypeList(equipmentTypeList);
+
+			final AdditionalInfo additionalInfo = equipmentHolder
+					.getAdditionalInfo();
+			AdditionalInfoUtils
+			.update(additionalInfo, DBComponent.TMFObject.EquipmentHolder,
+					ProprietaryAdditionalInfo.EquipmentConfigurableStatus.name(), String.valueOf(slot.getConfigurable()
+							.getValue()));
+
+			equipmentHolder.setAdditionalInfo(additionalInfo);
+
+			dbManager.update(dbEquipHolder, equipmentHolder, false);
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(equipmentHolder, String.format("updated EquipmentHolder with Node PossibleConfiguration %s...", equipmentHolder.getName())));
+			}
+
+		}
+	}
+
+	/**
+	 * updates EquipmentHolder acceptableCardTypeList
+	 * @param slot
+	 * @param equipmentTypeList
+	 */
+	private void updateAcceptableCardTypeList(
+			final X36SlotPossibleConfiguration slot,
+			final EquipmentObjectTypeList equipmentTypeList) {
+		final X36SetOfGraphicString acceptablleEquipmentTypeList = slot
+				.getAcceptableCardTypes();
+		for (final StringType equipmentType : acceptablleEquipmentTypeList) {
+
+			equipmentTypeList.add(new EquipmentObjectType(equipmentType));
+		}
+	}
+
+	/*
+	 * This method is used to get provisioningStatus from Equipment holder
+	 */
+	private String getTmfProvisioningStatus(final EquipmentHolder holder) {
+		final AdditionalInfo holderAddInfo = holder.getAdditionalInfo();
+		String tmfProvisioningStatus = AdditionalInfoUtils.find(holderAddInfo,
+				ProprietaryAdditionalInfo.TMFProvisioningStatus.name());
+		if (tmfProvisioningStatus == null) {
+			tmfProvisioningStatus = "";
+		}
+		return tmfProvisioningStatus;
+	}
+}

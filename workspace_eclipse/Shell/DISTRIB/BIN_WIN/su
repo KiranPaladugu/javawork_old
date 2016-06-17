@@ -1,0 +1,5 @@
+#!/bin/sh
+# cygwin su -- cygwin does not support this, so print a helpful error message
+echo "su: Not supported on Cygwin. Use another technique to change user id
+temporarily, such as Windows RunAs or Cygwin OpenSSH."
+exit 1

@@ -1,0 +1,5 @@
+#!/bin/sh
+
+what $1 | grep -v "^$1:$" | cut -c 2-
+
+exit 0

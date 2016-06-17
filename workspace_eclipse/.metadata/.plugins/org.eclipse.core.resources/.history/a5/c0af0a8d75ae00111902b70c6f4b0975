@@ -1,0 +1,949 @@
+package com.marconi.fusion.tmf.sbi.nm;
+
+import java.io.File;
+import java.util.concurrent.Semaphore;
+
+import org.apache.commons.configuration.Configuration;
+import org.apache.commons.configuration.ConfigurationException;
+import org.apache.commons.configuration.PropertiesConfiguration;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.ericsson.oss.sbiadapter.converter.StepByStepConverter;
+import com.ericsson.oss.sbiadapter.converter.StepByStepConverter.TypeOfConversion;
+import com.ericsson.oss.slc.ClassConvertionException;
+import com.marconi.fusion.I38.I38;
+import com.marconi.fusion.I38.I38Message;
+import com.marconi.fusion.I38.I38MessageDriverBuilder;
+import com.marconi.fusion.I38.I38MessageFactory;
+import com.marconi.fusion.X38.X38AttrId;
+import com.marconi.fusion.X38.X38GetUserList;
+import com.marconi.fusion.X38.X38GetVersion;
+import com.marconi.fusion.X38.X38Login;
+import com.marconi.fusion.X38.X38Message;
+import com.marconi.fusion.X38.X38MsgGetUserList;
+import com.marconi.fusion.X38.X38MsgGetVersion;
+import com.marconi.fusion.X38.X38MsgLogin;
+import com.marconi.fusion.X38.X38MsgReportGetUserList;
+import com.marconi.fusion.X38.X38MsgReportGetVersion;
+import com.marconi.fusion.X38.X38MsgReportLogin;
+import com.marconi.fusion.X38.X38ReportGetUserList;
+import com.marconi.fusion.X38.X38ReportGetVersion;
+import com.marconi.fusion.X38.X38ReportLogin;
+import com.marconi.fusion.X38.X38Res;
+import com.marconi.fusion.X38.X38SmartReqIdtype;
+import com.marconi.fusion.X38.X38UserListType;
+import com.marconi.fusion.X38.X38Users;
+import com.marconi.fusion.X38.X38WarningCode;
+import com.marconi.fusion.base.application.BaseApplication;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.application.WrongInitializationException;
+import com.marconi.fusion.base.asn1.IntegerType;
+import com.marconi.fusion.base.asn1.StringType;
+import com.marconi.fusion.base.asn1.msg.Message;
+import com.marconi.fusion.base.asn1.msg.MessageDriverBuilder;
+import com.marconi.fusion.base.asn1.msg.MessageFactory;
+import com.marconi.fusion.base.asn1.msg.io.MessageDecoder;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.messagePipe.PipeDriver;
+import com.marconi.fusion.base.pipe.TimeoutExpiredException;
+import com.marconi.fusion.tmf.SBI.SBI;
+import com.marconi.fusion.tmf.i38PlugIn.MessageBuilder;
+import com.marconi.fusion.tmf.plugIn.IEventConsumer;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.adapter.support.PENPDMConverter;
+import com.marconi.fusion.tmf.realignmentHandler.rh.ConnectionInfo;
+import com.marconi.fusion.tmf.sbi.nm.I38Support.GenericChannel;
+import com.marconi.fusion.tmf.sbi.nm.I38Support.GenericPipe;
+import com.marconi.fusion.tmf.sbi.nm.I38Support.SBILabelUtilities;
+
+/**
+ * <p>
+ * Title: X38SBI.java
+ * </p>
+ *
+ * @author XKHAJMO
+ * @version 4.1
+ * @since 4.1
+ *
+ */
+public class X38SBI extends AbstractBasePipe<X38Message<?>> implements SBI, IStateEventListener {
+
+	private static Log LOG = LogFactory.getLog(X38SBI.class);
+
+	private static IPipe<I38Message<?>> pipe;
+	private boolean started = false;
+	private boolean closed = false;
+	private int connectCount = 0;
+	private String hostName = null;
+	private String psbUserName = null;
+	private int psbDefUserId = -1;
+	private int port = 0;
+	private Semaphore semaphore = null;
+	public boolean isConnected = false;
+	private Integer userId = null;
+	private Integer psbUserId = null;
+	private static NmSBIPluginProperty nmProfile = null;
+	private com.marconi.fusion.base.application.Profile profile = null;
+	NmSBIPluginProperty nmProfile1 = null;
+	private X38Pipe pipeAsync = null;
+	/** field added to check whether control plane is enabled or not **/
+
+	/** Index which represents the I38 version used by SO-NM **/
+	int currentI38Index = -1;
+
+	/**
+	 * Variable used to store the connection information related to the
+	 * underlying Network Manager
+	 */
+	private ConnectionInfo connectionInfo = null;
+
+	protected enum userLogin {
+		OK, AlreadyLogged, NotAvailable, GenericError
+	};
+
+	/**
+	 *
+	 * @return NmSBIPluginProperty
+	 */
+	public NmSBIPluginProperty getNMProfile() {
+		return nmProfile;
+	}
+
+	public X38SBI() throws Exception {
+	}
+
+	public X38SBI(final com.marconi.fusion.base.application.Profile profile) throws Exception {
+		super(getPipe(profile));
+		this.profile = profile;
+		nmProfile = new NmSBIPluginProperty(profile);
+		// initialize the converter
+		final String rootDir = nmProfile.getString(NmSBIPluginProperty.Key.FRAMEWORK_HOME);
+		super.initConverter(rootDir);
+
+	}
+
+	/**
+	 *
+	 * @param profile
+	 * @return IPipe
+	 */
+	private static IPipe getPipe(final com.marconi.fusion.base.application.Profile profile) {
+		nmProfile = new NmSBIPluginProperty(profile);
+		if (nmProfile.getBool(NmSBIPluginProperty.Key.SBI_USE_CHANNEL, true)) {
+			pipe = AbstractBasePipe.getPipe(new I38MessageFactory(), I38.getModule().getName(), 0);
+		} else {
+			pipe = AbstractBasePipe.<I38Message<?>> getPipe(new PipeDriver(I38.getModule().getName(),
+					new I38MessageDriverBuilder()));
+		}
+		return pipe;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see
+	 * com.marconi.fusion.tmf.plugIn.SBI#init(com.marconi.fusion.tmf.plugIn.
+	 * IEventConsumer)
+	 */
+
+	@Override
+	public void init(final IEventConsumer event) throws WrongInitializationException {
+		try {
+			if (closed) {
+				LOG.error("### SBI IS CLOSED ####");
+				return;
+			}
+			getStateEventDispatcher().addListener(this);
+			nmProfile = new NmSBIPluginProperty();
+			final int connTimeout = nmProfile.getInt(NmSBIPluginProperty.Key.SBI_CONNECTION_TIMEOUT, 30000);
+			final int connRetry = nmProfile.getInt(NmSBIPluginProperty.Key.SBI_CONNECTION_RETRY, Integer.MAX_VALUE);
+			final long timeout = nmProfile.getInt(NmSBIPluginProperty.Key.SBI_MESSAGE_TIMEOUT, 180000);
+			setDumpSyntax(nmProfile.getBool(NmSBIPluginProperty.Key.SBI_DUMP_SYNTAX, false));
+
+			super.init(connTimeout, connRetry, getPipe(nmProfile));
+			super.setTimeout(timeout);
+
+			getStateEventDispatcher().addListener(this);
+
+		} catch (final Exception e) {
+			LOG.error(format(e));
+		}
+		// end
+
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.plugIn.SBI#start()
+	 */
+
+	@Override
+	public void start() throws PlugInException {
+		if (closed) {
+			LOG.error("### SBI IS CLOSED ####");
+			return;
+		}
+		if (started) {
+			LOG.warn("SBI already started.");
+			return;
+		}
+		try {
+			LOG.info(">>> Starting SBI...");
+
+			semaphore = new Semaphore(0);
+			start(hostName, port, AbstractBasePipe.PipeType.Sync);
+			if (semaphore != null) {
+				LOG.info(format("Waiting for SBI end..."));
+				semaphore.acquire();
+				semaphore = null;
+			}
+
+			LOG.info("Connecting to NM...");
+
+		} catch (final Exception ex) {
+			LOG.error(ex);
+			throw PlugInExceptionHandler.internalError("SBI initialization error.");
+		}
+
+		started = true;
+		LOG.info(">>> SBI started.");
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see
+	 * com.marconi.fusion.tmf.i38PlugIn.I38Support.IStateEventListener#onConnect
+	 * ()
+	 */
+
+	@Override
+	public void onConnect() {
+		if (closed) {
+			LOG.error("### SBI IS CLOSED ####");
+			if (semaphore != null) {
+				LOG.debug(format("Releasing semaphore"));
+				semaphore.release();
+				return;
+			}
+		}
+		connectCount++;
+		LOG.info(String.format(">>> SBI Connected [%d].", connectCount));
+		try {
+			isConnected = true;
+		} catch (final Exception ex) {
+			LOG.error(ex);
+		}
+		if (semaphore != null) {
+			semaphore.release();
+		}
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.plugIn.SBI#shutdown()
+	 */
+	@Override
+	public void shutdown() {
+		LOG.info(">>> Shutdown SBI...");
+		closed = true;
+		try {
+			super.shutdown();
+		} catch (final Exception ex) {
+			LOG.error(ex);
+		}
+		LOG.info("Deregister PluginEventListeners...");
+		LOG.info(">>> SBI Shutdown completed.");
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see
+	 * com.marconi.fusion.tmf.i38PlugIn.I38Support.IStateEventListener#onDisconnect
+	 * ()
+	 */
+	@Override
+	public void onDisconnect() {
+		LOG.info(">>> SBI Disconnected.");
+		System.exit(-1);
+		resetUserId();
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.i38PlugIn.I38Support.IStateEventListener#
+	 * onConnectionFailed(int)
+	 */
+
+	@Override
+	public void onConnectionFailed(final int retry) {
+		LOG.error("Connection to NM Failed: retry...");
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.i38PlugIn.I38Support.IStateEventListener#
+	 * onConnectionRetryStopped()
+	 */
+
+	@Override
+	public void onConnectionRetryStopped() {
+		System.exit(-1);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.plugIn.SBI#isConnected()
+	 */
+
+	@Override
+	public boolean isConnected() {
+
+		return isConnected;
+	}
+
+	/**
+	 *
+	 * @param profile
+	 * @throws Exception
+	 */
+	public void connect(final Profile profile) throws Exception {
+
+		nmProfile = new NmSBIPluginProperty(profile);
+		psbUserName = nmProfile.getString(NmSBIPluginProperty.Key.SBI_PSB_USERNAME, "psb_cm");
+		psbDefUserId = nmProfile.getInt(NmSBIPluginProperty.Key.SBI_PSB_USER_ID, psbDefUserId);
+		final String rootDir = nmProfile.getString(NmSBIPluginProperty.Key.FRAMEWORK_HOME);
+		super.initConverter(rootDir);
+
+		// Get the version from IPT NMS Circuit (SO-NM)
+		final String isGetVersionSupported = nmProfile.getProperty(NmSBIPluginProperty.Key.GETVERSIONSUPPORTED, "Yes");
+
+		final boolean getVersion = isGetVersionSupported(isGetVersionSupported);
+
+		final int latestI38Index = Integer.parseInt(nmProfile.getProperty(NmSBIPluginProperty.Key.LATESTI38INDEX, "0"));
+
+		final String i38SyntaxSeperator = nmProfile.getProperty(NmSBIPluginProperty.Key.I38SYNTAXSEPARATOR, "_");
+		String i38Version;
+
+		/** If the I38MsgGetVersion message is not supported by SO-NM **/
+		if (!getVersion) {
+			i38Version = nmProfile.getProperty(NmSBIPluginProperty.Key.I38VERSION, "13_2");
+			this.currentI38Index = Integer.parseInt(nmProfile.getProperty("PlugIn.I38Index." + i38Version, "-1"));
+		} else {
+			/**
+			 * If the I38MsgGetVersion message is supported by SO-NM Get the I38
+			 * version supported by SO-NM
+			 **/
+
+			setUserId(1);
+			final X38ReportGetVersion version = getNMVersion();
+			resetUserId();
+			i38Version = version.getMajorNum().getValue() + i38SyntaxSeperator + version.getMinorNum().getValue();
+			this.currentI38Index = Integer.parseInt(nmProfile.getProperty("PlugIn.I38Index." + i38Version, "-1"));
+		}
+
+		if (this.currentI38Index == -1) {
+			// LOG.error(String.format(
+			// "The I38 version used by SO-NM : %s is not supported by TMF. Shutting down the application. ",
+			// i38Version));
+			LOG.error(String.format(
+					"The I38 version used by SO-NM : %s is not supported by TMF. Shutting down the application. ", i38Version));
+			BaseApplication.getApplication().exitApplication();
+			return;
+		}
+
+		/** If the SO-NM is not using the latest I38 version **/
+		else if (this.currentI38Index != latestI38Index) {
+
+			LOG.info(String
+					.format("The I38 version used by SO-NM : %s is not the latest version",
+							i38Version));
+			// LOG.info(String.format("The I38 version used by SO-NM : %s is not the latest version"));
+			try {
+				/**
+				 * Instantiate the StepByStepConverter by passing all the
+				 * indexes
+				 **/
+				final StepByStepConverter stepByStepConverter = new StepByStepConverter(latestI38Index, currentI38Index,
+						i38SyntaxSeperator, TypeOfConversion.I38, profile.getProperty(PENPDMConverter.ROOT_DIR));
+				/** Set the StepByStepConverter in the I38BasePipe **/
+
+				setStepByStepConverter(stepByStepConverter);
+
+				final String i38ClassName = "com.marconi.fusion.I38" + i38SyntaxSeperator + (currentI38Index - latestI38Index)
+						+ ".I38";
+				Class i38Class= Class.forName(i38ClassName);
+				if (nmProfile.getBool(NmSBIPluginProperty.Key.SBI_USE_CHANNEL, true)) {
+					// Updating the I38MessageFactory
+					// Build the new factory class string
+					final String newMsgFactoryClsStr = "com.marconi.fusion.I38" + i38SyntaxSeperator
+							+ (currentI38Index - latestI38Index) + ".I38MessageFactory";
+					// Load the new message factory string
+					final Class<?> newMsgFactoryClass = Class.forName(newMsgFactoryClsStr);
+					Object newMsgFactory = newMsgFactoryClass.newInstance();
+					MessageFactory<I38Message<?>> factory = (MessageFactory<I38Message<?>>) newMsgFactory;
+					GenericChannel<I38Message<?>> genericPipe = (GenericChannel<I38Message<?>>)pipe;
+					genericPipe.setMessageFactory(factory);
+				} else {
+					// Updating the MessageDriverBuilder
+					// Build the new MessageDriverBuilder class string
+					final String newMsgBuilderClassStr = "com.marconi.fusion.I38" + i38SyntaxSeperator
+							+ (currentI38Index - latestI38Index) + ".I38MessageDriverBuilder";
+					// Load the new MessageDriverBuilder class
+					final Class<?> newMsgBuilderClass = Class.forName(newMsgBuilderClassStr);
+					Object newMsgBuilderObject = newMsgBuilderClass.newInstance();
+					MessageDriverBuilder builder = (MessageDriverBuilder) newMsgBuilderObject;
+					
+//					Method getModuleMethod = i38Class.getMethod("getModule");
+//					ASN1Module module = (ASN1Module) getModuleMethod.invoke(i38Class);
+//					GenericPipe<?> genericPipe = (GenericPipe<?>) pipe;
+//					genericPipe.setDriver(new PipeDriver(module.getName(), builder));
+					
+					
+					GenericPipe<?> genericPipe = (GenericPipe<?>) pipe;
+					genericPipe.setDriver(new PipeDriver(i38Class.getMethod("getModule").getName(), builder));
+				}
+			} catch (final ClassConvertionException c) {
+				LOG.error(new DumpInfo("Unable to initialize StepByStepConverter ", c));
+			}
+		} else {
+			// LOG.info(String.format("The I38 version used by SO-NM : %s is the latest version",
+			// i38Version));
+			LOG.info(String.format("The I38 version used by SO-NM : %s is the latest version", i38Version));
+		}
+		final String username = nmProfile.getString(NmSBIPluginProperty.Key.SBI_ADMIN_USER_USERNAME, "");
+		final String password = nmProfile.getString(NmSBIPluginProperty.Key.SBI_ADMIN_USER_PASSWORD, "");
+
+		login2(username, password, true);
+
+		if (getUserId() == null) {
+			LOG.error("###### NM login FAILED ######");
+			throw new Exception("NM login FAILED.");
+		}
+		if (getPsbUserId() == null) {
+			LOG.error("###### Cannot find PSB UserId ######");
+			throw new Exception("Cannot find PSB UserId.");
+		}
+		startAlarms();
+		isConnected = true;
+
+		if (getUserId() == null) {
+			LOG.error("NM login FAILED.");
+			throw PlugInExceptionHandler.internalError("NM login failed.");
+		}
+	}
+
+	/**
+	 * Login to IPT-NMS Circuit
+	 *
+	 * @param userName
+	 * @param password
+	 * @param retrieveUser
+	 */
+	public void login2(final String userName, final String password, final boolean retrieveUser) {
+		try {
+			final X38ReportLogin reportLogin = login2(userName, password);
+			final userLogin loginResult = codeClass(reportLogin);
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(format(String.format("Login as '%s'", userName), reportLogin));
+			}
+			if (reportLogin.getResult().getResMsg().getValue().length() > 0) {
+				LOG.info(format("### '%s' ###", reportLogin.getResult().getResMsg().getValue()));
+			}
+
+			if (loginResult == userLogin.OK) {
+				userId = reportLogin.getUserId().getValue();
+			} else if (loginResult == userLogin.AlreadyLogged) {
+				if (retrieveUser) {
+					LOG.warn(format("User already logged, retrieve User Id."));
+					userId = retrieveLogin(userName);
+				} else {
+					LOG.error(format("Cannot login as <%s>", userName));
+				}
+			} else if (loginResult == userLogin.NotAvailable) {
+				userId = retryLogin(userName, password);
+			} else {
+				LOG.error(format("Cannot login as <%s>", userName));
+			}
+
+			evaluatePsbUserId();
+
+			if (psbUserId != null) {
+				LOG.info(format("'%s' UserId=%d", psbUserName, psbUserId.intValue()));
+			} else {
+				LOG.error(format("Cannot find PSB UserId."));
+			}
+		} catch (final Throwable ex) {
+			LOG.error(format(ex));
+			userId = null;
+		}
+	}
+
+	/**
+	 * Builds Login message, sends the request to IPT-NMS Circuit and returns
+	 * the Login report
+	 *
+	 * @param userName
+	 * @param password
+	 * @return
+	 * @throws SBIException
+	 */
+	protected X38ReportLogin login2(final String userName, final String password) throws SBIException {
+		if (!isConnected()) {
+			LOG.error(format("Pipe not connected"));
+			throw new SBIException("Communication Error");
+		}
+		final X38MsgLogin msg = new X38MsgLogin();
+		final X38Login body = new X38Login();
+		X38MsgReportLogin response = null;
+
+		try {
+			body.setReqId(new X38SmartReqIdtype(reqId()));
+			body.setUserName(userName);
+			body.setPassword(password);
+			msg.setBody(body);
+
+			sendb(LOG, body);
+			response = sendRequest(msg, X38MsgReportLogin.class);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+
+		recvb(LOG, response);
+		return response.getBody();
+	}
+
+	/**
+	 * Processes the Login report
+	 *
+	 * @param in
+	 * @return
+	 */
+	protected userLogin codeClass(final X38ReportLogin in) {
+		if (in.getResult().getResCode().isResOK()) {
+			return userLogin.OK;
+		} else if (in.getResult().getResCode().isResWarning()) {
+			for (final X38WarningCode wCode : in.getResult().getWarningCodes()) {
+				return evaluateError(wCode);
+			}
+		} else {
+			final String resMessage = in.getResult().getResMsg().getValue().toLowerCase();
+			if (resMessage.contains("already logged")) {
+				return userLogin.AlreadyLogged;
+			} else {
+				// Fix for TR HO28415 - When tmfman user is not added, IPTNM
+				// send a response message as "Usertmfman not found"
+				// instead of
+				// "Usertmfman not available. Hence added an other condition checking for the string "not
+				// found""
+				if (resMessage.contains("not found") || resMessage.contains("not available")) {
+					return userLogin.NotAvailable;
+				} else {
+					return userLogin.GenericError;
+				}
+			}
+		}
+		return userLogin.OK;
+	}
+
+	protected Integer retrieveLogin(final String userName) throws SBIException {
+		if (!isConnected()) {
+			LOG.error(format("Pipe not connected"));
+			throw new SBIException("Communication Error");
+		}
+
+		final X38MsgGetUserList msg = new X38MsgGetUserList();
+		final X38GetUserList body = new X38GetUserList();
+		X38ReportGetUserList response = null;
+		X38MsgReportGetUserList respMsg = null;
+
+		try {
+			body.setReqId(new X38SmartReqIdtype(reqId()));
+			body.setType(new X38UserListType(X38UserListType.created));
+			body.setPattern(userName);
+			msg.setBody(body);
+
+			send(LOG, body);
+			respMsg = sendRequest(msg, X38MsgReportGetUserList.class);
+			response = respMsg.getBody();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+
+		// if (!(response.getBody().getresult().getresCode()).isresOK()) {
+		// log.error(format(response.getBody().getresult()));
+		// throw sbiException(response.getBody().getresult());
+		// }
+		verify(response.getResult());
+		recv(LOG, response);
+
+		X38AttrId userId = null;
+		for (final X38Users users : response.getSetOfUsers()) {
+			if (users.getUserName().getValue().compareTo(userName) == 0) {
+				userId = users.getUserId();
+				break;
+			}
+		}
+
+		if (userId == null) {
+			throw new SBIException(String.format("Cannot find user <%s> in userList", userName));
+		}
+
+		return Integer.valueOf(userId.getValue());
+	}
+
+	private Integer evaluatePsbUserId() throws SBIException {
+		psbUserId = retrieveUserId(psbUserName);
+		if (psbUserId == null) {
+			if (psbDefUserId > 0) {
+				psbUserId = Integer.valueOf(psbDefUserId);
+			}
+		}
+		return psbDefUserId;
+	}
+
+	protected Integer retrieveUserId(final String userName) throws SBIException {
+		if (!isConnected()) {
+			LOG.error(format("Pipe not connected"));
+			throw new SBIException("Communication Error");
+		}
+
+		final X38MsgGetUserList msg = new X38MsgGetUserList();
+		final X38GetUserList body = new X38GetUserList();
+		X38ReportGetUserList response = null;
+		X38MsgReportGetUserList respMsg = null;
+		try {
+			body.setReqId(new X38SmartReqIdtype(reqId()));
+			body.setType(new X38UserListType(X38UserListType.created));
+			// body.setPattern(userName);
+			msg.setBody(body);
+
+			send(LOG, body);
+			respMsg = sendRequest(msg, X38MsgReportGetUserList.class);
+			response = respMsg.getBody();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+
+		verify(response.getResult());
+		recv(LOG, response);
+
+		X38AttrId userId = null;
+		for (final X38Users users : response.getSetOfUsers()) {
+			if (users.getUserName().getValue().compareTo(userName) == 0) {
+				userId = users.getUserId();
+				break;
+			}
+		}
+
+		if (userId == null) {
+			LOG.error(String.format("Cannot find user <%s> in userList", userName));
+			return null;
+		}
+
+		return Integer.valueOf(userId.getValue());
+	}
+
+	/**
+	 * This method returns userLogin based on given wCode.
+	 *
+	 * @param wCode
+	 * @return
+	 */
+	private userLogin evaluateError(final IntegerType wCode) {
+		switch (wCode.getValue()) {
+		case 250:
+		case 251:
+		case 252:
+			return userLogin.OK;
+		case 300:
+			return userLogin.AlreadyLogged;
+		case 301:
+		case 302:
+			return userLogin.NotAvailable;
+		default:
+			return userLogin.GenericError;
+		}
+	}
+
+	/**
+	 * Method to check GetVersionSupported enabled.
+	 *
+	 * @param isGetVersionSupported
+	 *            , property string
+	 * @return true is getVersion is Yes and false if NO
+	 */
+	private boolean isGetVersionSupported(final String isGetVersionSupported) {
+		boolean getVersion;
+		if (isGetVersionSupported.equalsIgnoreCase("YES")) {
+			getVersion = true;
+		} else if (isGetVersionSupported.equalsIgnoreCase("NO")) {
+			getVersion = false;
+		} else {
+			LOG.warn("Invalid entry for the property PlugIn.GetVersionSupported");
+			getVersion = true;
+		}
+		return getVersion;
+	}
+
+	private void startAlarms() throws Exception {
+		if (!getNMProfile().getBoolProperty(NmSBIPluginProperty.Key.SBI_NMALARM_ENABLED, true)) {
+			LOG.warn("NMAlarm DISABLE");
+			return;
+		}
+		try {
+			// TODO discuss where we call below method,its BL realted Method
+			// configPipe.getNMAlarmList(getNMProfile().getBoolProperty(NmSBIPluginProperty.Key.SBI_CORRELATED_ALARMS,
+			// false));
+		} catch (final Exception ex) {
+			LOG.error(ex);
+		}
+	}
+
+	/**
+	 * Returns user id
+	 *
+	 * @return
+	 */
+	public X38AttrId getUserId() {
+		return userId == null ? null : new X38AttrId(userId.intValue());
+	}
+
+	/**
+	 * Returns Psb User Id
+	 *
+	 * @return
+	 */
+	public X38AttrId getPsbUserId() {
+		return psbUserId == null ? null : new X38AttrId(psbUserId.intValue());
+	}
+
+	/**
+	 * Resets user Id
+	 */
+	public void resetUserId() {
+		userId = null;
+	}
+
+	/**
+	 * Sets user id
+	 *
+	 * @param userId
+	 */
+	public void setUserId(final int userId) {
+		this.userId = Integer.valueOf(userId);
+	}
+
+	/**
+	 * Returns the IPT-NMS Circuit version
+	 *
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetVersion getNMVersion() throws SBIException {
+		checkState();
+		X38MsgReportGetVersion response = new X38MsgReportGetVersion();
+		try {
+			final X38MsgGetVersion msg = getNMVersion(getUserId(), super.reqId());
+			super.send(LOG, msg);
+			response = super.sendRequest(msg, X38MsgReportGetVersion.class);
+		} catch (final TimeoutExpiredException ex) { // added this catch block
+			// as part of the fix
+			// for TR HN54624 to
+			// shutdown the agent
+			// when TimeOut Expires for getVersion meassage
+			LOG.error(format(ex));
+			LOG
+			.error(" Timeout expired for the getVersion message. May be it is not supported by SO-NM. Shutting down the application.");
+			BaseApplication.getApplication().exitApplication();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		super.recv(LOG, response);
+		return response.getBody();
+	}
+
+	private X38MsgGetVersion getNMVersion(final X38AttrId userId, final int reqId) throws SBIException {
+		final X38GetVersion body = new X38GetVersion();
+		final X38MsgGetVersion msg = new X38MsgGetVersion();
+		body.setReqId(new X38SmartReqIdtype(reqId));
+		body.setUserId(userId);
+		msg.setBody(body);
+		return msg;
+	}
+
+	private void checkState() throws SBIException {
+		if (!isConnected()) {
+			LOG.error(format("SBI not connected"));
+			throw new SBIException("Communication Error");
+		}
+
+		if (getUserId() == null) {
+			LOG.error(format("Invalid User ID"));
+			throw new SBIException("Invalid User ID");
+		}
+	}
+
+	protected void verify(final X38Res res) throws SBIException {
+		verify(res, null);
+	}
+
+	protected void verify(final X38Res res, final StringType out) throws SBIException {
+		final String msg = res.getResMsg().getValue().trim();
+		if (res.getResCode().isResNotOK()) {
+			LOG.error(format(res));
+			throw PlugInExceptionHandler.unableToComply(msg.length() > 0 ? msg : "SBI Error: " + msg);
+			// throw new SBIException(msg.length() > 0 ? msg : "SBI Error: " +
+			// msg);
+		} else if (res.getResCode().isResWarning()) {
+			LOG.warn(format(res));
+		}
+		if (msg.length() > 0) {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(format(msg));
+			}
+			if (out != null) {
+				out.setValue(msg);
+			}
+		}
+	}
+
+	private Integer retryLogin(final String userName, final String password) throws Exception {
+		final int retry = 3;
+		final long timeout = 30000;
+
+		LOG.error(format("NM not available. Retry in %d ms", timeout));
+
+		for (int i = 0; i < retry; i++) {
+			Thread.sleep(timeout);
+			final X38ReportLogin reportLogin = login2(userName, password);
+			final userLogin loginResult = codeClass(reportLogin);
+			if (loginResult == userLogin.OK) {
+				return reportLogin.getUserId().getValue();
+			} else if (loginResult == userLogin.NotAvailable) {
+				LOG.error(format("NM not available. Retry in %d ms", timeout));
+			} else {
+				throw new SBIException(String.format("Cannot login as <%s>", userName));
+			}
+		}
+
+		throw new SBIException(String.format("Cannot login as <%s>", userName));
+	}
+
+	/**
+	 * Method to get the Connection information.
+	 *
+	 * @param connInfo
+	 *            , connection information of NM to which SBI has to connect
+	 */
+	@Override
+	public void setConnectionInfo(final ConnectionInfo connInfo) {
+		this.connectionInfo = connInfo;
+
+		// Form the hostName and Port information, this information is sent by
+		// using ConnectinInfo
+
+		hostName = connInfo.getHost();
+		port = Integer.parseInt(connectionInfo.getConfPort());
+
+		// Form the hostName, Configuration port and Event Port information,
+		// this information is sent by RealignmentHandler
+
+		profile = connInfo.getExtensions();
+		nmProfile = new NmSBIPluginProperty(profile);
+		final int connTimeout = nmProfile.getInt(NmSBIPluginProperty.Key.SBI_CONNECTION_TIMEOUT, 30000);
+		final int connRetry = nmProfile.getInt(NmSBIPluginProperty.Key.SBI_CONNECTION_RETRY, Integer.MAX_VALUE);
+		final long timeout = nmProfile.getInt(NmSBIPluginProperty.Key.SBI_MESSAGE_TIMEOUT, 180000);
+		setDumpSyntax(nmProfile.getBool(NmSBIPluginProperty.Key.SBI_DUMP_SYNTAX, false));
+		try {
+			super.init(connTimeout, connRetry, getPipe(nmProfile));
+		} catch (final Exception e) {
+			throw new WrongInitializationException();
+		}
+
+		super.setTimeout(timeout);
+		profile.setProperty(NmSBIPluginProperty.Key.SBI_HOST, hostName);
+
+		profile.setProperty(NmSBIPluginProperty.Key.SBI_CONFIG_PORT, connectionInfo.getConfPort());
+
+	}
+
+	/**
+	 * Method to return the available Connection Information
+	 *
+	 * @return
+	 */
+	public ConnectionInfo getConnectionInfo() {
+		return connectionInfo;
+	}
+
+	/**
+	 *
+	 * @param resourceName
+	 * @param clazz
+	 * @return
+	 */
+	public Configuration loadConfiguration(final String resourceName, final Class<?> clazz) {
+		Configuration configuration = null;
+
+		final String fileName = SBILabelUtilities.makeFileName(profile.getProperty(NmSBIPluginProperty.Key.FRAMEWORK_CONF),
+				resourceName);
+		configuration = loadConfiguration(fileName);
+		if (configuration == null) {
+			try {
+				configuration = new PropertiesConfiguration(clazz.getResource(resourceName));
+				LOG.info(String.format("Loaded '%s' from resources.", resourceName));
+			} catch (final Exception ex) {
+				LOG.warn(String.format("Cannot load resource: '%s'", resourceName));
+			}
+		}
+
+		return configuration;
+	}
+
+	/**
+	 *
+	 * @param fileName
+	 * @return
+	 */
+	private Configuration loadConfiguration(final String fileName) {
+		Configuration configuration = null;
+		if (fileName != null && fileName.length() > 0) {
+			final File file = new File(fileName);
+			if (file.exists()) {
+				try {
+					configuration = new PropertiesConfiguration(file);
+					LOG.info(String.format("Loaded configuration from file: '%s'", fileName));
+				} catch (final ConfigurationException e) {
+					LOG.warn(String.format("Cannot load file: '%s'", fileName));
+				}
+			}
+		}
+		return configuration;
+	}
+
+	/**
+	 * This method is called from AsyncManager to get X38Pipe
+	 *
+	 * @return X38Pipe
+	 */
+	public X38Pipe getAsyncPipe() {
+		if (pipeAsync == null) {
+			pipeAsync = new X38Pipe(nmProfile);
+		}
+		return pipeAsync;
+	}
+}

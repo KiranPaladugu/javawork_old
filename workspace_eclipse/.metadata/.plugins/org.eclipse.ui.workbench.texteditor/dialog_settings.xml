@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog_dialogBounds">
+		<item value="257" key="DIALOG_WIDTH"/>
+		<item value="384" key="DIALOG_Y_ORIGIN"/>
+		<item value="378" key="DIALOG_HEIGHT"/>
+		<item value="969" key="DIALOG_X_ORIGIN"/>
+		<item value="1|Segoe UI|9.0|0|WINDOWS|1|-12|0|0|0|400|0|0|0|1|0|0|0|0|Segoe UI" key="DIALOG_FONT_NAME"/>
+	</section>
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
+		<item value="true" key="wrap"/>
+		<item value="false" key="isRegEx"/>
+		<item value="false" key="casesensitive"/>
+		<item value="true" key="incremental"/>
+		<item value="false" key="wholeword"/>
+		<item value="TimeSlot ::" key="selection"/>
+		<list key="findhistory">
+			<item value="timeSlot ::"/>
+			<item value="timeSlot"/>
+			<item value="trail"/>
+			<item value="provisioned"/>
+			<item value="Provisioned"/>
+			<item value="SBI"/>
+			<item value="PDM"/>
+			<item value="ORCHEstrator"/>
+		</list>
+		<list key="replacehistory">
+			<item value="\\"/>
+			<item value="log"/>
+			<item value="&quot;"/>
+			<item value="&gt;"/>
+			<item value="&lt;"/>
+			<item value="System.err.println"/>
+			<item value="itr"/>
+			<item value="System.out.println"/>
+		</list>
+	</section>
+	<section name="org.eclipse.ui.texteditor.GotoLineAction$GotoLineDialog_dialogBounds">
+		<item value="270" key="DIALOG_Y_ORIGIN"/>
+		<item value="409" key="DIALOG_X_ORIGIN"/>
+	</section>
+</section>

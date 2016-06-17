@@ -1,0 +1,126 @@
+#!/bin/sh
+
+isNumeric()
+{
+   # This routine will return true (0) if the string contains all numeric
+   # characters.
+
+   expr "$1" + 1 > /dev/null 2>&1
+   if [ $? -ge 2 ]; then
+      return 1
+   fi
+   return 0
+}
+
+######## Retrieves AGENT environmental variables
+if [ -e "ENV_FILE" ];
+then 
+  . "ENV_FILE"
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+clear
+
+######## Prints welcome message
+echo ""
+echo "########################################"
+echo ""
+echo "  FULLNAME MANAGEMENT  "
+echo ""
+echo "########################################"
+echo ""
+echo ""
+
+echo " 1 - FULLNAME Application Restart"
+echo " 2 - FULLNAME Application Shutdown"
+echo " 3 - FULLNAME Database Reset"
+echo " 4 - FULLNAME Database Backup"
+echo " 5 - FULLNAME Database Restore"
+echo " 6 - FULLNAME USER Backup"
+echo " 7 - FULLNAME USER Restore"
+echo " 8 - Exit"
+echo ""
+
+typeset -i opt_menu=0
+while [ "${opt_menu}" -lt 1 -o "${opt_menu}" -gt 8 ]
+do
+  echo "Please, enter your selection [1..8][default: 8]:"
+  read l_var
+  if [ "${l_var}" = "" ];
+  then
+    l_var="8"
+  fi
+  if isNumeric "${l_var}"
+  then
+    opt_menu=${l_var}
+  fi
+done
+
+echo ""
+
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" -o "${curr_os}" = "Linux" ];
+then
+  case ${opt_menu} in
+    '1')
+       su AGENT_USER -c "sh -c '${AGENT_DIR}/SCRIPT/Q_Stop'"
+       su AGENT_USER -c "sh -c '${AGENT_DIR}/SCRIPT/Q_Start'"
+       ;;
+    '2')
+       su AGENT_USER -c "sh -c '${AGENT_DIR}/SCRIPT/Q_Stop'"
+       ;;
+    '3')
+       su AGENT_USER -c "sh -c '${AGENT_DIR}/SCRIPT/Q_ResetDB'"
+       ;;
+    '4')
+       su AGENT_USER -c "sh -c '${AGENT_DIR}/SCRIPT/Q_Backup ${AGENT_DIR}'"
+       ;;
+    '5')
+       su AGENT_USER -c "sh -c '${AGENT_DIR}/SCRIPT/Q_Restore'"
+       ;;
+	'6')
+	   su AGENT_USER -c "sh -c '${AGENT_DIR}/SCRIPT/Q_Userbackup ${AGENT_DIR}'"
+       ;;
+	'7')	   
+	   su AGENT_USER -c "sh -c '${AGENT_DIR}/SCRIPT/Q_Userrestore'"
+       ;;
+    *)
+       echo "Exiting management procedure..."
+       echo ""
+       exit 0
+       ;;
+  esac
+else
+  case ${opt_menu} in
+    '1')
+       "${AGENT_DIR}"/BIN/bash.exe -c ". ${AGENT_DIR}/SCRIPT/Q_Stop"
+       "${AGENT_DIR}"/BIN/bash.exe -c ". ${AGENT_DIR}/SCRIPT/Q_Start"
+       ;;
+    '2')
+       "${AGENT_DIR}"/BIN/bash.exe -c ". ${AGENT_DIR}/SCRIPT/Q_Stop"
+       ;;
+    '3')
+       "${AGENT_DIR}"/BIN/bash.exe -c ". ${AGENT_DIR}/SCRIPT/Q_ResetDB"
+       ;;
+    '4')
+       "${AGENT_DIR}"/BIN/bash.exe -c ". ${AGENT_DIR}/SCRIPT/Q_Backup ${AGENT_DIR}"
+       ;;
+    '5')
+       "${AGENT_DIR}"/BIN/bash.exe -c ". ${AGENT_DIR}/SCRIPT/Q_Restore"
+       ;;
+    *)
+       echo "Exiting management procedure..."
+       echo ""
+       exit 0
+       ;;
+  esac
+fi
+
+echo ""
+
+exit 0

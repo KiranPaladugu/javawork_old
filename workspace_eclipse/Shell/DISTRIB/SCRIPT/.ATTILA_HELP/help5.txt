@@ -1,0 +1,2 @@
+This command erase the TMFAgent database content. 
+After the command the database will be completely empty.

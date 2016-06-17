@@ -1,0 +1,142 @@
+#!/bin/sh
+
+###############################################################################
+#
+#  Read_Lic
+#
+#  This script contains a TMF License browser.
+#
+###############################################################################
+
+###############################################################################
+#
+# @(#) Revision: 1.01 "
+#
+# NOTE:    This script is not configurable!  Any changes made to this
+#          script will be overwritten when you upgrade to the next
+#          release of FULLNAME application.
+#
+# WARNING: Changing this script in any way may lead to all
+#          FULLNAME application.
+#          Do not modify this script.
+#
+###############################################################################
+
+
+echo ""
+echo "========================================================="
+echo "   FULLNAME - LICENSE BROWSER UTILITY"
+echo "========================================================="
+echo ""
+
+######## Gets target
+answer=""
+while [ "${answer}" = "" ];
+do
+  echo ""
+  echo "Insert full License file pathname"
+  echo "[full path name]: "
+  read answer
+done
+licFile=${answer}
+
+if [ ! -r "${licFile}" ];
+then
+  echo ""
+  echo "The License filename is not valid!"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+si_list=""
+str_search1="productType"
+str_search2="fingerprint"
+str_search3="fingerprint>"
+str_search4="featureKey id"
+str_search5="featureKey>"
+str_search6="description"
+str_search7="description>>"
+str_search8="start"
+str_search9="start>"
+str_search10="stop"
+str_search11="stop>"
+  
+str_search="${str_search1}"
+eq_found="0"
+
+cat "${licFile}" | while
+read LINE;
+do
+  #echo "line = $LINE"
+  tmp_str=$(echo ${LINE} | grep "${str_search3}")
+  if [ "${tmp_str}" != "" ];
+  then
+    echo "========================================================="
+    echo ""
+    exit 0
+  fi
+  tmp_str=$(echo ${LINE} | grep "${str_search}")
+  #echo "tmp_str = <${tmp_str}>"
+  if [ "${tmp_str}" != "" ];
+  then
+    if [ "${eq_found}" = "0" ];
+    then
+      tmp_str_list=$(echo "${tmp_str}" | cut -d '"' -f 2)
+      echo ""
+      echo "========================================================="
+      echo ""
+      echo "  Product:       ${tmp_str_list}"
+      echo ""
+      eq_found="1"
+      str_search="${str_search2}"
+      continue
+    elif [ "${eq_found}" = "1" ];
+    then
+      tmp_str_list=$(echo "${tmp_str}" | cut -d '"' -f 4)
+      echo ""
+      echo "  Fingerprint:   ${tmp_str_list}"
+      echo ""
+      echo "  Feature List:"
+      echo ""
+      eq_found="2"
+      str_search="${str_search4}"
+      continue
+    elif [ "${eq_found}" = "2" ];
+    then
+      tmp_str_list=$(echo "${tmp_str}" | cut -d "'" -f 2)
+      echo "    Key:         ${tmp_str_list}"
+      eq_found="3"
+      str_search="${str_search6}"
+      continue
+    elif [ "${eq_found}" = "3" ];
+    then
+      tmp_str_list=$(echo "${tmp_str}" | cut -d ">" -f 2 | cut -d "<" -f 1)
+      echo "    Description: ${tmp_str_list}"
+      eq_found="4"
+      str_search="${str_search8}"
+      continue
+    elif [ "${eq_found}" = "4" ];
+    then
+      tmp_str_list=$(echo "${tmp_str}" | cut -d ">" -f 2 | cut -d "<" -f 1)
+      echo "    Valid from:  ${tmp_str_list}"
+      eq_found="5"
+      str_search="${str_search10}"
+      continue
+    elif [ "${eq_found}" = "5" ];
+    then
+      tmp_str_list=$(echo "${tmp_str}" | cut -d ">" -f 2 | cut -d "<" -f 1)
+      echo "    Valid to:    ${tmp_str_list}"
+      echo ""
+      eq_found="2"
+      str_search="${str_search4}"
+      continue
+    fi
+  fi
+done
+
+echo ""
+echo "========================================================="
+echo ""
+
+exit 0

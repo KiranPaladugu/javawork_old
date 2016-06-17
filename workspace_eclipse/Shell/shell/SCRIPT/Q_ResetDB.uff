@@ -1,0 +1,170 @@
+#!/bin/sh
+
+FORCE=$1
+
+######## Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then 
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "Empty Database Restoration"
+echo ""
+
+DATA_DIR="${AGENT_DIR}/DATA"
+CONF_DIR="${AGENT_DIR}/CONF"
+
+######## Controllo che i processi non siano running
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" ];
+then
+  if [ "${SG}" = "1" ];
+  then
+    HP_ARCH=pa11
+    if [ -x /usr/bin/hp-pa ];
+    then
+      /usr/bin/hp-pa
+      if [ $? -ne 0 ];
+      then
+        HP_ARCH=ia64
+        OS_SUBVER=$(uname -r | awk -F. '{print $3}')
+        if [ "${OS_SUBVER}" -ge "31" ];
+        then
+          HP_ARCH="ia64_31"
+        fi
+      fi
+    fi 
+    if [ ! "${AGENT_DIR}/BIN/monitorapp" -ef "${AGENT_DIR}/BIN/monitorapp.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/BIN/monitorapp.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/BIN/monitorapp"  
+    fi
+
+    if [ ! "${AGENT_DIR}/DBRESTORE/SOO_TMF_DB.boot" -ef "${AGENT_DIR}/DBRESTORE/SOO_TMF_DB.boot.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/DBRESTORE/SOO_TMF_DB.boot.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/DBRESTORE/SOO_TMF_DB.boot"  
+    fi
+
+    if [ ! "${AGENT_DIR}/DBRESTORE/SOO_TMF_DB.fdb" -ef "${AGENT_DIR}/DBRESTORE/SOO_TMF_DB.fdb.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/DBRESTORE/SOO_TMF_DB.fdb.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/DBRESTORE/SOO_TMF_DB.fdb"  
+    fi
+
+    #if [ ! "${AGENT_DIR}/LIB/oojava.jar" -ef "${AGENT_DIR}/LIB/oojava.jar.${curr_os}.${HP_ARCH}" ];
+    #then
+    #  ln -f -s "${AGENT_DIR}/LIB/oojava.jar.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/LIB/oojava.jar"  
+    #fi
+
+    if [ ! "${AGENT_DIR}/BIN/TMFA_Man" -ef "${AGENT_DIR}/BIN/TMFA_Man.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/BIN/TMFA_Man.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/BIN/TMFA_Man"  
+    fi
+    if [ ! "${AGENT_DIR}/CONF/app.ini" -ef "${AGENT_DIR}/CONF/app.ini.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/CONF/app.ini.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/CONF/app.ini"  
+    fi
+  fi
+fi
+
+if [ "${FORCE}" != "force" ];
+then
+if [ -x ${AGENT_DIR}/BIN/monitorapp ];
+then
+  tmp_res=$("${AGENT_DIR}"/BIN/monitorapp -p "${AGENT_DIR}"/CONF/app.ini -t)
+  if [ "${tmp_res}" -gt 0 ];
+  then
+    echo "\nWARNING: you have to stop FULLNAME application first.\n"
+    answer=""
+    while [ "${answer}" != "y" -a "${answer}" != "n" ];
+    do
+      echo "Do you want stop now the FULLNAME application?"
+      echo "[y/n] [default: n]:"
+      read answer
+      if [ "${answer}" = "" ];
+      then
+        answer="n"
+      fi
+    done
+    if [ ${answer} = "n" ];
+    then
+      echo ""
+      echo "Exiting..."
+      echo ""
+      exit 1
+    else
+      ${AGENT_DIR}/SCRIPT/Q_Stop
+    fi
+  fi
+fi
+fi
+
+${AGENT_DIR}/SCRIPT/Q_CheckNMSDB
+if [ $? -ne 0 ];
+then
+  echo "ERROR: cannot reset FULLNAME Database!"
+  echo "Check your NMSDB configuration!"
+  echo ""
+  exit 2
+fi
+
+if [ "${FORCE}" != "force" ];
+then
+  ######## Last notice
+  echo "\nWARNING: This operation will DELETE current FULLNAME's database!"
+  answer=""
+  while [ "${answer}" != "y" -a "${answer}" != "n" ];
+  do
+    echo "Are you sure you want to do this? [y/n] [default: n]: "
+    read answer
+    if [ "${answer}" = "" ];
+    then
+      answer="n"
+    fi
+  done
+  if [ ${answer} = "n" ];
+  then
+    echo ""
+    echo "Exiting..."
+    echo ""
+    exit 1
+  fi
+fi
+
+###### Copia del database vuoto dalla directory DBRESTORE
+/bin/rm -f ${AGENT_DIR}/DATA/*                        > /dev/null 2>&1
+/bin/cp ${AGENT_DIR}/DBRESTORE/*.boot ${AGENT_DIR}/DATA
+/bin/cp ${AGENT_DIR}/DBRESTORE/*.fdb  ${AGENT_DIR}/DATA
+
+###### Cambio i diritti
+chown AGENT_USER:AGENT_GROUP ${AGENT_DIR}/DATA        > /dev/null 2>&1
+chmod 755 ${AGENT_DIR}/DATA                           > /dev/null 2>&1
+
+###### Restarting database
+echo ""
+echo "Installing database..."
+${AGENT_DIR}/SCRIPT/installfd
+if [ $? -ne 0 ];
+then
+  echo "..ERROR: cannot install database"
+  echo "Exiting.."
+  echo ""
+  exit 1
+fi
+echo "Successfully installed"
+
+chown AGENT_USER:AGENT_GROUP ${AGENT_DIR}/DATA/*.fdb   > /dev/null 2>&1
+chmod 644 ${AGENT_DIR}/DATA/*.fdb                      > /dev/null 2>&1
+chown AGENT_USER:AGENT_GROUP ${AGENT_DIR}/DATA/*.boot  > /dev/null 2>&1
+chmod 644 ${AGENT_DIR}/DATA/*.boot                     > /dev/null 2>&1
+
+# delete the file ber.realigned, no more used for upload
+/bin/rm -f ${AGENT_DIR}/BER/*.realigned                > /dev/null 2>&1
+
+
+exit 0

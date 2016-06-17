@@ -1,0 +1,416 @@
+#!/bin/sh
+
+ErrExit()
+{
+  rval=$1
+  /bin/rm -rf ${agent_path}/FDBACKUP > /dev/null 2>&1
+  if [ ${rval} -ne 0 ];
+  then
+    echo "\n FULLNAME Database backup NOT performed! \n"
+  else
+    echo "\n FULLNAME Database backup successfully completed!"
+    echo "\n FULLNAME Database backup file is:"
+    echo "${DEV}"
+    echo ""
+  fi
+
+
+
+  exit ${rval}
+}
+
+######################
+#Check Parameter     #
+######################
+
+if [ $# -lt 1 -o $# -gt 2 ];
+then
+   echo ""
+   echo "Usage $0 <manual> or <backupdirpath>"
+   echo ""
+   echo "OR"
+   echo "$0 <backupfrom_dirpath> $1 <backupto_dirpath>"
+   exit 1
+fi
+
+######## Welcome
+echo ""
+echo "========================================================="
+echo "   FULLNAME - DATABASE BACKUP UTILITY"
+echo "========================================================="
+
+mode="auto"
+
+#Path of the Agent_Home from where backup has to be performed
+backupfrom_dir=""
+
+#Destination directory where the backup file(s) are to be kept
+remdir=""
+
+if [ $# -lt 2 ];
+ then
+ if [ $1 = "manual" ];
+  then
+  mode="manual"
+ else
+  remdir=$1
+ fi
+else
+ backupfrom_dir=$1
+ remdir=$2
+fi
+
+
+######## AGENT_USER only may run the script...
+if [ "${mode}" = "manual" ];
+then
+  if [ -x /usr/bin/whoami ];
+  then
+    if [ $(/usr/bin/whoami) != "AGENT_USER" ];
+    then
+      echo "\n Sorry, you must be AGENT_USER to run this script!"
+      echo ""
+      exit 1
+    fi
+  fi
+fi
+
+######## Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+######## Set env for AGENT
+
+if [ "${backupfrom_dir}" != "" ];
+then
+ object_path=${OBJDIR}/bin
+ agent_path=$backupfrom_dir
+ AGENT_DIR=$agent_path
+ set_name=$(basename ${agent_path})_BUP
+ boot_file="SOO_TMF_DB.boot"
+ boot_path=${agent_path}/DATA
+ boot_empty_path=${agent_path}/DBRESTORE
+ DATE=$(/bin/date '+%Y_%m_%d_%H_%M_%S')
+ agent_exe="AGENT_EXEC"
+ DATA_DIR="${agent_path}/DATA"
+ CONF_DIR="${agent_path}/CONF"
+else
+ object_path=${OBJDIR}/bin
+ agent_path=${AGENT_DIR}
+ set_name=$(basename ${agent_path})_BUP
+ boot_file="SOO_TMF_DB.boot"
+ boot_path=${agent_path}/DATA
+ boot_empty_path=${agent_path}/DBRESTORE
+ DATE=$(/bin/date '+%Y_%m_%d_%H_%M_%S')
+ agent_exe="AGENT_EXEC"
+ DATA_DIR="${AGENT_DIR}/DATA"
+ CONF_DIR="${AGENT_DIR}/CONF"
+fi
+
+
+#DB=$(grep "^EMS1=" "${AGENT_DIR}"/CONF/TMFFramework.properties | cut -d '=' -f 2)
+#if [ "${DB}" = "" ];
+#then
+#  echo "Cannot read EMS1 entry in file ${AGENT_DIR}/CONF/TMFFramework.properties"
+#  echo "Exiting..."
+#  exit 1
+#fi
+
+boot_list=$(find "${AGENT_DIR}/DATA" -type f -name "*.boot" -print)
+for item in ${boot_list};
+do
+  tmp_name=$(basename "${item}")
+  DBNAME=$(basename "${tmp_name}" .boot)
+  if [ "${DBNAME}" != "" ];
+  then
+    DB="${item}"
+    break
+  fi
+done
+
+if [ "${DBNAME}" = "" ];
+then
+  echo "Cannot read DBNAME from boot file in dir ${AGENT_DIR}/DATA"
+  echo "Exiting..."
+  exit 1
+fi
+
+boot_file="${DB}"
+
+######## Controllo che i processi non siano running
+HOT_BACKUP="1"
+
+if [ "${HOT_BACKUP}" = "0" ];
+then
+  curr_os=$(uname -s)
+  if [ "${curr_os}" = "HP-UX" ];
+  then
+    if [ "${SG}" = "1" ];
+    then
+      HP_ARCH=pa11
+      if [ -x /usr/bin/hp-pa ];
+      then
+        /usr/bin/hp-pa
+        if [ $? -ne 0 ];
+        then
+          HP_ARCH=ia64
+          OS_SUBVER=$(uname -r | awk -F. '{print $3}')
+          if [ "${OS_SUBVER}" -ge "31" ];
+          then
+            HP_ARCH="ia64_31"
+          fi
+        fi
+      fi
+      if [ ! "${AGENT_DIR}/BIN/monitorapp" -ef "${AGENT_DIR}/BIN/monitorapp.${curr_os}.${HP_ARCH}" ];
+      then
+        ln -f -s "${AGENT_DIR}/BIN/monitorapp.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/BIN/monitorapp"
+      fi
+
+      #if [ ! "${AGENT_DIR}/LIB/oojava.jar" -ef "${AGENT_DIR}/LIB/oojava.jar.${curr_os}.${HP_ARCH}" ];
+      #then
+      #  ln -f -s "${AGENT_DIR}/LIB/oojava.jar.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/LIB/oojava.jar"
+      #fi
+
+      if [ ! "${AGENT_DIR}/BIN/TMFA_Man" -ef "${AGENT_DIR}/BIN/TMFA_Man.${curr_os}.${HP_ARCH}" ];
+      then
+        ln -f -s "${AGENT_DIR}/BIN/TMFA_Man.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/BIN/TMFA_Man"
+      fi
+      if [ ! "${AGENT_DIR}/CONF/app.ini" -ef "${AGENT_DIR}/CONF/app.ini.${curr_os}.${HP_ARCH}" ];
+      then
+        ln -f -s "${AGENT_DIR}/CONF/app.ini.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/CONF/app.ini"
+      fi
+    fi
+  fi
+
+  if [ -x ${agent_path}/BIN/monitorapp ];
+  then
+    tmp_res=$("${agent_path}"/BIN/monitorapp -p "${agent_path}"/CONF/app.ini -t)
+    if [ "${tmp_res}" -gt 0 ];
+    then
+      echo "\n WARNING: you have to stop FULLNAME application first. \n"
+      answer=""
+      while [ "${answer}" != "y" -a "${answer}" != "n" ];
+      do
+        echo "Do you want stop now the FULLNAME application?"
+        echo "[y/n] [default: n]:"
+        read answer
+        if [ "${answer}" = "" ];
+        then
+          answer="n"
+        fi
+      done
+      if [ ${answer} = "n" ];
+      then
+        echo ""
+        echo "Exiting..."
+        echo ""
+        exit 1
+      else
+        ${agent_path}/SCRIPT/Q_Stop
+      fi
+    fi
+  fi
+fi
+
+######## BEGIN MANUAL VERSION
+if [ "${mode}" = "manual" ];
+then
+  answer=""
+  while [ "${answer}" = "" ];
+  do
+    echo ""
+    echo "Insert target (name of a device or full path \n to a backup file):"
+    read answer
+    if [ "${answer}" != "" ];
+    then
+      if [ -d ${answer} ];
+      then
+        echo "You have inserted a not valid device or file name"
+        answer=""
+      fi
+    fi
+  done
+  DEV=${answer}
+######## END MANUAL VERSION
+else
+######## BEGIN AUTO VERSION
+  DEV=${remdir}/TMF_Backup_${DATE}.tar
+######## END AUTO VERSION
+fi
+
+######## DB LICENSE CHECK
+${AGENT_DIR}/SCRIPT/Q_CheckDBLic
+
+if [ $? -ne 0 ];
+then
+  echo “”
+  echo "..application FULLNAME database license check failed!"
+  echo "Check your DB License configuration!"
+  echo ""
+  exit 1
+fi
+
+######## end of DB LICENSE CHECK
+######## Runs backup
+echo "\n Running FULLNAME database backup, please wait..."
+
+
+cd "${agent_path}"
+
+if [ -d "${DATA_DIR}" ];
+then
+  if [ "${AGENT_MODE}" = "NM" ];
+  then
+    if [ ! -e "${DATA_DIR}"/HistoryInfo.properties ];
+    then
+      echo "There are NO valid DB files to backup."
+      ErrExit 1
+    fi
+  fi
+else
+  echo "The DB dir ${DATA_DIR} is not present."
+  ErrExit 1
+fi
+
+base_boot_file=$(basename "${boot_file}")
+
+${object_path}/ooqueryset -set "${set_name}" \
+                          -notitle \
+                          -quiet \
+                          DATA/${base_boot_file} > /dev/null 2>&1
+if [ $? -ne 0 ];
+then
+  ${object_path}/oocreateset -set ${set_name} \
+                             -notitle \
+                             -quiet \
+                             DATA/${base_boot_file}
+  if [ $? -ne 0 ];
+  then
+    ErrExit 1
+  fi
+fi
+
+if [ -e ${agent_path}/FDBACKUP ];
+then
+  /bin/rm -f ${agent_path}/FDBACKUP/* > /dev/null 2>&1
+else
+  mkdir ${agent_path}/FDBACKUP
+fi
+
+chmod 777 ${agent_path}/FDBACKUP
+
+${object_path}/oobackup -set ${set_name} \
+                        -backup AGENTFDBackup_$$ \
+                        -volume AGENTFDBackup \
+                        -device ${agent_path}/FDBACKUP \
+                        -level 0 \
+                        -quiet \
+                        -notitle \
+                        -capacity 10000 \
+                        DATA/${base_boot_file}
+
+error=$?
+if [ ${error} -ne 0 ];
+then
+  ErrExit ${error}
+fi
+
+${object_path}/ooschemadump -encode \
+                            -outfile ${agent_path}/FDBACKUP/.schema.enc \
+                            -notitle \
+                            -quiet \
+                            -exists delete \
+                            DATA/${base_boot_file}
+
+error=$?
+if [ ${error} -ne 0 ];
+then
+  ErrExit ${error}
+fi
+
+if [ -e "${agent_path}"/DATA/HistoryInfo.properties ];
+then
+  /bin/cp -f "${agent_path}"/DATA/HistoryInfo.properties "${agent_path}"/FDBACKUP/HistoryInfo.properties > /dev/null 2>&1
+fi
+
+/bin/cp -p -R "${CONF_DIR}" "${agent_path}/FDBACKUP" > /dev/null 2>&1
+
+#take the backup of BER directory
+if [ -d "${agent_path}"/BER ];
+then
+  /bin/cp -p -R "${AGENT_DIR}/BER" "${agent_path}/FDBACKUP" > /dev/null 2>&1
+fi
+
+#take the backup of TMP directory
+if [ -d "${agent_path}"/TMP ];
+then
+  /bin/cp -p -R "${AGENT_DIR}/TMP" "${agent_path}/FDBACKUP" > /dev/null 2>&1
+fi
+
+if [ -d "${AGENT_DIR}"/USERS ];
+then
+  /bin/cp -p -R "${AGENT_DIR}/USERS" "${agent_path}/FDBACKUP" > /dev/null 2>&1
+fi
+
+curr_host=$(hostname | cut -d '.' -f 1)
+trueLicFile="${AGENT_DIR}/CONF/License.xml"
+newLicFile="${trueLicFile}.${curr_host}"
+if [ -e "${newLicFile}" ];
+then
+  /bin/cp -p "${newLicFile}" "${agent_path}/FDBACKUP" > /dev/null 2>&1
+  /bin/cp -p "${trueLicFile}".* "${agent_path}/FDBACKUP" > /dev/null 2>&1
+  /bin/cp -p "${AGENT_DIR}/CONF/"*.xml "${agent_path}/FDBACKUP" > /dev/null 2>&1
+
+fi
+
+if [ -e "${agent_path}"/FDBACKUP/.TMF_version ];
+then
+  /bin/rm -f "${agent_path}"/FDBACKUP/.TMF_version > /dev/null 2>&1
+fi
+
+basename "${AGENT_DIR}" > ${agent_path}/FDBACKUP/.TMF_version
+
+if [ -e "${agent_path}"/FDBACKUP/.boot_name ];
+then
+  /bin/rm -f "${agent_path}"/FDBACKUP/.boot_name > /dev/null 2>&1
+fi
+
+echo "${DBNAME}" > "${agent_path}"/FDBACKUP/.boot_name
+
+if [ -e "${agent_path}"/FDBACKUP/.oodata ];
+then
+  /bin/rm -f "${agent_path}"/FDBACKUP/.oodata > /dev/null 2>&1
+fi
+
+echo $$ > "${agent_path}"/FDBACKUP/.oodata
+
+if [ -e "${agent_path}"/FDBACKUP/.ooset ];
+then
+  /bin/rm -f "${agent_path}"/FDBACKUP/.ooset > /dev/null 2>&1
+fi
+
+echo "${set_name}" > "${agent_path}"/FDBACKUP/.ooset
+
+if [ -x /usr/contrib/bin/gzip ];
+then
+    /usr/contrib/bin/gzip -r "${agent_path}"/FDBACKUP/* 2> /dev/null
+elif [ -x /bin/gzip ];
+then
+    /bin/gzip -r "${agent_path}"/FDBACKUP/* 2> /dev/null
+fi
+
+tar cf ${DEV} -C "${agent_path}" FDBACKUP
+error=$?
+ErrExit ${error}
+
+
+
+exit 0

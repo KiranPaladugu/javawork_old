@@ -1,0 +1,62 @@
+package com.marconi.tmp.tools;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.tmf.i36PlugIn.realignment.BeginRealignmentEvent;
+import com.marconi.fusion.tmf.i36PlugIn.realignment.EndRealignmentEvent;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+
+public class BERConversiontEventSupport {
+	List<BERConversionEventListener> listeners = new ArrayList<BERConversionEventListener>();
+	Object source = null;
+
+	public BERConversiontEventSupport(final Object source) {
+		this.source = source;
+	}
+
+	public void clearListener() {
+		synchronized (listeners) {
+			listeners.clear();
+		}
+	}
+
+	public void addListener(final BERConversionEventListener lst) {
+		synchronized (listeners) {
+			listeners.add(lst);
+		}
+	}
+
+	public void removeListener(final BERConversionEventListener lst) {
+		synchronized (listeners) {
+			listeners.remove(lst);
+		}
+	}
+
+	public void fireEvent(final BERConversionEvent event) {
+		List<BERConversionEventListener> backup = null;
+		synchronized (listeners) {
+			backup = new ArrayList<BERConversionEventListener>(listeners);
+		}
+		for (final BERConversionEventListener lst : backup) {
+			lst.onRealignmentEvent(event);
+		}
+	}
+
+	public void fireBeginRealignmentEvent(final MEDn meDn, final X36NeId neId) {
+		final BERConversionEvent event = new BERConversionEvent(this,null,null) {
+		};
+		fireEvent(event);
+	}
+
+	public void fireEndRealignmentEvent(final MEDn meDn, final X36NeId neId, final boolean completed) {
+		final EndRealignmentEvent event = new EndRealignmentEvent(source, meDn, neId, completed);
+		fireEvent(event);
+	}
+
+	public void fireEndRealignmentEvent(final MEDn meDn, final X36NeId neId, final boolean completed, final String cause) {
+		final EndRealignmentEvent event = new EndRealignmentEvent(source, meDn, neId, completed, cause);
+		fireEvent(event);
+	}
+}

@@ -1,0 +1,4041 @@
+/*
+ * File: I38MessageHandler.java
+ */
+package com.marconi.fusion.tmf.i38PlugIn;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.ericsson.oss.sbiadapter.converter.MessageNotSupportedException;
+import com.marconi.fusion.X38.*;
+import com.marconi.fusion.base.asn1.BooleanType;
+import com.marconi.fusion.base.asn1.IntegerType;
+import com.marconi.fusion.base.asn1.NullType;
+import com.marconi.fusion.base.asn1.StringType;
+import com.marconi.fusion.base.asn1.msg.Message;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.tmf.i38PlugIn.sbi.X38SBIClient;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.sbi.nm.AbstractBase;
+import com.marconi.fusion.tmf.sbi.nm.NmSBIPluginProperty;
+import com.marconi.fusion.tmf.sbi.nm.SBIException;
+import com.marconi.fusion.tmf.utils.NumberGenerator;
+
+/**
+ * @author tcssuss
+ * 
+ */
+public class I38MessageHandler extends AbstractBase {
+
+	private static final Log LOG = LogFactory.getLog(I38MessageHandler.class);
+
+	protected static final String MSG_NM_COMM_ERROR = "NM communication error.";
+	protected static final String MSG_QUERY_LIMIT_EXCEDED = "Query limit exceded.";
+	protected static I38MessageHandler msgHandler = null;
+	private final int defaultQueryLimit = 100000;
+	private Integer userId = null;
+	public int nmAlarmMaxNumber = 10000;
+	private X38SBIClient sbiClient = null;
+
+	// I38Pipe.java---static class
+	public static class GetFastAutoRouteData {
+		X38Routing routing = null;
+		X38SignalType signalType = null;
+		X38ProtType protType = null;
+
+		// optionals
+		public X38PathType circuitType = null;
+		public int workerColour = -1;
+		public int protColour = -1;
+		public X38RoutingRequirements routingReq = null;
+		public X38PathId routingPathInfo = null;
+
+		StringType message = new StringType("");
+
+		/**
+		 * @return
+		 */
+		public String getMessage() {
+			return message.getValue();
+		}
+
+		/**
+		 * @param routing
+		 * @param signalType
+		 * @param protType
+		 */
+		public GetFastAutoRouteData(final X38Routing routing, final X38SignalType signalType, final X38ProtType protType) {
+			this.routing = routing;
+			this.signalType = signalType;
+			this.protType = protType;
+		}
+	}
+
+	public static class CreatePathData {
+		String pathName = null;
+		X38SignalType signalType = null;
+		X38PathType pathType = null;
+		X38ProtType protType = null;
+		X38Routing routing = null;
+		boolean pathStructFlag = false;
+
+		/**
+		 * @Deprecated not managed by MV38
+		 */
+		@Deprecated
+		public final X38PathProtDiversity pathProtDiversity = null;
+
+		// optionals
+		public X38Revertive revertive = null;
+		public X38Priority priority = null;
+		public X38PathState pathState = null;
+		public X38PathGroup pathGroup = null;
+
+		/**
+		 * @param pathName
+		 * @param signalType
+		 * @param pathType
+		 * @param protType
+		 * @param routing
+		 * @param pathStructFlag
+		 */
+		public CreatePathData(final String pathName, final X38SignalType signalType, final X38PathType pathType,
+				final X38ProtType protType, final X38Routing routing, final boolean pathStructFlag) {
+			this.pathName = pathName;
+			this.signalType = signalType;
+			this.pathType = pathType;
+			this.protType = protType;
+			this.routing = routing;
+			this.pathStructFlag = pathStructFlag;
+		}
+	}
+
+	public static class AddProtectionData {
+		X38PathId pathId = null;
+		X38SignalType signalType = null;
+		X38ProtType protType = null;
+		X38Routing routing = null;
+		X38ProtOperMode protOperMode = null;
+
+		/**
+		 * @Deprecated not managed by MV38
+		 */
+		@Deprecated
+		public final X38PathProtDiversity pathProtDiversity = null;
+		// optionals
+		public X38Revertive revertive = null;
+		public X38Priority priority = null;
+
+		/**
+		 * @param pathId
+		 * @param signalType
+		 * @param protType
+		 * @param routing
+		 */
+		public AddProtectionData(final X38PathId pathId, final X38SignalType signalType, final X38ProtType protType,
+				final X38Routing routing) {
+			this.pathId = pathId;
+			this.signalType = signalType;
+			this.protType = protType;
+			this.routing = routing;
+		}
+
+		/**
+		 * @param pathId
+		 * @param signalType
+		 * @param protType
+		 * @param routing
+		 * @param protOperMode
+		 */
+		public AddProtectionData(final X38PathId pathId, final X38SignalType signalType, final X38ProtType protType,
+				final X38Routing routing, final X38ProtOperMode protOperMode) {
+			this.pathId = pathId;
+			this.signalType = signalType;
+			this.protType = protType;
+			this.routing = routing;
+			this.protOperMode = protOperMode;
+		}
+	}
+
+	// I38pipeEX- static classes
+	public static class CreateOduPathParams {
+		public X38PathName pathName = null;
+		public X38SignalType signalType = null;
+		public X38Directionality directionality = null;
+		public X38Colour colour = new X38Colour(0);
+		public X38CustomerData customerData = new X38CustomerData();
+		public X38ManagementType managementType = new X38ManagementType(X38ManagementType.legacy);
+		public X38RouteOptCriteria trafficEng = new X38RouteOptCriteria(X38RouteOptCriteria.undefined);
+		public X38PayLoad payload = new X38PayLoad(X38PayLoad.ansiEtsiPdh);
+		public X38GenericRouting routing = null; // OPTIONAL
+		public X38LSPathProt protection = null; // OPTIONAL
+		public boolean setInService = false; // NULL OPTIONAL
+
+		/**
+		 * @param pathName
+		 * @param signalType
+		 * @param directionality
+		 */
+		public CreateOduPathParams(final X38PathName pathName, final X38SignalType signalType,
+				final X38Directionality directionality) {
+			this.pathName = pathName;
+			this.signalType = signalType;
+			this.directionality = directionality;
+		}
+
+		/**
+		 * @param pathName
+		 * @param signalType
+		 * @param directionality
+		 * @param routing
+		 */
+		public CreateOduPathParams(final X38PathName pathName, final X38SignalType signalType,
+				final X38Directionality directionality, final X38GenericRouting routing) {
+			this.pathName = pathName;
+			this.signalType = signalType;
+			this.directionality = directionality;
+			this.routing = routing;
+		}
+	}
+
+	public static class TrailDetails {
+		public X38PathOrLinkId trailId = null;
+		public X38SgLnType trailType = null;
+		public X38TrailName trailName = null;
+
+		/**
+		 * @param pathOrLinkId
+		 * @param type
+		 * @param linkName
+		 * @param isLink
+		 */
+		public TrailDetails(final X38PathOrLinkId pathOrLinkId, final int type, final String linkName, final boolean isLink) {
+			trailId = new X38PathOrLinkId();
+			trailId = pathOrLinkId;
+
+			trailType = new X38SgLnType();
+			if (isLink) {
+				trailType.setLnType(type);
+			} else {
+				// to set the signalType in case of path
+				trailType.setSignalType(type);
+			}
+			trailName = new X38TrailName();
+
+			trailName.setLinkName(linkName);
+		}
+	}
+
+	// newly added method
+
+	private I38MessageHandler(final X38SBIClient sbiClient) {
+		this.sbiClient = sbiClient;
+	}
+
+	public static I38MessageHandler getInstance(final X38SBIClient sbiClient) {
+		if (msgHandler == null) {
+			msgHandler = new I38MessageHandler(sbiClient);
+		}
+		return msgHandler;
+	}
+
+	/**
+	 * @param profile
+	 * @throws Exception
+	 */
+	public void init(final NmSBIPluginProperty profile) throws Exception {
+		nmAlarmMaxNumber = profile.getIntProperty(NmSBIPluginProperty.Key.SBI_NMALARM_MAX_NUMBER, 10000);
+	}
+
+	/**
+	 * @throws Exception
+	 */
+	public void start() throws Exception {
+		// super.start(hostName, port, AbstractBasePipe.PipeType.Sync);
+	}
+
+	/**
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void logout(final String hostName) throws SBIException {
+		logout(userId, hostName);
+		userId = null;
+	}
+
+	// I38PipeEx methods
+
+	/**
+	 * @param linkId
+	 * @param lnType
+	 * @param linkConnName
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public List<X38LinkConnQueryResult> makeLinkConnQuery(final X38LinkId linkId, final X38LnType lnType,
+			final X38Pattern linkConnName, final String hostName)
+					throws SBIException {
+		final X38LinkConnQuery query = new X38LinkConnQuery();
+		query.setLinkId(new X38LinkId(linkId.getValue()));
+		query.setLnType(new X38LnType(lnType.getValue()));
+		if (linkConnName == null) {
+			query.setNotPresentLinkConnName();
+		} else {
+			query.setLinkConnName(new X38LinkPattern(linkConnName.getValue()));
+		}
+		final List<X38LinkConnQueryResult> out = new ArrayList<X38LinkConnQueryResult>();
+		final X38SetOfLinkConnQueryResult setOfResult = makeLinkConnQuery(
+				query, hostName);
+		for (final X38LinkConnQueryResult result : setOfResult) {
+			try {
+				final X38LinkConnQueryResult item = new X38LinkConnQueryResult();
+				item.setLinkConnName(result.getLinkConnName().getValue());
+				final X38EndTP aEnd = result.getAEndTP();
+				if (aEnd == null) {
+					LOG.error(format("Cannot get AEnd:", result));
+				} else {
+					item.setAEndTP(aEnd);
+				}
+				final X38EndTP zEnd = result.getZEndTP();
+				if (zEnd == null) {
+					LOG.error(format("Cannot get ZEnd:", result));
+				} else {
+					item.setZEndTP(zEnd);
+				}
+				out.add(item);
+			} catch (final Exception ex) {
+				LOG.error(format(ex));
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * @param linkId
+	 * @param lnType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public List<X38LinkConnQueryResult> makeLinkConnQuery(
+			final X38LinkId linkId, final X38LnType lnType,
+			final String hostName) throws SBIException {
+		return makeLinkConnQuery(linkId, lnType, null, hostName);
+	}
+
+	/**
+	 * @param linkId
+	 * @param lnType
+	 * @param linkPattern
+	 * @param lcAssignInfo
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public List<X38LinkConnQueryResult> makeLinkConnQuery(final X38LinkId linkId, final X38LnType lnType,
+			final X38LinkPattern linkPattern,
+			final X38LCAssignInfo lcAssignInfo, final String hostName)
+					throws SBIException {
+		return makeLinkConnQuery(linkId, lnType, linkPattern, lcAssignInfo,
+				null, hostName);
+	}
+
+	/**
+	 * @param linkId
+	 * @param lnType
+	 * @param linkPattern
+	 * @param lcAssignInfo
+	 * @param signalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public List<X38LinkConnQueryResult> makeLinkConnQuery(final X38LinkId linkId, final X38LnType lnType,
+			final X38LinkPattern linkPattern,
+			final X38LCAssignInfo lcAssignInfo, final X38SignalType signalType,
+			final String hostName)
+					throws SBIException {
+		final X38LinkConnQuery query = new X38LinkConnQuery();
+		query.setLinkId(linkId);
+		query.setLnType(lnType);
+
+		if (signalType == null) {
+			query.setNotPresentSignalType();
+		} else {
+			query.setSignalType(signalType);
+		}
+
+		if (linkPattern == null) {
+			query.setNotPresentLinkConnName();
+		} else {
+			query.setLinkConnName(linkPattern);
+		}
+
+		if (lcAssignInfo != null) {
+			query.setAssignInfo(lcAssignInfo);
+		} else {
+			query.setNotPresentAssignInfo();
+		}
+
+		final List<X38LinkConnQueryResult> out = new ArrayList<X38LinkConnQueryResult>();
+
+		final X38SetOfLinkConnQueryResult setOfResult = makeLinkConnQuery(
+				query, hostName);
+		for (final X38LinkConnQueryResult result : setOfResult) {
+			out.add(result);
+		}
+
+		return out;
+	}
+
+	/**
+	 * @param query
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	private X38SetOfLinkConnQueryResult makeLinkConnQuery(
+			final X38LinkConnQuery query, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeLinkConnQuery response = null;
+		try {
+			final X38MsgMakeLinkConnQuery msg = MessageBuilder
+					.makeLinkConnQuery(query, sbiClient.getSBI(hostName).getUserId(),
+							sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportMakeLinkConnQuery.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException(MSG_NM_COMM_ERROR);
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfLinkConnQueryResult();
+	}
+
+	// == SNQuery ==============================================================
+
+	/**
+	 * @param snName
+	 * @param setOfSNType
+	 * @param setOfLayer
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfSNQueryResult makeSNQuery(final X38SNName snName, final X38SetOfSNType setOfSNType,
+			final X38SetOfLayer setOfLayer,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeSNQuery response = null;
+		try {
+			final X38MsgMakeSNQuery msg = MessageBuilder.makeSNQuery(snName,
+					setOfSNType, setOfLayer, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportMakeSNQuery.class, hostName);
+			if (response.getBody().getNumResults().getValue() > defaultQueryLimit) {
+				LOG.error(format(String.format("Limit (%d) exceded; %d", defaultQueryLimit, response.getBody().getNumResults()
+						.getValue())));
+				throw new SBIException(String.format("Limit (%d) exceded; %d", defaultQueryLimit, response.getBody()
+						.getNumResults().getValue()));
+			}
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfSNQueryResult();
+	}
+
+	/**
+	 * @param setOfSNType
+	 * @param setOfLayer
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfSNQueryResult makeSNQuery(final X38SetOfSNType setOfSNType,
+			final X38SetOfLayer setOfLayer, final String hostName)
+					throws SBIException {
+		final X38SNName snName = new X38SNName();
+		snName.setLongSNName("*");
+		snName.setShortSNName("*");
+		snName.setSnSuffix("*");
+		return makeSNQuery(snName, setOfSNType, setOfLayer, hostName);
+	}
+
+	/**
+	 * @param pattern
+	 * @param setOfSNType
+	 * @param setOfLayer
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfSNQueryResult makeSNQuery(final X38NEPattern pattern,
+			final X38SetOfSNType setOfSNType, final X38SetOfLayer setOfLayer,
+			final String hostName) throws SBIException {
+		final X38SNName snName = new X38SNName();
+		snName.setLongSNName(pattern.isPresentLongNEName() ? pattern
+				.getLongNEName().getValue() : "*");
+		snName.setShortSNName(pattern.isPresentShortNEName() ? pattern
+				.getShortNEName().getValue() : "*");
+		// TR HL38739
+		if (pattern.isPresentNeSuffix()
+				&& !pattern.getNeSuffix().getValue().equals("")) {
+			snName.setSnSuffix(pattern.getNeSuffix().getValue());
+		} else {
+			snName.setSnSuffix("*");
+		}
+		return makeSNQuery(snName, setOfSNType, setOfLayer, hostName);
+	}
+
+	/**
+	 * @param pattern
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfNE_SN getNEList(final X38NEPattern pattern,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetNEList response = null;
+		try {
+			final X38MsgGetNEList msg = MessageBuilder.getNEList(pattern,
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportGetNEList.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfNE_SN();
+	}
+
+	/**
+	 * This method sends the X38RemoveSN query to SO-NM.
+	 * 
+	 * @param neID
+	 * @return X38ReportRemoveSN
+	 */
+	public X38ReportRemoveSN makeRemoveSNQuery(final X38SNId snId,
+			final String hostName) throws SBIException {
+		X38MsgReportRemoveSN response = null;
+		try {
+			final X38MsgRemoveSN msg = MessageBuilder.makeRemoveSNQuery(snId,
+					sbiClient.getSBI(hostName).getUserId(),
+					NumberGenerator.getReqId());
+			response = sendRequest(msg, X38MsgReportRemoveSN.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody();
+	}
+
+	// == LinkQuery ============================================================
+
+	/**
+	 * @param layer
+	 * @param setofsnId
+	 * @param linkPattern
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	/*
+	 * public X38SetOfLinkQueryResult makeLinkQuery1(final X38Layer layer, final X38SetOfSNId setofsnId, final String linkPattern,
+	 * final String hostName) throws SBIException { checkState(hostName); X38MsgReportMakeLinkQuery response = null; try { final
+	 * X38MsgMakeLinkQuery msg = MessageBuilder.makeLinkQuery1( layer, setofsnId, linkPattern, sbiClient.getSBI(hostName)
+	 * .getUserId(), sbiClient.getSBI(hostName).reqId()); response = sendRequest(msg, X38MsgReportMakeLinkQuery.class, hostName);
+	 * if (response.getBody().getNumResults().getValue() > defaultQueryLimit) {
+	 * LOG.error(format(String.format("Limit (%d) exceded; %d", defaultQueryLimit,
+	 * (response.getBody().getNumResults().getValue())))); throw new SBIException(String.format("Limit (%d) exceded; %d",
+	 * defaultQueryLimit, (response.getBody().getNumResults().getValue()))); } } catch (final Exception ex) {
+	 * LOG.error(format(ex)); throw new SBIException("NM communication error."); } verify(response.getBody().getResult());
+	 * sbiClient.getSBI(hostName).recv(LOG, response); return response.getBody().getSetOfLinkQueryResult(); }
+	 */
+
+	/**
+	 * @param layer
+	 * @param snId
+	 * @param linkPattern
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkQueryResult makeLinkQuery(final X38Layer layer,
+			final X38SNId snId, final String linkPattern, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeLinkQuery response = null;
+		try {
+			final X38MsgMakeLinkQuery msg = MessageBuilder.makeLinkQuery(layer, snId, linkPattern,
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportMakeLinkQuery.class,
+					hostName);
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(" X38MsgReportMakeLinkQuery :: " + response);
+			}
+			final int value = response.getBody().getNumResults().getValue();
+			if (value > defaultQueryLimit) {
+				LOG.error(format(String.format("Limit (%d) exceded; %d", defaultQueryLimit,
+						(response.getBody().getNumResults().getValue()))));
+				throw new SBIException(String.format("Limit (%d) exceded; %d", defaultQueryLimit, (response.getBody()
+						.getNumResults().getValue())));
+			}
+		} catch (final MessageNotSupportedException ex) {
+			LOG.info(format("Could not send the message MsgMakeLinkQuery over this interface due to : %s", ex.getMessage()));
+			return new X38SetOfLinkQueryResult();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfLinkQueryResult();
+	}
+
+	/**
+	 * @param layer
+	 * @param snId
+	 * @param tosnId
+	 * @param linkPattern
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkQueryResult makeLinkQuery(final X38Layer layer,
+			final X38SNId snId, final X38SNId tosnId, final String linkPattern,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeLinkQuery response = null;
+		try {
+			final X38MsgMakeLinkQuery msg = MessageBuilder.makeLinkQuery(layer,
+					snId, tosnId, linkPattern, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportMakeLinkQuery.class,
+					hostName);
+			if (response.getBody().getNumResults().getValue() > defaultQueryLimit) {
+				LOG.error(format(String.format("Limit (%d) exceded; %d",
+						defaultQueryLimit,
+						(response.getBody().getNumResults().getValue()))));
+				throw new SBIException(String.format("Limit (%d) exceded; %d",
+						defaultQueryLimit,
+						(response.getBody().getNumResults().getValue())));
+			}
+		} catch (final MessageNotSupportedException ex) {
+			LOG.info(format("Could not send the message MsgMakeLinkQuery over this interface due to : %s", ex.getMessage()));
+			return new X38SetOfLinkQueryResult();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfLinkQueryResult();
+	}
+
+	/**
+	 * Added for sending setOfSNId in the message X38MsgMakeLinkQuery
+	 * 
+	 * @param layer
+	 * @param setOfSnId
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkQueryResult makeLinkQuery(final X38Layer layer,
+			final X38SetOfSNId setOfSnId, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeLinkQuery response = null;
+		try {
+			final X38MsgMakeLinkQuery msg = MessageBuilder.makeLinkQuery(layer,
+					setOfSnId, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportMakeLinkQuery.class,
+					hostName);
+			if (response.getBody().getNumResults().getValue() > defaultQueryLimit) {
+				LOG.error(format(String.format("Limit (%d) exceded; %d", defaultQueryLimit,
+						(response.getBody().getNumResults().getValue()))));
+				throw new SBIException(String.format("Limit (%d) exceded; %d", defaultQueryLimit, (response.getBody()
+						.getNumResults().getValue())));
+			}
+		} catch (final MessageNotSupportedException ex) {
+			LOG.info(format("Could not send the message MsgMakeLinkQuery over this interface due to : %s", ex.getMessage()));
+			return new X38SetOfLinkQueryResult();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfLinkQueryResult();
+	}
+
+	/**
+	 * @param layer
+	 * @param snId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkQueryResult makeLinkQuery(final X38Layer layer,
+			final X38SNId snId, final String hostName) throws SBIException {
+		return makeLinkQuery(layer, snId, "*", hostName);
+	}
+
+	/**
+	 * @param layer
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkQueryResult makeLinkQuery(final X38Layer layer,
+			final String hostName) throws SBIException {
+		return makeLinkQuery(layer, null, "*", hostName);
+	}
+
+	/**
+	 * @param layer
+	 * @param linkPattern
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkQueryResult makeLinkQuery(final X38Layer layer,
+			final String linkPattern, final String hostName)
+					throws SBIException {
+		return makeLinkQuery(layer, null, linkPattern, hostName);
+	}
+
+	/**
+	 * @param pathPattern
+	 * @param setOfSignalType
+	 * @param snId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPathQueryResult makePathQuery(final String pathPattern,
+			final X38SetOfSignalType setOfSignalType, final X38SNId snId,
+			final String hostName) throws SBIException {
+		final X38PathQuery pathQuery = new X38PathQuery();
+
+		pathQuery.setPathName(new X38PathPattern(pathPattern));
+		pathQuery.setCustomerData(new X38CustomerDataItemString("*"));
+		pathQuery.setSignalTypes(setOfSignalType);
+		pathQuery.setServiceStates(getAllServiceStates());
+		pathQuery.setPathStates(getAllCycleLifeStates());
+		pathQuery.setProtTypes(getAllProtTypes());
+		pathQuery.setOperStates(getAllOperStates());
+
+		if (snId != null) {
+			final X38SelectedNodes selectedNodes = new X38SelectedNodes();
+			selectedNodes.setRecurseSelectedNodes(false);
+			selectedNodes.getSelectedNodes().add(snId);
+			selectedNodes
+			.setLogicType(new X38LogicType(X38LogicType.logicalAnd));
+			pathQuery.setSelectedNodes(selectedNodes);
+		}
+
+		pathQuery.setCaseSensitiveMatching(new NullType());
+
+		return makePathQuery(pathQuery, hostName);
+	}
+
+	/**
+	 * This method retreives all the OCH paths assoicatd with a particular ODU path
+	 * 
+	 * @param pathPattern
+	 * @param setOfSignalType
+	 * @param snId
+	 * @param clientPathId
+	 * @param clientSignalType
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPathQueryResult makeServerPathQuery(final String pathPattern, final X38SetOfSignalType setOfSignalType,
+			final X38SNId snId, final int clientPathId,
+			final X38SignalType clientSignalType, final String hostName)
+					throws SBIException {
+		final X38PathQuery pathQuery = new X38PathQuery();
+
+		pathQuery.setPathName(new X38PathPattern(pathPattern));
+		pathQuery.setCustomerData(new X38CustomerDataItemString("*"));
+		pathQuery.setSignalTypes(setOfSignalType);
+		pathQuery.setServiceStates(getAllServiceStates());
+		pathQuery.setPathStates(getAllCycleLifeStates());
+		pathQuery.setProtTypes(getAllProtTypes());
+		pathQuery.setOperStates(getAllOperStates());
+
+		if (snId != null) {
+			final X38SelectedNodes selectedNodes = new X38SelectedNodes();
+			selectedNodes.setRecurseSelectedNodes(false);
+			selectedNodes.getSelectedNodes().add(snId);
+			selectedNodes.setLogicType(new X38LogicType(X38LogicType.logicalAnd));
+			pathQuery.setSelectedNodes(selectedNodes);
+		}
+
+		pathQuery.setCaseSensitiveMatching(new NullType());
+
+		final X38Paths clientPaths = new X38Paths();
+		clientPaths.setPathId(clientPathId);
+		clientPaths.setSignalType(clientSignalType);
+
+		pathQuery.setClientPath(clientPaths);
+
+		return makePathQuery(pathQuery, hostName);
+	}
+
+	/**
+	 * Added for sending setOfSNId in the message MsgMakePathQuery
+	 * 
+	 * @param setOfSignalType
+	 * @param setOfSnId
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPathQueryResult makePathQuery(
+			final X38SetOfSignalType setOfSignalType,
+			final X38SetOfSNId setOfSnId, final String hostName)
+					throws SBIException {
+		final X38PathQuery pathQuery = new X38PathQuery();
+
+		pathQuery.setPathName(new X38PathPattern("*"));
+		pathQuery.setCustomerData(new X38CustomerDataItemString("*"));
+		pathQuery.setSignalTypes(setOfSignalType);
+		pathQuery.setServiceStates(getAllServiceStates());
+		pathQuery.setPathStates(getAllCycleLifeStates());
+		pathQuery.setProtTypes(getAllProtTypes());
+		pathQuery.setOperStates(getAllOperStates());
+
+		if (setOfSnId != null) {
+			final X38SelectedNodes selectedNodes = new X38SelectedNodes();
+			selectedNodes.setRecurseSelectedNodes(false);
+			for (final X38SNId snId : setOfSnId) {
+				selectedNodes.getSelectedNodes().add(snId);
+			}
+			selectedNodes.setLogicType(new X38LogicType(X38LogicType.logicalOr));
+			pathQuery.setSelectedNodes(selectedNodes);
+		}
+
+		pathQuery.setCaseSensitiveMatching(new NullType());
+
+		return makePathQuery(pathQuery, hostName);
+	}
+
+	/**
+	 * @param setOfSignalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPathQueryResult makePathQuery(
+			final X38SetOfSignalType setOfSignalType, final String hostName)
+					throws SBIException {
+		return makePathQuery("*", setOfSignalType, null, hostName);
+	}
+
+	/**
+	 * @param setOfSignalType
+	 * @param snId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPathQueryResult makePathQuery(
+			final X38SetOfSignalType setOfSignalType, final X38SNId snId,
+			final String hostName)
+					throws SBIException {
+		return makePathQuery("*", setOfSignalType, snId, hostName);
+	}
+
+	/**
+	 * @param pathPattern
+	 * @param setOfSignalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPathQueryResult makePathQuery(final String pathPattern,
+			final X38SetOfSignalType setOfSignalType, final String hostName)
+					throws SBIException {
+		if (pathPattern == null) {
+			return makePathQuery(setOfSignalType, hostName);
+		}
+		return makePathQuery(pathPattern, setOfSignalType, null, hostName);
+	}
+
+	/**
+	 * @param pathQuery
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	private X38SetOfPathQueryResult makePathQuery(final X38PathQuery pathQuery,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakePathQuery response = null;
+		try {
+			final X38MsgMakePathQuery msg = MessageBuilder.makePathQuery(
+					pathQuery, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportMakePathQuery.class,
+					hostName);
+			if (response.getBody().getNumResults().getValue() > defaultQueryLimit) {
+				LOG.error(format(String.format("Limit (%d) exceded; %d", defaultQueryLimit, response.getBody().getNumResults()
+						.getValue())));
+				throw new SBIException(String.format("Limit (%d) exceded; %d", defaultQueryLimit, response.getBody()
+						.getNumResults().getValue()));
+			}
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfPathQueryResult();
+	}
+
+	// == CircuitQuery =========================================================
+	/**
+	 * @param pathPattern
+	 * @param signalTypes
+	 * @param snId
+	 * @param astnStateFilter
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfCctQueryResult makeCctQuery(final String pathPattern, final X38SetOfSignalType signalTypes,
+			final X38SNId snId,
+			final X38SetOfASTNOpStateFilter astnStateFilter,
+			final String hostName) throws SBIException {
+		final X38CctQuery circuitQuery = new X38CctQuery();
+
+		circuitQuery.setCircuitName(new X38PathPattern(pathPattern));
+		circuitQuery.setCustomerData(new X38CustomerDataItemString("*"));
+		circuitQuery.setSignalTypes(signalTypes);
+		circuitQuery.setServiceStates(getAllServiceStates());
+		circuitQuery.setCircuitStates(getAllCycleLifeStates());
+		circuitQuery.setProtTypes(getAllProtTypes());
+		circuitQuery.setOperStates(getAllOperStates());
+		circuitQuery.setAstnOpStateFilters(astnStateFilter);
+		circuitQuery.setLinkCluster("*");
+
+		if (snId != null) {
+			final X38SelectedNodes selectedNodes = new X38SelectedNodes();
+			selectedNodes.setRecurseSelectedNodes(false);
+			selectedNodes.getSelectedNodes().add(snId);
+			selectedNodes.setLogicType(new X38LogicType(X38LogicType.logicalAnd));
+			circuitQuery.setSelectedNodes(selectedNodes);
+		}
+
+		return makeCctQuery(circuitQuery, hostName);
+	}
+
+	/**
+	 * Added for sending setOfSNId in the message MsgMakeCctQuery
+	 * 
+	 * @param signalTypes
+	 * @param setOfSnId
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfCctQueryResult makeCctQuery(
+			final X38SetOfSignalType signalTypes, final X38SetOfSNId setOfSnId,
+			final String hostName)
+					throws SBIException {
+		final X38CctQuery circuitQuery = new X38CctQuery();
+
+		circuitQuery.setCircuitName(new X38PathPattern("*"));
+		circuitQuery.setCustomerData(new X38CustomerDataItemString("*"));
+		circuitQuery.setSignalTypes(signalTypes);
+		circuitQuery.setServiceStates(getAllServiceStates());
+		circuitQuery.setCircuitStates(getAllCycleLifeStates());
+		circuitQuery.setProtTypes(getAllProtTypes());
+		circuitQuery.setOperStates(getAllOperStates());
+		circuitQuery.setAstnOpStateFilters(getAllASTNOpStateFilter());
+		circuitQuery.setLinkCluster("*");
+
+		if (setOfSnId != null) {
+			final X38SelectedNodes selectedNodes = new X38SelectedNodes();
+			selectedNodes.setRecurseSelectedNodes(false);
+			for (final X38SNId snId : setOfSnId) {
+				selectedNodes.getSelectedNodes().add(snId);
+			}
+			selectedNodes.setLogicType(new X38LogicType(X38LogicType.logicalOr));
+			circuitQuery.setSelectedNodes(selectedNodes);
+		}
+		return makeCctQuery(circuitQuery, hostName);
+	}
+
+	/**
+	 * @param pathPattern
+	 * @param signalTypes
+	 * @param snId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfCctQueryResult makeCctQuery(final String pathPattern,
+			final X38SetOfSignalType signalTypes, final X38SNId snId,
+			final String hostName)
+					throws SBIException {
+		return makeCctQuery(pathPattern, signalTypes, snId,
+				getAllASTNOpStateFilter(), hostName);
+	}
+
+	/**
+	 * @param pathPattern
+	 * @param signalTypes
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfCctQueryResult makeCctQuery(final String pathPattern,
+			final X38SetOfSignalType signalTypes, final String hostName)
+					throws SBIException {
+		return makeCctQuery(pathPattern, signalTypes, null,
+				getAllASTNOpStateFilter(), hostName);
+	}
+
+	/**
+	 * @param signalTypes
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfCctQueryResult makeCctQuery(
+			final X38SetOfSignalType signalTypes, final String hostName)
+					throws SBIException {
+		return makeCctQuery("*", signalTypes, null, getAllASTNOpStateFilter(),
+				hostName);
+	}
+
+	/**
+	 * @param signalTypes
+	 * @param snId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfCctQueryResult makeCctQuery(
+			final X38SetOfSignalType signalTypes, final X38SNId snId,
+			final String hostName) throws SBIException {
+		return makeCctQuery("*", signalTypes, snId, getAllASTNOpStateFilter(),
+				hostName);
+	}
+
+	/**
+	 * @param circuitQuery
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	private X38SetOfCctQueryResult makeCctQuery(final X38CctQuery circuitQuery,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeCctQuery response = null;
+		try {
+			final X38MsgMakeCctQuery msg = MessageBuilder.makeCctQuery(
+					circuitQuery, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportMakeCctQuery.class,
+					hostName);
+			if (response.getBody().getNumResults().getValue() > defaultQueryLimit) {
+				LOG.error(format(String.format("Limit (%d) exceded; %d", defaultQueryLimit, response.getBody().getNumResults()
+						.getValue())));
+				throw new SBIException(String.format("Limit (%d) exceded; %d", defaultQueryLimit, response.getBody()
+						.getNumResults().getValue()));
+			}
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfCctQueryResult();
+	}
+
+	/**
+	 * @param pathPattern
+	 * @param setOfSignalType
+	 * @param snId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfCircuitGroupQueryResult makeCircuitGroupQuery(
+			final String pathPattern, final X38SetOfSignalType setOfSignalType,
+			final X38SNId snId, final String hostName) throws SBIException {
+		final X38CircuitGroupQuery query = new X38CircuitGroupQuery();
+
+		query.setCircGroupName(new X38PathPattern(pathPattern));
+		query.setCustomerData(new X38CustomerDataItemString("*"));
+		query.setSignalTypes(setOfSignalType);
+		final X38SetOfDirectionality setOfDirectionality = new X38SetOfDirectionality();
+		setOfDirectionality.add(X38Directionality.unidirectional);
+		setOfDirectionality.add(X38Directionality.bidirectional);
+		setOfDirectionality.add(X38Directionality.broadcast);
+		query.setDirectionalities(setOfDirectionality);
+		query.setLcasOpStates(getSetOfLCASOpState());
+		if (snId != null) {
+			final X38SelectedNodes selectedNodes = new X38SelectedNodes();
+			selectedNodes.setRecurseSelectedNodes(false);
+			selectedNodes.getSelectedNodes().add(snId);
+			selectedNodes
+			.setLogicType(new X38LogicType(X38LogicType.logicalAnd));
+			query.setSelectedNodes(selectedNodes);
+		}
+
+		return makeCircuitGroupQuery(query, hostName);
+	}
+
+	/**
+	 * @param query
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	private X38SetOfCircuitGroupQueryResult makeCircuitGroupQuery(
+			final X38CircuitGroupQuery query, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeCircuitGroupQuery response = null;
+		try {
+			final X38MsgMakeCircuitGroupQuery msg = MessageBuilder
+					.makeCircuitGroupQuery(query, sbiClient.getSBI(hostName)
+							.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg,
+					X38MsgReportMakeCircuitGroupQuery.class, hostName);
+			if (response.getBody().getNumResults().getValue() > defaultQueryLimit) {
+				LOG.error(format(String.format("Limit (%d) exceded; %d", defaultQueryLimit, response.getBody().getNumResults()
+						.getValue())));
+				throw new SBIException(String.format("Limit (%d) exceded; %d", defaultQueryLimit, response.getBody()
+						.getNumResults().getValue()));
+			}
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfCircuitGroupQueryResult();
+	}
+
+	// == Path creation ========================================================
+
+	/**
+	 * @param params
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportCreateOduPath createOduPath(
+			final CreateOduPathParams params, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		new X38CreateOduPath();
+		X38MsgReportCreateOduPath response = null;
+		try {
+			final X38MsgCreateOduPath msg = MessageBuilder.createOduPath(
+					params, sbiClient.getSBI(hostName).getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportCreateOduPath.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody();
+	}
+
+	/**
+	 * @param pathName
+	 * @param signalType
+	 * @param routing
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportCreateOduPath createOduPath(final String pathName,
+			final X38SignalType signalType, final X38GenericRouting routing,
+			final String hostName) throws SBIException {
+		return createOduPath(new CreateOduPathParams(new X38PathName(pathName),
+				signalType, new X38Directionality(
+						X38Directionality.bidirectional), routing), hostName);
+	}
+
+	/**
+	 * @param pathId
+	 * @param signalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetWorkingSide getWorkingSide(final X38PathId pathId,
+			final X38SignalType signalType, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetWorkingSide response = null;
+		try {
+			final X38MsgGetWorkingSide msg = MessageBuilder.getWorkingSide(
+					pathId, signalType, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportGetWorkingSide.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException(MSG_NM_COMM_ERROR);
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody();
+	}
+
+	/**
+	 * @param pathId
+	 * @param signalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetLSPathObjWorkingSide getLSPathObjWorkingSide(
+			final X38PathId pathId, final X38SignalType signalType,
+			final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetLSPathObjWorkingSide response = null;
+		try {
+			final X38MsgGetLSPathObjWorkingSide msg = MessageBuilder.getLSPathObjWorkingSide(pathId, signalType, sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg,
+					X38MsgReportGetLSPathObjWorkingSide.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException(MSG_NM_COMM_ERROR);
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody();
+	}
+
+	// == TrailTrace ===========================================================
+
+	/**
+	 * @param idAttrObjTrail
+	 * @param objTrail
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetObjTrail getObjTrail(
+			final X38IdAttrObjTrail idAttrObjTrail, final X38ObjTrail objTrail,
+			final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetObjTrail response = null;
+		try {
+			final X38MsgGetObjTrail msg = MessageBuilder.getObjTrail(
+					idAttrObjTrail, objTrail, sbiClient.getSBI(hostName)
+					.getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sbiClient.getSBI(hostName).sendRequest(msg,
+					X38MsgReportGetObjTrail.class);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody();
+	}
+
+	/**
+	 * @param name
+	 * @param type
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetObjTrail getObjTrail(final String name,
+			final X38LnType type, final String hostName) throws SBIException {
+		final X38IdAttrObjTrail idAttrObjTrail = new X38IdAttrObjTrail();
+		idAttrObjTrail.setTrailName(new X38IdAttrName());
+		idAttrObjTrail.setTrailId(new X38IdAttrId());
+		idAttrObjTrail.setTrailType(new X38IdAttrType());
+
+		final X38ObjTrail objTrail = new X38ObjTrail();
+		final X38TrailName trailName = new X38TrailName();
+		trailName.setLinkName(name);
+		objTrail.setTrailName(trailName);
+		final X38SgLnType trailType = new X38SgLnType();
+		trailType.setLnType(type);
+		objTrail.setTrailType(trailType);
+
+		return getObjTrail(idAttrObjTrail, objTrail, hostName);
+	}
+
+	/**
+	 * @param name
+	 * @param type
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetObjTrail getObjTrail(final String name,
+			final X38SignalType type, final String hostName)
+					throws SBIException {
+		final X38IdAttrObjTrail idAttrObjTrail = new X38IdAttrObjTrail();
+		idAttrObjTrail.setTrailName(new X38IdAttrName());
+		idAttrObjTrail.setTrailId(new X38IdAttrId());
+		idAttrObjTrail.setTrailType(new X38IdAttrType());
+
+		final X38ObjTrail objTrail = new X38ObjTrail();
+		final X38TrailName trailName = new X38TrailName();
+		trailName.setLinkName(name);
+		objTrail.setTrailName(trailName);
+		final X38SgLnType trailType = new X38SgLnType();
+		trailType.setSignalType(type);
+		objTrail.setTrailType(trailType);
+		return getObjTrail(idAttrObjTrail, objTrail, hostName);
+	}
+
+	/**
+	 * @param idAttrObjTrailTrace
+	 * @param objTrailTrace
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetObjTrailTrace getObjTrailTrace(
+			final X38IdAttrObjTrailTrace idAttrObjTrailTrace,
+			final X38ObjTrailTrace objTrailTrace, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetObjTrailTrace response = null;
+		try {
+			final X38MsgGetObjTrailTrace msg = MessageBuilder.getObjTrailTrace(
+					idAttrObjTrailTrace, objTrailTrace,
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetObjTrailTrace.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody();
+	}
+
+	/**
+	 * @param trailDetails
+	 * @param received
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetObjTrailTrace getObjTrailTrace(
+			final TrailDetails trailDetails, final boolean received,
+			final String hostName)
+					throws SBIException {
+		final X38IdAttrObjTrailTrace idAttrObjTrailTrace = new X38IdAttrObjTrailTrace();
+		idAttrObjTrailTrace.setTrailName(new X38IdAttrName());
+		idAttrObjTrailTrace.setAEnd(new X38IdAttrName());
+		idAttrObjTrailTrace.setAEndSend(new X38IdAttrName());
+		idAttrObjTrailTrace.setAEndExpected(new X38IdAttrName());
+		idAttrObjTrailTrace.setAEndTrailTrace(new X38IdAttrName());
+		idAttrObjTrailTrace.setZEnd(new X38IdAttrName());
+		idAttrObjTrailTrace.setZEndSend(new X38IdAttrName());
+		idAttrObjTrailTrace.setZEndExpected(new X38IdAttrName());
+		idAttrObjTrailTrace.setZEndTrailTrace(new X38IdAttrName());
+		idAttrObjTrailTrace.setState(new X38IdAttrState());
+
+		if (received) {
+			idAttrObjTrailTrace.setAEndReceived(new X38IdAttrName());
+			idAttrObjTrailTrace.setZEndReceived(new X38IdAttrName());
+		}
+
+		final X38ObjTrailTrace objTrailTrace = new X38ObjTrailTrace();
+		objTrailTrace.setTrailId(trailDetails.trailId);
+		objTrailTrace.setTrailType(trailDetails.trailType);
+
+		return getObjTrailTrace(idAttrObjTrailTrace, objTrailTrace, hostName);
+	}
+
+	/**
+	 * @param linkId
+	 * @param type
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetObjTrail getObjTrail(final int linkId,
+			final X38LnType type, final String hostName) throws SBIException {
+		final X38IdAttrObjTrail idAttrObjTrail = new X38IdAttrObjTrail();
+		idAttrObjTrail.setTrailName(new X38IdAttrName());
+		idAttrObjTrail.setTrailId(new X38IdAttrId());
+		idAttrObjTrail.setTrailType(new X38IdAttrType());
+
+		final X38ObjTrail objTrail = new X38ObjTrail();
+		final X38PathOrLinkId pathOrLinkId = new X38PathOrLinkId();
+		pathOrLinkId.setLinkId(linkId);
+		objTrail.setTrailId(pathOrLinkId);
+		final X38SgLnType trailType = new X38SgLnType();
+		trailType.setLnType(type);
+		objTrail.setTrailType(trailType);
+
+		return getObjTrail(idAttrObjTrail, objTrail, hostName);
+	}
+
+	/**
+	 * @param pathId
+	 * @param type
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetObjTrail getObjTrail(final int pathId,
+			final X38SignalType type, final String hostName)
+					throws SBIException {
+		final X38IdAttrObjTrail idAttrObjTrail = new X38IdAttrObjTrail();
+		idAttrObjTrail.setTrailName(new X38IdAttrName());
+		idAttrObjTrail.setTrailId(new X38IdAttrId());
+		idAttrObjTrail.setTrailType(new X38IdAttrType());
+
+		final X38ObjTrail objTrail = new X38ObjTrail();
+		final X38PathOrLinkId pathOrLinkId = new X38PathOrLinkId();
+		pathOrLinkId.setPathId(pathId);
+		objTrail.setTrailId(pathOrLinkId);
+		final X38SgLnType trailType = new X38SgLnType();
+		trailType.setSignalType(type);
+		objTrail.setTrailType(trailType);
+
+		return getObjTrail(idAttrObjTrail, objTrail, hostName);
+	}
+
+	/**
+	 * @param objTrailList
+	 * @param objTrailTrace
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38MsgReportSetObjTrailTrace setObjTrailTrace(
+			final X38ObjTrailList objTrailList,
+			final X38ObjTrailTrace objTrailTrace, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportSetObjTrailTrace response = null;
+		try {
+			final X38MsgSetObjTrailTrace msg = MessageBuilder.setObjTrailTrace(
+					objTrailList, objTrailTrace, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportSetObjTrailTrace.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response;
+	}
+
+	/**
+	 * @param objTrail
+	 * @param objTrailTrace
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38MsgReportSetObjTrailTrace setObjTrailTrace(
+			final X38ObjTrail objTrail, final X38ObjTrailTrace objTrailTrace,
+			final String hostName)
+					throws SBIException {
+		final X38ObjTrailList objTrailList = new X38ObjTrailList();
+		objTrailList.add(objTrail);
+		return setObjTrailTrace(objTrailList, objTrailTrace, hostName);
+	}
+
+	/**
+	 * @param objTrail
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38MsgReportSetObjTrailTrace setObjTrailTrace(
+			final X38ObjTrail objTrail, final String hostName)
+					throws SBIException {
+		final X38ObjTrailList objTrailList = new X38ObjTrailList();
+		objTrailList.add(objTrail);
+		return setObjTrailTrace(objTrailList, null, hostName);
+	}
+
+	// == LegQuery ===========================================================
+
+	/**
+	 * @param paths
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38MsgReportGetLegList getLegList(final X38Paths paths,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetLegList response = null;
+		try {
+			final X38MsgGetLegList msg = MessageBuilder.getLegList(paths,
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportGetLegList.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response;
+	}
+
+	/**
+	 * @param circuitName
+	 * @param setOfSignalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38MsgReportMakeLegQuery makeLegQuery(final String circuitName,
+			final X38SetOfSignalType setOfSignalType, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeLegQuery response = null;
+		try {
+			final X38MsgMakeLegQuery msg = MessageBuilder.makeLegQuery(
+					circuitName, setOfSignalType, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportMakeLegQuery.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response;
+	}
+
+	/**
+	 * @param circuitName
+	 * @param pathId
+	 * @param signalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38MsgReportMakeLegQuery makeLegQuery(final String circuitName,
+			final X38PathId pathId, final X38SignalType signalType,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeLegQuery response = null;
+		try {
+			final X38MsgMakeLegQuery msg = MessageBuilder.makeLegQuery(
+					circuitName, pathId, signalType, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportMakeLegQuery.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response;
+	}
+	/*
+	 * Use EnumSet
+	 */
+	/**
+	 * @return
+	 */
+	@Deprecated
+	private X38SetOfServiceState getAllServiceStates() {
+		final X38SetOfServiceState out = new X38SetOfServiceState();
+
+		out.add(X38ServiceState.inService);
+		out.add(X38ServiceState.outOfService);
+
+		return out;
+	}
+
+	/*
+	 * Use EnumSet
+	 */
+	@Deprecated
+	private X38SetOfCycleLifeState getAllCycleLifeStates() {
+		final X38SetOfCycleLifeState out = new X38SetOfCycleLifeState();
+
+		out.add(X38CycleLifeState.indeterminated);
+		out.add(X38CycleLifeState.reserved);
+		out.add(X38CycleLifeState.partiallyActived);
+		out.add(X38CycleLifeState.actived);
+		out.add(X38CycleLifeState.alreadyActived);
+		out.add(X38CycleLifeState.booked);
+		out.add(X38CycleLifeState.preplanned);
+		out.add(X38CycleLifeState.partiallySecured);
+		out.add(X38CycleLifeState.secured);
+		out.add(X38CycleLifeState.framed);
+		out.add(X38CycleLifeState.preplannedOnNe);
+
+		return out;
+	}
+
+	/*
+	 * Use EnumSet
+	 */
+	@Deprecated
+	private X38SetOfProtType getAllProtTypes() {
+		final X38SetOfProtType out = new X38SetOfProtType();
+
+		out.add(X38ProtType.indeterminate);
+		out.add(X38ProtType.noProtection);
+		out.add(X38ProtType.pathProtection);
+		out.add(X38ProtType.osRestoration);
+		out.add(X38ProtType.preplanRestoration);
+		out.add(X38ProtType.nonRevOsRestoration);
+		out.add(X38ProtType.strongProtection);
+
+		return out;
+	}
+
+	/*
+	 * Use EnumSet
+	 */
+	@Deprecated
+	private X38SetOfOperState getAllOperStates() {
+		final X38SetOfOperState out = new X38SetOfOperState();
+
+		out.add(X38OperState.enable);
+		out.add(X38OperState.disable);
+
+		return out;
+	}
+
+	/*
+	 * Use EnumSet
+	 */
+	@Deprecated
+	private X38SetOfASTNOpStateFilter getAllASTNOpStateFilter() {
+		final X38SetOfASTNOpStateFilter out = new X38SetOfASTNOpStateFilter();
+
+		out.add(X38ASTNOpStateFilter.cdEnabled);
+		out.add(X38ASTNOpStateFilter.ddEnabled);
+		out.add(X38ASTNOpStateFilter.disabled);
+		out.add(X38ASTNOpStateFilter.cdOutOfOrder);
+		out.add(X38ASTNOpStateFilter.notApplicable);
+
+		return out;
+	}
+
+	/**
+	 * @return
+	 */
+	private X38SetOfLCASOpState getSetOfLCASOpState() {
+		final X38SetOfLCASOpState out = new X38SetOfLCASOpState();
+
+		out.add(X38LCASOpState.lcasNotSupported);
+		out.add(X38LCASOpState.lcasDisabled);
+		out.add(X38LCASOpState.lcasEnabled);
+
+		return out;
+	}
+
+	/**
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLoggedUser getLoggedUsersList(final String hostName)
+			throws SBIException {
+		X38MsgReportGetLoggedUsersList response = null;
+		try {
+			final X38MsgGetLoggedUsersList msg = MessageBuilder
+					.getLoggedUsersList(sbiClient.getSBI(hostName).getUserId(),
+							sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetLoggedUsersList.class,
+					hostName);
+			verify(response.getBody().getResult());
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		return response.getBody().getSetOfUsers();
+	}
+
+	/**
+	 * @param linkClusterName
+	 * @param adjacencyName
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkClusterQueryResult makeLinkClusterQuery(
+			final String linkClusterName, final String adjacencyName,
+			final String hostName)
+					throws SBIException {
+		X38MsgReportMakeLinkClusterQuery response = null;
+		X38SetOfLinkClusterQueryResult queryResult = null;
+		try {
+			final X38MsgMakeLinkClusterQuery request = MessageBuilder.makeLinkClusterQuery(linkClusterName, adjacencyName,
+					sbiClient.getSBI(hostName).getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(request,
+					X38MsgReportMakeLinkClusterQuery.class, hostName);
+			verify(response.getBody().getResult());
+		} catch (final Exception e) {
+			LOG.error(format(e));
+			throw new SBIException("NM communication error.");
+		}
+		queryResult = response.getBody().getSetOfLinkClusterQueryResult();
+		return queryResult;
+	}
+
+	/**
+	 * @param linkComponentPattern
+	 * @param linkClusterAssociated
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkComponentQueryResult makeLinkComponentQuery(final String linkComponentPattern,
+			final String linkClusterAssociated, final String hostName)
+					throws SBIException {
+		X38SetOfLinkComponentQueryResult result = null;
+		X38MsgReportMakeLinkComponentQuery response = new X38MsgReportMakeLinkComponentQuery();
+		try {
+			final X38MsgMakeLinkComponentQuery request = MessageBuilder.makeLinkComponentQuery(linkComponentPattern,
+					linkClusterAssociated, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName)
+					.reqId());
+			response = sbiClient.getSBI(hostName).sendRequest(request,
+					X38MsgReportMakeLinkComponentQuery.class);
+			verify(response.getBody().getResult());
+		} catch (final Exception e) {
+			LOG.error(format(e));
+			throw new SBIException("NM communication error.");
+		}
+		result = response.getBody().getSetOfLinkComponentQueryResult();
+		return result;
+	}
+
+	/**
+	 * Method to retrieve LSRQueryResult from NM/SBI
+	 * 
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLSRQueryResult makeLSRQuery(
+			final X38SetOfSNType setOfSnType, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportMakeLSRQuery response = new X38MsgReportMakeLSRQuery();
+		try {
+			final X38MsgMakeLSRQuery request = MessageBuilder.makeLSRQuery(
+					setOfSnType, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(request, X38MsgReportMakeLSRQuery.class,
+					hostName);
+		} catch (final Exception e) {
+			LOG.error(format(e));
+			throw new SBIException("NM communication error.");
+		}
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfLSRQueryResult();
+	}
+
+	/**
+	 * Method to get Label Switch Router Info
+	 * 
+	 * @param requestBody
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38LabelSwitchedRouterInfo getLSRInfo(
+			final X38GetLSRInfo requestBody, final String hostName)
+					throws SBIException {
+
+		X38MsgReportGetLSRInfo response = new X38MsgReportGetLSRInfo();
+		try {
+			final X38MsgGetLSRInfo request = MessageBuilder.getLSRInfo(
+					requestBody, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(request, X38MsgReportGetLSRInfo.class,
+					hostName);
+		} catch (final Exception e) {
+			LOG.error(format(e));
+			throw new SBIException("NM communication error.");
+		}
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getLabelSwitchedRouterInfo();
+	}
+
+	/**
+	 * @param pathName
+	 * @param setofCycleLifeState
+	 * @param hostName
+	 * @return
+	 * @throws Exception
+	 */
+	public X38SetOfCombinedPathQueryResult makeCombinedPathQuery(final String pathName,
+			final X38SetOfCycleLifeState setofCycleLifeState,
+			final String hostName) throws Exception {
+		X38MsgReportMakeCombinedPathQuery response = new X38MsgReportMakeCombinedPathQuery();
+		try {
+			final X38MsgMakeCombinedPathQuery request = MessageBuilder.makeCombinedPathQuery(pathName, setofCycleLifeState,
+					sbiClient.getSBI(hostName).getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(request,
+					X38MsgReportMakeCombinedPathQuery.class, hostName);
+		} catch (final Exception excp) {
+			LOG.error(new DumpInfo(excp, "Failed to get the combinedPathQueryResult"));
+			throw excp;
+		}
+		final X38SetOfCombinedPathQueryResult combinedPathQueryResult = response.getBody().getSetOfCombinedPathQueryResult();
+		sbiClient.getSBI(hostName).send(LOG, combinedPathQueryResult);
+		return combinedPathQueryResult;
+	}
+
+	/**
+	 * @param trailId
+	 * @param signalType
+	 * @param setOfLayer
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetClientPathsAndCircuits getClientPathsAndCircuits(final long trailId, final X38SignalType signalType,
+			final X38SetOfLayer setOfLayer, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+
+		X38MsgReportGetClientPathsAndCircuits response = null;
+		try {
+			final X38MsgGetClientPathsAndCircuits msg = MessageBuilder.getClientPathsAndCircuits(trailId, signalType, setOfLayer,
+					sbiClient.getSBI(hostName).getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(msg,
+					X38MsgReportGetClientPathsAndCircuits.class, hostName);
+		} catch (final MessageNotSupportedException ex) {
+			LOG.info(format("Could not send the message MsgGetClientPathsAndCircuits over this interface due to : %s",
+					ex.getMessage()));
+			return new X38ReportGetClientPathsAndCircuits();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody();
+	}
+
+	// I38Pipe.java methods
+
+	// == Link =================================================================
+
+	/**
+	 * @param snId
+	 * @param lnType
+	 * @param linkPattern
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinks getLnLinkList(final X38SNId snId,
+			final X38LnType lnType, final X38LinkPattern linkPattern,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetLnLinkList response = null;
+		try {
+			final X38MsgGetLnLinkList msg = MessageBuilder.getLnLinkList(snId,
+					lnType, linkPattern,
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetLnLinkList.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfLinks();
+	}
+
+	/**
+	 * @param linkId
+	 * @param lnType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38LinkInfo getLinkInfo(final X38SmartResIdtype linkId,
+			final X38LnType lnType, final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetLinkInfo response = null;
+		try {
+			final X38MsgGetLinkInfo msg = MessageBuilder.getLinkInfo(linkId,
+					lnType, sbiClient.getSBI(hostName).getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetLinkInfo.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getLinkInfo();
+	}
+
+	/**
+	 * @param links
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38LinkInfo getLinkInfo(final X38Links links, final String hostName)
+			throws SBIException {
+		return getLinkInfo(links.getLinkId(), links.getLnType(), hostName);
+	}
+
+	/**
+	 * @param linkId
+	 * @param lnType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38LinkInfo getLinkInfo(final X38LnLinkId linkId,
+			final X38LnType lnType, final String hostName) throws SBIException {
+		return getLinkInfo(new X38SmartResIdtype(linkId.getValue()), lnType,
+				hostName);
+	}
+
+	/**
+	 * @param linkQueryResult
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38LinkInfo getLinkInfo(final X38LinkQueryResult linkQueryResult,
+			final String hostName) throws SBIException {
+		return getLinkInfo(new X38SmartResIdtype(linkQueryResult.getLinkId()
+				.getValue()), linkQueryResult.getLnType(), hostName);
+	}
+
+	/**
+	 * @param linkId
+	 * @param signalType
+	 * @param lcAssignInfo
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkConn getLinkConnList(final X38LnLinkId linkId, final X38SignalType signalType,
+			final X38LCAssignInfo lcAssignInfo,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetLinkConnList response = null;
+		try {
+			final X38MsgGetLinkConnList msg = MessageBuilder.getLinkConnList(
+					linkId, signalType, lcAssignInfo, sbiClient
+					.getSBI(hostName)
+					.getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetLinkConnList.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfLinkConn();
+	}
+
+	/**
+	 * @param linkId
+	 * @param signalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfLinkConn getLinkConnList(final X38LnLinkId linkId,
+			final X38SignalType signalType, final String hostName)
+					throws SBIException {
+		return getLinkConnList(linkId, signalType, null, hostName);
+	}
+
+	/**
+	 * @param linkName
+	 * @param fromUSNId
+	 * @param toUSNId
+	 * @param ttpIdFrom
+	 * @param ttpIdTo
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void createLink(final X38LinkName linkName, final X38SNId fromUSNId, final X38SNId toUSNId, final X38TTPId ttpIdFrom,
+			final X38TTPId ttpIdTo, final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportCreateLink response = null;
+		try {
+			final X38MsgCreateLink msg = MessageBuilder.createLink(linkName, fromUSNId, toUSNId, ttpIdFrom, ttpIdTo, sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportCreateLink.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param linkId
+	 * @param lnType
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void removeLink(final X38SmartResIdtype linkId,
+			final X38LnType lnType, final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportRemoveLink response = null;
+		try {
+			final X38MsgRemoveLink msg = MessageBuilder.removeLink(linkId,
+					lnType, sbiClient.getSBI(hostName).getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportRemoveLink.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	public void removeLink(final X38LnLinkId linkId, final X38LnType lnType,
+			final String hostName) throws SBIException {
+		removeLink(new X38SmartResIdtype(linkId.getValue()), lnType, hostName);
+	}
+
+	// == CTP ==================================================================
+
+	/**
+	 * @param snId
+	 * @param signalType
+	 * @param pathCmdType
+	 * @param managementType
+	 * @param pattern
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	private X38SetOfAG getAGList(final X38SNId snId, final X38SignalType signalType, final X38PathCmdType pathCmdType,
+			final X38ManagementType managementType, final String pattern,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetAGList response = null;
+		try {
+			final X38MsgGetAGList msg = MessageBuilder.getAGList(snId, signalType, pathCmdType, managementType, pattern,
+					sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetAGList.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfAG();
+	}
+
+	/**
+	 * @param snId
+	 * @param signalType
+	 * @param pathCmdType
+	 * @param managementType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfAG getAGList(final X38SNId snId, final X38SignalType signalType, final X38PathCmdType pathCmdType,
+			final X38ManagementType managementType, final String hostName)
+					throws SBIException {
+		return getAGList(snId, signalType, pathCmdType, managementType, null,
+				hostName);
+	}
+
+	/**
+	 * @param snId
+	 * @param signalType
+	 * @param pattern
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfAG getAGList(final X38SNId snId,
+			final X38SignalType signalType, final String pattern)
+					throws SBIException {
+		return getAGList(snId, signalType, null, null, pattern);
+	}
+
+	/**
+	 * @param snId
+	 * @param signalType
+	 * @param managementType
+	 * @param pattern
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfAG getAGList(final X38SNId snId, final X38SignalType signalType, final X38ManagementType managementType,
+			final String pattern) throws SBIException {
+		return getAGList(snId, signalType, null, managementType, pattern);
+	}
+
+	/**
+	 * @param snId
+	 * @param agId
+	 * @param signalType
+	 * @param cmdType
+	 * @param managementType
+	 * @param vcgOnly
+	 * @param vcgBusy
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPort getPortList(final X38SNId snId, final X38AGId agId, final X38SignalType signalType,
+			final X38CmdType cmdType,
+			final X38ManagementType managementType, final BooleanType vcgOnly,
+			final BooleanType vcgBusy, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetPortList response = null;
+		try {
+			final X38MsgGetPortList msg = MessageBuilder.getPortList(snId, agId, signalType, cmdType, managementType, vcgOnly,
+					vcgBusy, sbiClient.getSBI(hostName).getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetPortList.class, hostName);
+		} catch (final MessageNotSupportedException ex) {
+			LOG.info(format("Could not send the message GetPortList over this interface due to : %s", ex.getMessage()));
+			return new X38SetOfPort();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfPort();
+	}
+
+	/**
+	 * @param snId
+	 * @param agId
+	 * @param signalType
+	 * @param cmdType
+	 * @param managementType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPort getPortList(final X38SNId snId, final X38AGId agId, final X38SignalType signalType,
+			final X38CmdType cmdType,
+			final X38ManagementType managementType, final String hostName)
+					throws SBIException {
+		return getPortList(snId, agId, signalType, null, managementType, null,
+				null, hostName);
+	}
+
+	/**
+	 * @param snId
+	 * @param agId
+	 * @param signalType
+	 * @param managementType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPort getPortList(final X38SNId snId, final X38AGId agId, final X38SignalType signalType,
+			final X38ManagementType managementType, final String hostName)
+					throws SBIException {
+		return getPortList(snId, agId, signalType, null, managementType, null,
+				null, hostName);
+	}
+
+	/**
+	 * @param snId
+	 * @param signalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPort getPortList(final X38SNId snId,
+			final X38SignalType signalType, final String hostName)
+					throws SBIException {
+		return getPortList(snId, null, signalType, null, hostName);
+	}
+
+	/**
+	 * @param snId
+	 * @param signalType
+	 * @param vcgOnly
+	 * @param vcgBusy
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPort getPortList(final X38SNId snId, final X38SignalType signalType, final boolean vcgOnly,
+			final boolean vcgBusy, final String hostName) throws SBIException {
+		return getPortList(snId, null, signalType, null, null, vcgOnly ? new BooleanType(true) : null, vcgBusy ? new BooleanType(
+				true) : null, hostName);
+	}
+
+	/**
+	 * @param snId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPort getPortList(final X38SNId snId, final String hostName)
+			throws SBIException {
+		return getPortList(snId, null, null, null, hostName);
+	}
+
+	/**
+	 * @param snId
+	 * @param portCoord
+	 * @param channelFilter
+	 * @param assignInfo
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ChannelsInfo getChannelList(final X38SNId snId, final X38PortCoord portCoord, final X38ChannelFilter channelFilter,
+			final X38TPAssignInfo assignInfo, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetChannelList response = null;
+		try {
+			final X38MsgGetChannelList msg = MessageBuilder.getChannelList(snId, portCoord, channelFilter, assignInfo,
+					sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetChannelList.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+
+		verify(response.getBody().getResult());
+
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getChannelsInfo();
+	}
+
+	/**
+	 * @param snId
+	 * @param portCoord
+	 * @param signalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ChannelsInfo getChannelList(final X38SNId snId,
+			final X38PortCoord portCoord, final X38SignalType signalType,
+			final String hostName)
+					throws SBIException {
+		final X38ChannelFilter channelFilter = new X38ChannelFilter();
+		channelFilter.setSignalType(signalType);
+
+		final X38TPAssignInfo assignInfo = new X38TPAssignInfo();
+		assignInfo.setDirectionality(new X38Directionality(X38Directionality.bidirectional));
+		assignInfo.setSnRole(new X38SNRole(X38SNRole.from));
+
+		return getChannelList(snId, portCoord, channelFilter, assignInfo,
+				hostName);
+	}
+
+	/**
+	 * @param agId
+	 * @param signalType
+	 * @param cmdType
+	 * @param directionality
+	 * @param snRole
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfTTP getTTPList(final X38AGId agId, final X38SignalType signalType, final X38CmdType cmdType,
+			final X38Directionality directionality, final X38SNRole snRole,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetTTPList response = null;
+		try {
+			final X38MsgGetTTPList msg = MessageBuilder.getTTPList(agId, signalType, cmdType, directionality, snRole,
+					sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetTTPList.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfTTP();
+	}
+
+	/**
+	 * @param agId
+	 * @param signalType
+	 * @param directionality
+	 * @param snRole
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfTTP getTTPList(final X38AGId agId, final X38SignalType signalType, final X38Directionality directionality,
+			final X38SNRole snRole,
+			final String hostName) throws SBIException {
+		return getTTPList(agId, signalType, new X38CmdType(
+				X38CmdType.getAllTTPs), directionality, snRole, hostName);
+	}
+
+	/**
+	 * @param agId
+	 * @param signalType
+	 * @param cmdType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfTTP getTTPList(final X38AGId agId,
+			final X38SignalType signalType, final X38CmdType cmdType,
+			final String hostName)
+					throws SBIException {
+		return getTTPList(agId, signalType, cmdType, new X38Directionality(X38Directionality.bidirectional), new X38SNRole(
+				X38SNRole.from), hostName);
+	}
+
+	/**
+	 * @param agId
+	 * @param signalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfTTP getTTPList(final X38AGId agId,
+			final X38SignalType signalType, final String hostName)
+					throws SBIException {
+		return getTTPList(agId, signalType, new X38CmdType(X38CmdType.getAllTTPs), new X38Directionality(
+				X38Directionality.bidirectional),
+				new X38SNRole(X38SNRole.from), hostName);
+	}
+
+	/**
+	 * @param linkConnId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38AU4Info getSdhStructure(final X38LinkConnId linkConnId,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetSdhStructure response = null;
+		try {
+			final X38MsgGetSdhStructure msg = MessageBuilder.getSdhStructure(
+					linkConnId, sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetSdhStructure.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSdhStructure();
+	}
+
+	/**
+	 * @param linkConnId
+	 * @param au4Info
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void setSdhStructure(final X38LinkConnId linkConnId,
+			final X38AU4Info au4Info, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportSetSdhStructure response = null;
+		try {
+			final X38MsgSetSdhStructure msg = MessageBuilder.setSdhStructure(
+					linkConnId, au4Info,
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+
+			response = sendRequest(msg, X38MsgReportSetSdhStructure.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param sgLnType
+	 * @param pathOrLinkId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfTPs getSupportingTPList(final X38SgLnType sgLnType,
+			final X38PathOrLinkId pathOrLinkId, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetSupportingTPList response = null;
+		try {
+			final X38MsgGetSupportingTPList msg = MessageBuilder
+					.getSupportingTPList(sgLnType, pathOrLinkId,
+							sbiClient.getSBI(hostName).getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetSupportingTPList.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getTps();
+	}
+
+	/**
+	 * @param sgLnType
+	 * @param pathId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfTPs getSupportingTPList(final X38SgLnType sgLnType,
+			final X38PathId pathId, final String hostName) throws SBIException {
+		final X38PathOrLinkId pathOrLinkId = new X38PathOrLinkId();
+		pathOrLinkId.setPathId(pathId);
+		return getSupportingTPList(sgLnType, pathOrLinkId, hostName);
+	}
+
+	/**
+	 * @param signalType
+	 * @param linkId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfTPs getSupportingTPList(final X38SignalType signalType,
+			final int linkId, final String hostName) throws SBIException {
+		final X38SgLnType sgLnType = new X38SgLnType();
+		sgLnType.setSignalType(signalType);
+
+		// X38SmartResIdtype smartResIdtype = new X38SmartResIdtype(linkId);
+		final X38PathOrLinkId pathOrLinkId = new X38PathOrLinkId();
+		pathOrLinkId.setLinkId(linkId);
+		return getSupportingTPList(sgLnType, pathOrLinkId, hostName);
+	}
+
+	/**
+	 * @param lnType
+	 * @param linkId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfTPs getSupportingTPList(final X38LnType lnType,
+			final int linkId, final String hostName) throws SBIException {
+		final X38SgLnType sgLnType = new X38SgLnType();
+		sgLnType.setLnType(lnType);
+
+		// X38SmartResIdtype smartResIdtype = new X38SmartResIdtype(linkId);
+		final X38PathOrLinkId pathOrLinkId = new X38PathOrLinkId();
+		pathOrLinkId.setLinkId(linkId);
+		return getSupportingTPList(sgLnType, pathOrLinkId, hostName);
+	}
+
+	// == SNC ==================================================================
+
+	/**
+	 * @param pathPattern
+	 * @param pathStructFlag
+	 * @param optPathFlag
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPath getPathList(final String pathPattern,
+			final boolean pathStructFlag, final boolean optPathFlag,
+			final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetPathList response = null;
+		try {
+			final X38MsgGetPathList msg = MessageBuilder.getPathList(
+					pathPattern, pathStructFlag, optPathFlag,
+					sbiClient.getSBI(hostName)
+					.getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetPathList.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfPath();
+	}
+
+	/**
+	 * @param setOfPaths
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPathInfo getPathInfo(final X38SetOfPaths setOfPaths,
+			final String hostName) throws SBIException {
+		if (setOfPaths.size() == 0) {
+			return new X38SetOfPathInfo();
+		}
+		checkState(hostName);
+		X38MsgReportGetPathInfo response = null;
+		try {
+			final X38MsgGetPathInfo msg = MessageBuilder.getPathInfo(
+					setOfPaths, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetPathInfo.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfPathInfo();
+	}
+
+	/**
+	 * @param setOfAstnPath
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfPathInfo getPathInfo(final X38SetOfAstnPath setOfAstnPath,
+			final String hostName) throws SBIException {
+		final X38SetOfPathInfo setOfPathInfo = new X38SetOfPathInfo();
+		if (setOfAstnPath.size() == 0) {
+			return setOfPathInfo;
+		}
+		X38MsgReportLSPathObj response = null;
+		// @TODO: check! seems to be that network manager needs one AstnPath
+		// for each get even if we can specify a setOf...
+		for (final X38AstnPath astnPath : setOfAstnPath) {
+			checkState(hostName);
+			try {
+				final X38MsgLSPathObj msg = MessageBuilder.getPathInfo(
+						setOfAstnPath, astnPath, sbiClient.getSBI(hostName)
+						.getUserId(), sbiClient.getSBI(hostName)
+						.reqId());
+				response = sendRequest(msg, X38MsgReportLSPathObj.class,
+						hostName);
+			} catch (final Exception ex) {
+				LOG.error(format(ex));
+				throw new SBIException("NM communication error.");
+			}
+			verify(response.getBody().getResult());
+			sbiClient.getSBI(hostName).recv(LOG, response);
+			setOfPathInfo.addAll(response.getBody().getSetOfPathInfo());
+		}
+		return setOfPathInfo;
+	}
+
+	/**
+	 * This method is used to query for CombinedPathInfo
+	 * 
+	 * @param pathId
+	 * @return X38SetOfCombinedPathInfo
+	 * @throws SBIException
+	 */
+	public X38SetOfCombinedPathInfo getCombinedPathInfo(
+			final X38SetOfPathId setofPathId, final String hostName)
+					throws SBIException {
+
+		X38SetOfCombinedPathInfo setOfCombinedPathInfo = new X38SetOfCombinedPathInfo();
+		if (setofPathId.size() == 0) {
+			return setOfCombinedPathInfo;
+		}
+		X38MsgReportGetCombinedPathInfo response = null;
+		try {
+			checkState(hostName);
+			final X38MsgGetCombinedPathInfo msg = MessageBuilder
+					.getCombinedPathInfo(setofPathId, sbiClient.getSBI(hostName)
+							.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetCombinedPathInfo.class,
+					hostName);
+		} catch (final Exception excp) {
+			LOG.error(format(excp));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		setOfCombinedPathInfo = response.getBody().getSetOfCombinedPathInfo();
+		return setOfCombinedPathInfo;
+	}
+
+	/**
+	 * @param objFilter
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ObjSNCList getObjSNC(final X38ObjSNC objFilter,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetObjSNC response = null;
+		try {
+			final X38MsgGetObjSNC msg = MessageBuilder.getObjSNC(objFilter,
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportGetObjSNC.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getList();
+	}
+
+	/**
+	 * @param snId
+	 * @param sncId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ObjSNCList getObjSNC(final X38SNId snId, final X38SNCId sncId,
+			final String hostName) throws SBIException {
+		final X38ObjSNC objSnc = new X38ObjSNC();
+
+		final X38SetOfSNId setOfSNId = new X38SetOfSNId();
+		snId.setLayer(new X38Layer(X38Layer.ph));
+		setOfSNId.add(snId);
+
+		objSnc.setSetOfSNId(setOfSNId);
+		objSnc.setSncId(sncId);
+
+		return getObjSNC(objSnc, hostName);
+	}
+
+	/**
+	 * @param snId
+	 * @param pattern
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ObjSNCList getObjSNC(final X38SNId snId, final String pattern,
+			final String hostName) throws SBIException {
+		final X38ObjSNC objSnc = new X38ObjSNC();
+
+		final X38SetOfSNId setOfSNId = new X38SetOfSNId();
+		snId.setLayer(new X38Layer(X38Layer.ph));
+		setOfSNId.add(snId);
+
+		final X38SNCName sncName = new X38SNCName();
+		sncName.setPhysical(pattern);
+
+		objSnc.setSetOfSNId(setOfSNId);
+		objSnc.setSncName(sncName);
+		// objSnc.setCommandType(new X38CommandType(X38CommandType.remove));
+
+		return getObjSNC(objSnc, hostName);
+	}
+
+	/**
+	 * @param routing
+	 * @param routeByTP
+	 * @param isVc4Path
+	 * @param signalType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38Routing getTPRouting(final X38Routing routing, final boolean routeByTP, final boolean isVc4Path,
+			final X38SignalType signalType, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetTPRouting response = null;
+		try {
+			final X38MsgGetTPRouting msg = MessageBuilder.getTPRouting(routing, routeByTP, isVc4Path, signalType, sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+
+			response = sendRequest(msg, X38MsgReportGetTPRouting.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getRouting();
+	}
+
+	/**
+	 * @param data
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38Routing getFastAutoRoute(final GetFastAutoRouteData data,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetFastAutoRoute response = null;
+		try {
+			final X38MsgGetFastAutoRoute msg = MessageBuilder.getFastAutoRoute(
+					data, sbiClient.getSBI(hostName).getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetFastAutoRoute.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult(), data.message);
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getRouting();
+	}
+
+	/**
+	 * @param routing
+	 * @param signalType
+	 * @param pathType
+	 * @param protType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38Routing getAutoRoute(final X38Routing routing,
+			final X38SignalType signalType, final X38PathType pathType,
+			final X38ProtType protType, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetAutoRoute response = null;
+		try {
+			final X38MsgGetAutoRoute msg = MessageBuilder.getAutoRoute(routing,
+					signalType, pathType, protType, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetAutoRoute.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getRouting();
+	}
+
+	/**
+	 * @param routing
+	 * @param signalType
+	 * @param pathType
+	 * @param protType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38Routing getManualRouteInfo(final X38Routing routing,
+			final X38SignalType signalType, final X38PathType pathType,
+			final X38ProtType protType, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetManualRouteInfo response = null;
+		try {
+			final X38MsgGetManualRouteInfo msg = MessageBuilder
+					.getManualRouteInfo(routing, signalType, pathType, protType,
+							sbiClient.getSBI(hostName).getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetManualRouteInfo.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getRouting();
+	}
+
+	/**
+	 * This method is to build X38MsgGetRoutingAreaList.
+	 * 
+	 * @return X38SetOfRoutingArea
+	 * @throws SBIException
+	 */
+	public X38SetOfRoutingArea getRoutingAreaList(final String hostName)
+			throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetRoutingAreaList response = new X38MsgReportGetRoutingAreaList();
+		try {
+			final X38MsgGetRoutingAreaList request = MessageBuilder
+					.getRoutingAreaList(sbiClient.getSBI(hostName).getUserId(),
+							sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(request,
+					X38MsgReportGetRoutingAreaList.class, hostName);
+		} catch (final Exception e) {
+			LOG.error(format(e));
+			throw new SBIException("NM communication error.");
+		}
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfRoutingArea();
+	}
+
+	/**
+	 * @param data
+	 * @param hostName
+	 * @return
+	 * @throws Exception
+	 */
+	public X38ReportCreatePath createPath(final CreatePathData data,
+			final String hostName) throws Exception {
+		checkState(hostName);
+		X38MsgReportCreatePath response = null;
+		try {
+			final X38MsgCreatePath msg = MessageBuilder.createPath(data,
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportCreatePath.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody();
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param protOnlyFlag
+	 * @param isAstnDD
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void removePath(final X38SignalType signalType, final X38PathId pathId, final BooleanType protOnlyFlag,
+			final boolean isAstnDD, final String hostName) throws SBIException {
+		if (isAstnDD) {
+			removeAstnDDPath(signalType, pathId, protOnlyFlag, hostName);
+		} else {
+			removePath(signalType, pathId, protOnlyFlag, hostName);
+		}
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param protOnlyFlag
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void removeAstnDDPath(final X38SignalType signalType,
+			final X38PathId pathId, final BooleanType protOnlyFlag,
+			final String hostName)
+					throws SBIException {
+		X38MsgReportLSPathObj response = null;
+		try {
+			final X38MsgLSPathObj msg = MessageBuilder.removeAstnDDPath(
+					signalType, pathId, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportLSPathObj.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param protOnlyFlag
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void removePath(final X38SignalType signalType,
+			final X38PathId pathId, final BooleanType protOnlyFlag,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportRemovePath response = null;
+		try {
+			final X38MsgRemovePath msg = MessageBuilder.removePath(signalType,
+					pathId, protOnlyFlag, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportRemovePath.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param isAstnDD
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void removePath(final X38SignalType signalType,
+			final X38PathId pathId, final boolean isAstnDD,
+			final String hostName) throws SBIException {
+		removePath(signalType, pathId, null, isAstnDD, hostName);
+	}
+
+	/**
+	 * Sends message to SO-NM to delete given leg of a broadcast circuit.
+	 * 
+	 * @param signalType
+	 * @param pathId
+	 * @param ttpId
+	 * @param ctpId
+	 * @return
+	 * @throws SBIException
+	 */
+	public String removeLeg(final X38SignalType signalType,
+			final X38PathId pathId, final X38TPId tpId, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportRemoveLeg response = null;
+		try {
+			final X38MsgRemoveLeg msg = MessageBuilder.removeLeg(signalType,
+					pathId, tpId, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportRemoveLeg.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return String.valueOf("");
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param pathState
+	 * @param isAstnDD
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public String activatePath(final X38SignalType signalType, final X38PathId pathId, final X38PathState pathState,
+			final boolean isAstnDD, final String hostName) throws SBIException {
+		if (isAstnDD) {
+			return activateAstnDDPath(signalType, pathId, hostName);
+		} else {
+			return activatePath(signalType, pathId, pathState, hostName);
+		}
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public String activateAstnDDPath(final X38SignalType signalType,
+			final X38PathId pathId, final String hostName) throws SBIException {
+		X38MsgReportLSPathObj response = null;
+		try {
+			final X38MsgLSPathObj msg = MessageBuilder.activateAstnDDPath(
+					signalType, pathId, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportLSPathObj.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return String.valueOf("");
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param pathState
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public String activatePath(final X38SignalType signalType,
+			final X38PathId pathId, final X38PathState pathState,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportActivatePath response = null;
+		try {
+			final X38MsgActivatePath msg = MessageBuilder.activatePath(
+					signalType, pathId, pathState, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportActivatePath.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return String.valueOf("");
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param pathState
+	 * @param pathCmdType
+	 * @param isAstnDD
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public String deactivatePath(final X38SignalType signalType, final X38PathId pathId, final X38PathState pathState,
+			final X38PathCmdType pathCmdType, final boolean isAstnDD,
+			final String hostName) throws SBIException {
+		if (isAstnDD) {
+			return deactivateAstnDDPath(signalType, pathId, pathState,
+					pathCmdType, hostName);
+		} else {
+			return deactivatePath(signalType, pathId, pathState, pathCmdType,
+					hostName);
+		}
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param pathState
+	 * @param pathCmdType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public String deactivateAstnDDPath(final X38SignalType signalType, final X38PathId pathId, final X38PathState pathState,
+			final X38PathCmdType pathCmdType, final String hostName)
+					throws SBIException {
+		X38MsgReportLSPathObj response = null;
+		try {
+			final X38MsgLSPathObj msg = MessageBuilder.deactivateAstnDDPath(signalType, pathId, pathState, pathCmdType,
+					sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportLSPathObj.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return String.valueOf("");
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param pathState
+	 * @param pathCmdType
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public String deactivatePath(final X38SignalType signalType, final X38PathId pathId, final X38PathState pathState,
+			final X38PathCmdType pathCmdType, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportDeactivatePath response = null;
+		try {
+			final X38MsgDeactivatePath msg = MessageBuilder.deactivatePath(signalType, pathId, pathState, pathCmdType,
+					sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportDeactivatePath.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return String.valueOf("");
+	}
+
+	/**
+	 * Sends message to SO-NM to deactivate given leg of broadcast circuit.
+	 * 
+	 * @param signalType
+	 * @param pathId
+	 * @param ttpId
+	 * @return Empty string if the operation is successful.
+	 * @throws SBIException
+	 */
+	public String deactivateLeg(final X38SignalType signalType,
+			final X38PathId pathId, final X38TPId tpId, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportDeactivateLeg response = null;
+		try {
+			final X38MsgDeactivateLeg msg = MessageBuilder.deactivateLeg(signalType, pathId, tpId,
+					sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportDeactivateLeg.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return String.valueOf("");
+	}
+
+	/**
+	 * Sends message to SO-NM to deactivate protections of given leg of broadcast circuit. SO-NM does not provide a method to
+	 * deactivate protection of a single leg, so protections of all legs are deactivated.
+	 * 
+	 * @param signalType
+	 * @param pathId
+	 * @return Empty string if the operation is successful.
+	 * @throws SBIException
+	 */
+	public String deactivateLegProtections(final X38SignalType signalType,
+			final X38PathId pathId, final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportDeactivateLegProtections response = null;
+		try {
+			final X38MsgDeactivateLegProtections msg = MessageBuilder.deactivateLegProtections(signalType, pathId, sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg,
+					X38MsgReportDeactivateLegProtections.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return String.valueOf("");
+	}
+
+	/**
+	 * @param data
+	 * @param hostName
+	 * @return
+	 * @throws Exception
+	 */
+	public X38MsgReportAddProtection addProtection(
+			final AddProtectionData data, final String hostName)
+					throws Exception {
+		checkState(hostName);
+		X38MsgReportAddProtection response = null;
+		try {
+			final X38MsgAddProtection msg = MessageBuilder.addProtection(data,
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportAddProtection.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response;
+	}
+
+	/**
+	 * @param object
+	 * @param attrValue
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	private String setObjPath(final X38ObjPath object,
+			final X38ObjPath attrValue, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+
+		X38MsgReportSetObjPath response = null;
+		try {
+			final X38MsgSetObjPath msg = MessageBuilder.setObjPath(object,
+					attrValue, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportSetObjPath.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		final StringType out = new StringType();
+		verify(response.getBody().getResult(), out);
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return out.getValue();
+	}
+
+	/**
+	 * @param pathId
+	 * @param pathType
+	 * @param cmd
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public String setObjPath(final X38PathOrLinkId pathId,
+			final X38SgLnType pathType, final X38PathCmd cmd,
+			final String hostName) throws SBIException {
+		final X38ObjPath object = new X38ObjPath();
+		final X38ObjPath attrValue = new X38ObjPath();
+
+		object.setPathId(pathId);
+		object.setPathType(pathType);
+		object.setCmd(cmd);
+
+		return setObjPath(object, attrValue, hostName);
+	}
+
+	/**
+	 * @param snId
+	 * @param snName
+	 * @param coord
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void modifySN(final X38SNId snId, final X38SNName snName,
+			final X38SNCoordxy coord, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+
+		X38MsgReportModifySN response = null;
+		try {
+			final X38MsgModifySN msg = MessageBuilder.modifySN(snId, snName,
+					coord, sbiClient.getSBI(hostName).getUserId(), sbiClient
+					.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportModifySN.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param pathName
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void modifyPath(final X38SignalType signalType,
+			final X38PathId pathId, final X38PathName pathName,
+			final String hostName)
+					throws SBIException {
+
+		modifyPath(signalType, pathId, pathName, null, hostName);
+	}
+
+	/**
+	 * Sends X38MsgModifyPath message to the NM by setting the protOperationMode.
+	 * 
+	 * @param signalType
+	 *            X38SignalType
+	 * @param pathId
+	 *            X38PathId
+	 * @param protOperMode
+	 *            int
+	 * @throws SBIException
+	 */
+	public void modifyPath(final X38SignalType signalType,
+			final X38PathId pathId, final int protOperMode,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportModifyPath response = null;
+		try {
+			final X38MsgModifyPath msg = MessageBuilder.modifyPath(signalType,
+					pathId, protOperMode, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportModifyPath.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param pathGroup
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void modifyPath(final X38SignalType signalType,
+			final X38PathId pathId, final X38PathGroup pathGroup,
+			final String hostName)
+					throws SBIException {
+		modifyPath(signalType, pathId, (X38PathName) null, pathGroup, hostName);
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param name
+	 * @param pathGroup
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void modifyPath(final X38SignalType signalType,
+			final X38PathId pathId, final String name,
+			final X38PathGroup pathGroup, final String hostName)
+					throws SBIException {
+		final X38PathName pathName = new X38PathName();
+		pathName.setValue(name);
+		modifyPath(signalType, pathId, pathName, pathGroup, hostName);
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param pathName
+	 * @param pathGroup
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	private void modifyPath(final X38SignalType signalType, final X38PathId pathId, final X38PathName pathName,
+			final X38PathGroup pathGroup, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportModifyPath response = null;
+		try {
+			final X38MsgModifyPath msg = MessageBuilder.modifyPath(signalType,
+					pathId, pathName, pathGroup, sbiClient.getSBI(hostName)
+					.getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+
+			response = sendRequest(msg, X38MsgReportModifyPath.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param signalType
+	 * @param pathId
+	 * @param revertive
+	 * @throws SBIException
+	 *             This method sends a request to SONM with updated revertive
+	 *             value
+	 */
+	public void modifyPath(final X38SignalType signalType,
+			final X38PathId pathId, final Boolean revertive,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportModifyPath response = null;
+		try {
+			final X38MsgModifyPath msg = MessageBuilder.modifyPath(signalType,
+					pathId, revertive, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+			response = sendRequest(msg, X38MsgReportModifyPath.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param linkClusterName
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38LinkClusterInfo getLinkClusterInfo(final String linkClusterName,
+			final String hostName) throws SBIException {
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("LinkClusterInfo query is sent to SONM using LinkClusterName as filter ");
+		}
+		X38MsgReportGetLinkClusterInfo response = new X38MsgReportGetLinkClusterInfo();
+		X38LinkClusterInfo linkClusterInfo = new X38LinkClusterInfo();
+		try {
+			final X38MsgGetLinkClusterInfo request = MessageBuilder
+					.getLinkClusterInfo(linkClusterName, sbiClient
+							.getSBI(hostName).getUserId(), sbiClient.getSBI(hostName).reqId());
+
+			response = sendRequest(request,
+					X38MsgReportGetLinkClusterInfo.class, hostName);
+			verify(response.getBody().getResult());
+			sbiClient.getSBI(hostName).recv(LOG, response);
+		} catch (final Exception e) {
+			LOG.error(format(e));
+			throw new SBIException("NM communication error.");
+		}
+		linkClusterInfo = response.getBody().getLinkClusterInfo();
+		return linkClusterInfo;
+	}
+
+	/**
+	 * @param lkId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38LinkClusterInfo getLinkClusterInfo(final X38LKId lkId,
+			final String hostName) throws SBIException {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("LinkClusterInfo query is sent to SONM using LinkClusterId as filter ");
+		}
+		X38LinkClusterInfo linkClusterInfo = new X38LinkClusterInfo();
+		X38MsgReportGetLinkClusterInfo response = new X38MsgReportGetLinkClusterInfo();
+		try {
+			final X38MsgGetLinkClusterInfo request = MessageBuilder
+					.getLinkClusterInfo(lkId, sbiClient.getSBI(hostName)
+							.getUserId(), sbiClient.getSBI(hostName).reqId());
+
+			response = sendRequest(request,
+					X38MsgReportGetLinkClusterInfo.class, hostName);
+			verify(response.getBody().getResult());
+			sbiClient.getSBI(hostName).recv(LOG, response);
+		} catch (final Exception e) {
+			LOG.error(format(e));
+			throw new SBIException("NM communication error.");
+		}
+		linkClusterInfo = response.getBody().getLinkClusterInfo();
+		return linkClusterInfo;
+	}
+
+	/**
+	 * @param linkComponentName
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38LinkComponentInfo getLinkComponentInfo(
+			final String linkComponentName, final String hostName)
+					throws SBIException {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("LinkComponentInfo query is sent to SONM using LinkComponentName as a filter ");
+		}
+		X38LinkComponentInfo linkComponentInfo = new X38LinkComponentInfo();
+		X38MsgReportGetLinkComponentInfo response = new X38MsgReportGetLinkComponentInfo();
+		try {
+			final X38MsgGetLinkComponentInfo request = MessageBuilder
+					.getLinkComponentInfo(linkComponentName,
+							sbiClient.getSBI(hostName).getUserId(), sbiClient.getSBI(hostName).reqId());
+
+			response = sendRequest(request,
+					X38MsgReportGetLinkComponentInfo.class, hostName);
+			verify(response.getBody().getResult());
+			sbiClient.getSBI(hostName).recv(LOG, response);
+		} catch (final Exception e) {
+			LOG.error(format(e));
+			throw new SBIException("NM communication error.");
+		}
+		linkComponentInfo = response.getBody().getLinkComponentInfo();
+		return linkComponentInfo;
+	}
+
+	/**
+	 * @param lcId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38LinkComponentInfo getLinkComponentInfo(final X38LCId lcId,
+			final String hostName) throws SBIException {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("LinkComponentInfo query is sent to SONM using LinkComponentId as a filter ");
+		}
+		X38LinkComponentInfo linkComponentInfo = new X38LinkComponentInfo();
+		X38MsgReportGetLinkComponentInfo response = new X38MsgReportGetLinkComponentInfo();
+		try {
+			final X38MsgGetLinkComponentInfo request = MessageBuilder
+					.getLinkComponentInfo(lcId, sbiClient.getSBI(hostName)
+							.getUserId(), sbiClient.getSBI(hostName).reqId());
+
+			response = sendRequest(request,
+					X38MsgReportGetLinkComponentInfo.class, hostName);
+			verify(response.getBody().getResult());
+			sbiClient.getSBI(hostName).recv(LOG, response);
+		} catch (final Exception e) {
+			LOG.error(format(e));
+			throw new SBIException("NM communication error.");
+		}
+		linkComponentInfo = response.getBody().getLinkComponentInfo();
+		return linkComponentInfo;
+	}
+
+	/**
+	 * @param lnType
+	 * @param linkId
+	 * @param linkName
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void modifyLink(final X38LnType lnType, final X38LnLinkId linkId,
+			final X38LinkName linkName, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportModifyLink response = null;
+		try {
+			final X38MsgModifyLink msg = MessageBuilder.modifyLink(lnType,
+					linkId, linkName, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+
+			response = sendRequest(msg, X38MsgReportModifyLink.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	// I38BasePipe.java methods
+	protected enum userLogin {
+		OK, AlreadyLogged, NotAvailable, GenericError
+	};
+
+	/*
+	 * public I38BasePipe(final NmSBIPluginProperty profile) {
+	 * 
+	 * super(getPipe(profile)); nmAlarmMaxNumber = profile.getInt(NmSBIPluginProperty.Key.SBI_NMALARM_MAX_NUMBER, 10000); }
+	 * 
+	 * private static IPipe getPipe(final NmSBIPluginProperty profile) { if
+	 * (profile.getBool(NmSBIPluginProperty.Key.SBI_USE_CHANNEL, true)) { pipe = AbstractBasePipe.getPipe(new I38MessageFactory(),
+	 * I38.getModule().getName(), 0); } else { pipe = AbstractBasePipe.<I38Message<?>> getPipe(new
+	 * PipeDriver(I38.getModule().getName(), new I38MessageDriverBuilder())); } return pipe; }
+	 */
+
+	// == Login ================================================================
+
+	/**
+	 * @param userName
+	 * @param password
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	protected X38ReportLogin login2(final String userName,
+			final String password, final String hostName) throws SBIException {
+		X38MsgReportLogin response = null;
+		if (!sbiClient.getSBI(hostName).isConnected()) {
+			LOG.error("Pipe not connected");
+			throw new SBIException("Communication Error");
+		}
+		try {
+			final X38MsgLogin msg = MessageBuilder.login2(userName, password,
+					sbiClient.getSBI(hostName).reqId());
+
+			sbiClient.getSBI(hostName).sendb(LOG, msg.getBody());
+			response = sbiClient.getSBI(hostName).sendRequest(msg,
+					X38MsgReportLogin.class);
+
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		sbiClient.getSBI(hostName).recvb(LOG, response);
+		return response.getBody();
+	}
+
+	/**
+	 * @param userId
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	protected void logout(final Integer userId, final String hostName)
+			throws SBIException {
+		checkState(hostName);
+		X38MsgReportLogout response = null;
+		final X38SmartReqIdtype id = new X38SmartReqIdtype(sbiClient.getSBI(
+				hostName).reqId());
+		try {
+			final X38MsgLogout msg = MessageBuilder.logout(userId, id);
+
+			response = sendRequest(msg, X38MsgReportLogout.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		if (response.getBody().getReqId().getValue() != id.getValue()) {
+			LOG.error(format("Invalid response from NM: invalid reqId", response));
+			throw new SBIException("Invalid response from NM");
+		}
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param userName
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	protected Integer retrieveLogin(final String userName, final String hostName)
+			throws SBIException {
+		if (!sbiClient.getSBI(hostName).isConnected()) {
+			LOG.error(format("Pipe not connected"));
+			throw new SBIException("Communication Error");
+		}
+		X38ReportGetUserList response = null;
+		X38MsgReportGetUserList respMsg = null;
+		try {
+			final X38MsgGetUserList msg = MessageBuilder.retrieveLogin(
+					userName, sbiClient.getSBI(hostName).reqId());
+
+			respMsg = sendRequest(msg, X38MsgReportGetUserList.class, hostName);
+			response = respMsg.getBody();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		X38AttrId userId = null;
+		for (final X38Users users : response.getSetOfUsers()) {
+			if (users.getUserName().getValue().compareTo(userName) == 0) {
+				userId = users.getUserId();
+				break;
+			}
+		}
+		if (userId == null) {
+			throw new SBIException(String.format("Cannot find user <%s> in userList", userName));
+		}
+		return Integer.valueOf(userId.getValue());
+	}
+
+	/**
+	 * @param userName
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	protected Integer retrieveUserId(final String userName,
+			final String hostName) throws SBIException {
+		if (!sbiClient.getSBI(hostName).isConnected()) {
+			LOG.error(format("Pipe not connected"));
+			throw new SBIException("Communication Error");
+		}
+		X38ReportGetUserList response = null;
+		X38MsgReportGetUserList respMsg = null;
+		try {
+			final X38MsgGetUserList msg = MessageBuilder.retrieveUserId(
+					userName, sbiClient.getSBI(hostName).reqId());
+
+			respMsg = sendRequest(msg, X38MsgReportGetUserList.class, hostName);
+			response = respMsg.getBody();
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+
+		X38AttrId userId = null;
+		for (final X38Users users : response.getSetOfUsers()) {
+			if (users.getUserName().getValue().compareTo(userName) == 0) {
+				userId = users.getUserId();
+				break;
+			}
+		}
+		if (userId == null) {
+			LOG.error(String.format("Cannot find user <%s> in userList", userName));
+			return null;
+		}
+		return Integer.valueOf(userId.getValue());
+	}
+
+	// == EMs ==================================================================
+
+	/**
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfEMs getEMList(final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetEMList response = null;
+		try {
+			final X38MsgGetEMList msg = MessageBuilder.getEMList(sbiClient
+					.getSBI(hostName).getUserId(), sbiClient.getSBI(hostName)
+					.reqId());
+
+			response = sendRequest(msg, X38MsgReportGetEMList.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfEMs();
+	}
+
+	/**
+	 * @param emId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38ReportGetEMInfo getEMInfo(final X38SmartResIdtype emId,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetEMInfo response = null;
+		try {
+			final X38MsgGetEMInfo msg = MessageBuilder.getEMInfo(emId,
+					sbiClient.getSBI(hostName).reqId());
+
+			response = sendRequest(msg, X38MsgReportGetEMInfo.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody();
+	}
+
+	// == ManagedElements ======================================================
+
+	/**
+	 * @param neId
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void realignNE(final X38NEId neId, final String hostName/*
+	 * , X38SNId
+	 * usnId
+	 */)
+			 throws SBIException {
+		checkState(hostName);
+		X38MsgReportRealignNE response = null;
+		try {
+			final X38MsgRealignNE msg = MessageBuilder
+					.realignNE(neId, sbiClient.getSBI(hostName).getUserId(),
+							sbiClient.getSBI(hostName).reqId());
+
+			response = sendRequest(msg, X38MsgReportRealignNE.class, hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		// Modified to support I38v14.2.1.G
+		final X38SetOfNeRes setOfResults = response.getBody().getResult();
+		for (final X38ResNeBased res : setOfResults) {
+			if (neId.getNeId().getValue() == res.getNeId().getNeId().getValue()) {
+				verify(res.getResult());
+			}
+		}
+		sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	// == Alarms ===============================================================
+
+	/**
+	 * @param setOfNEId
+	 * @param netAlarmState
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfNMAlarm getNMAlarmList(final X38SetOfNEId setOfNEId,
+			final boolean netAlarmState, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetNMAlarmList response = null;
+		try {
+			final X38MsgGetNMAlarmList msg = MessageBuilder.getNMAlarmList(
+					setOfNEId, netAlarmState, sbiClient.getSBI(hostName)
+					.getUserId(), sbiClient.getSBI(hostName).reqId(),
+					nmAlarmMaxNumber);
+
+			response = sendRequest(msg, X38MsgReportGetNMAlarmList.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getAlarms();
+	}
+
+	/**
+	 * @param netAlarmState
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfNMAlarm getNMAlarmList(final boolean netAlarmState,
+			final String hostName) throws SBIException {
+		return getNMAlarmList(null, netAlarmState, hostName);
+	}
+
+	/**
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	public void stopNMAlarmList(final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportStopNMAlarmList response = null;
+		try {
+			final X38MsgStopNMAlarmList msg = MessageBuilder.stopNMAlarmList(
+					sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName)
+					.reqId());
+
+			response = sendRequest(msg, X38MsgReportStopNMAlarmList.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		 sbiClient.getSBI(hostName).recv(LOG, response);
+	}
+
+	/**
+	 * @param resourceId
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public X38SetOfNMResAlarmed getNMCorrelate(final X38PathOrLink resourceId,
+			final String hostName) throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetNMCorrelate response = null;
+		try {
+			final X38MsgGetNMCorrelate msg = MessageBuilder.getNMCorrelate(
+					resourceId, sbiClient.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId(),
+					nmAlarmMaxNumber);
+
+			response = sendRequest(msg, X38MsgReportGetNMCorrelate.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getSetOfNMResAlarmed();
+	}
+
+	/**
+	 * @param fromUSNId
+	 * @param toUSNId
+	 * @param signalType
+	 * @param pathStructFlag
+	 * @param hostName
+	 * @return
+	 * @throws SBIException
+	 */
+	public String getM1400Name(final X38SNId fromUSNId, final X38SNId toUSNId, final X38SignalType signalType,
+			final X38PathStructFlag pathStructFlag, final String hostName)
+					throws SBIException {
+		checkState(hostName);
+		X38MsgReportGetM1400Name response = null;
+		try {
+			final X38MsgGetM1400Name msg = MessageBuilder.getM1400Name(fromUSNId, toUSNId, signalType, pathStructFlag,
+					sbiClient
+					.getSBI(hostName).getUserId(),
+					sbiClient.getSBI(hostName).reqId());
+			response = sendRequest(msg, X38MsgReportGetM1400Name.class,
+					hostName);
+		} catch (final Exception ex) {
+			LOG.error(format(ex));
+			throw new SBIException("NM communication error.");
+		}
+		verify(response.getBody().getResult());
+		sbiClient.getSBI(hostName).recv(LOG, response);
+		return response.getBody().getM1400Name().getValue();
+	}
+
+
+	/**
+	 * @param hostName
+	 * @throws SBIException
+	 */
+	protected void checkState(final String hostName) throws SBIException {
+		if (!sbiClient.getSBI(hostName).isConnected()) {
+			LOG.error(format("SBI not connected"));
+			throw new SBIException("Communication Error");
+		}
+
+		if (sbiClient.getSBI(hostName).getUserId() == null) {
+			LOG.error(format("Invalid User ID"));
+			throw new SBIException("Invalid User ID");
+		}
+	}
+
+	/**
+	 * @param res
+	 * @param out
+	 * @throws SBIException
+	 */
+	protected void verify(final X38Res res, final StringType out) throws SBIException {
+		final String msg = res.getResMsg().getValue().trim();
+		if (res.getResCode().isResNotOK()) {
+			LOG.error(format(res));
+			throw PlugInExceptionHandler.unableToComply(msg.length() > 0 ? msg : "SBI Error: " + msg);
+		} else if (res.getResCode().isResWarning()) {
+			LOG.warn(format(res));
+		}
+		if (msg.length() > 0) {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(format(msg));
+			}
+			if (out != null) {
+				out.setValue(msg);
+			}
+		}
+	}
+
+	/**
+	 * @param res
+	 * @throws SBIException
+	 */
+	protected void verify(final X38Res res) throws SBIException {
+		verify(res, null);
+	}
+
+	/**
+	 * @param in
+	 * @return
+	 */
+	protected userLogin codeClass(final X38ReportLogin in) {
+		if (in.getResult().getResCode().isResOK()) {
+			return userLogin.OK;
+		} else if (in.getResult().getResCode().isResWarning()) {
+			for (final X38WarningCode wCode : in.getResult().getWarningCodes()) {
+				return evaluateError(wCode);
+			}
+		} else {
+			final String resMessage = in.getResult().getResMsg().getValue().toLowerCase();
+			if (resMessage.contains("already logged")) {
+				return userLogin.AlreadyLogged;
+			} else {
+				// Fix for TR HO28415 - When tmfman user is not added, IPTNM
+				// send a response message as "Usertmfman not found"
+				// instead of
+				// "Usertmfman not available. Hence added an other condition checking for the string "not
+				// found""
+				if (resMessage.contains("not found") || resMessage.contains("not available")) {
+					return userLogin.NotAvailable;
+				} else {
+					return userLogin.GenericError;
+				}
+			}
+		}
+		return userLogin.OK;
+	}
+
+	/**
+	 * This method returns userLogin based on given wCode.
+	 * 
+	 * @param wCode
+	 * @return
+	 */
+
+	private userLogin evaluateError(final IntegerType wCode) {
+		switch (wCode.getValue()) {
+		case 250:
+		case 251:
+		case 252:
+			return userLogin.OK;
+		case 300:
+			return userLogin.AlreadyLogged;
+		case 301:
+		case 302:
+			return userLogin.NotAvailable;
+		default:
+			return userLogin.GenericError;
+		}
+	}
+
+	/**
+	 * @param <A>
+	 * @param msg
+	 * @param class1
+	 * @param hostName
+	 * @return
+	 * @throws Exception
+	 */
+	private <A extends Message<?>> A sendRequest(final X38Message msg,
+			final Class<A> class1, final String hostName) throws Exception {
+		A response = null;
+		sbiClient.getSBI(hostName).send(LOG, msg);
+		response = sbiClient.getSBI(hostName).sendRequest(msg, class1);
+
+		return response;
+
+	}
+}

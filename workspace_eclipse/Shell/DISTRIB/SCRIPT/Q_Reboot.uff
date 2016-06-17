@@ -1,0 +1,115 @@
+#!/sbin/sh
+#
+# Start/stop FULLNAME 
+#
+
+PATH=/sbin:/usr/sbin:/usr/bin:/bin
+export PATH
+
+# Source function library.
+if [ -f /etc/init.d/functions ] ; then
+  . /etc/init.d/functions
+elif [ -f /etc/rc.d/init.d/functions ] ; then
+  . /etc/rc.d/init.d/functions
+fi
+
+processname="FULLNAME"
+servicename="FULLNAME"
+
+Contact="Please, contact your System Administrator.\n"
+
+rval=0
+set_return()
+{
+  x=$?
+  if [ $x -ne 0 ]; then
+    echo "$1 ERROR CODE $x"
+    rval=$x
+    exit ${rval}
+  fi
+}
+
+case "$1" in
+  "start_msg")
+     echo "Starting FULLNAME"
+     ;;
+
+  "stop_msg")
+     echo "Stopping FULLNAME"
+     ;;
+
+  "recovery_msg")
+     echo "Starting FULLNAME with recovery"
+     ;;
+
+
+  "stop")
+     # Authomatic shutdown procedure
+     if [ -r "ENV_FILE" ];
+     then 
+       . "ENV_FILE"
+       if [ -x "${AGENT_DIR}/SCRIPT/Q_Stop" ];
+       then 
+         echo "FULLNAME application shutdown in progress..."
+         su AGENT_USER -c "sh -f ${AGENT_DIR}/SCRIPT/Q_Stop" 1> /dev/null 2>&1
+         set_return "FULLNAME shutdown error."
+         if [ -d "/var/lock/subsys" ];
+         then
+           [ ${rval} -eq 0 ] && rm -f "/var/lock/subsys/${servicename}"
+         fi
+         echo "FULLNAME shutdown completed."
+       fi
+     else
+       echo "Incomplete FULLNAME installation: missing ENV_FILE\n${Contact}"
+       exit 1
+     fi
+     ;;
+
+   "start")
+      # Authomatic boot procedure
+     if [ -r "ENV_FILE" ];
+     then 
+       . "ENV_FILE"
+       if [ -x "${AGENT_DIR}/SCRIPT/Q_Start" ];
+       then 
+         echo "FULLNAME application startup in progress..."
+         su AGENT_USER -c "sh -f ${AGENT_DIR}/SCRIPT/Q_Start" 1> /dev/null 2>&1
+         set_return "FULLNAME startup error."
+         if [ -d "/var/lock/subsys" ];
+         then
+           [ ${rval} -eq 0 ] && touch "/var/lock/subsys/${servicename}"
+         fi
+         echo "FULLNAME startup completed."
+       fi
+     else
+       echo "Incomplete FULLNAME installation: missing ENV_FILE\n${Contact}"
+       exit 1
+     fi
+     ;;
+
+   "recovery")
+     # Authomatic boot procedure with recovery
+     if [ -r "ENV_FILE" ];
+     then
+       . "ENV_FILE"
+       if [ -x "${AGENT_DIR}/SCRIPT/Q_Start" ];
+       then
+         echo "FULLNAME application startup with recovery in progress..."
+         su AGENT_USER -c "sh ${AGENT_DIR}/SCRIPT/Q_Start recovery"
+         set_return "FULLNAME startup with recovery error."
+         echo "FULLNAME startup with recovery completed."
+       fi
+     else
+       echo "Incomplete FULLNAME installation: missing ENV_FILE\n${Contact}"
+       exit 1
+     fi
+     ;;
+
+   *)
+     echo "Usage: $0 {start|stop|recovery|start_msg|stop_msg|recovery_msg}"
+     rval=1
+     ;;
+
+esac
+
+exit ${rval}

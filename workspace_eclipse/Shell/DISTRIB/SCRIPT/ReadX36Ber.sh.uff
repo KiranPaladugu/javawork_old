@@ -1,0 +1,91 @@
+#!/bin/sh
+
+######################
+#Check Parameter     #
+######################
+
+if [ $# -ne 1 ];
+then
+   echo ""
+   echo "Usage $0 full_pathname_of_BER_file>"
+   echo ""
+   exit 1
+fi
+
+berFile="$1"
+
+if [ ! -r "${berFile}" ];
+then
+  echo ""
+  echo "File ${berFile} isn't readable"
+  echo "Exiting"
+  echo ""
+  exit 1
+fi
+
+######## AGENT_USER only may run the script...
+if [ -x /usr/bin/whoami ];
+then
+  if [ $(/usr/bin/whoami) != "AGENT_USER" ];
+  then
+    echo ""
+    echo "Sorry, you must be AGENT_USER to run this script!"
+    echo ""
+    exit 1
+  fi
+fi
+
+######## Retrieves AGENT environmental variables
+if [ -e "ENV_FILE" ];
+then
+  . "ENV_FILE"
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" -o "${curr_os}" = "Linux" ];
+then
+  sep=":"
+else
+  sep=";"
+fi
+
+JAVA_EXE="/opt/java1.6/jre/bin/java"
+
+if [ -x "${JAVA_HOME}/jre/bin/java" ];
+then
+  JAVA_EXE="${JAVA_HOME}/jre/bin/java"
+elif [ -x "${JAVA_HOME}/bin/java" ];
+then
+  JAVA_EXE="${JAVA_HOME}/bin/java"
+else
+  echo ""
+  echo "Cannot find java on your server!"
+  echo "Please check your installation"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+TMF_XP_RB="."
+
+file_list=$(find "${AGENT_DIR}/LIB" \( -type f -o -type l \) -name "*.jar" -print)
+
+for item in ${file_list};
+do
+  TMF_XP_RB="${TMF_XP_RB}${sep}${item}"
+done
+
+export TMF_XP_RB
+
+CONF_DIR="${AGENT_DIR}"/CONF
+
+"${JAVA_EXE}" -Dlog4j.configuration=file:"${CONF_DIR}"/log4j_rb.xml -classpath "${TMF_XP_RB}" com.marconi.fusion.base.asn1.msg.FileMsgBerReader com.marconi.fusion.X36.X36MessageFactory "${berFile}"
+
+
+exit $?

@@ -1,0 +1,580 @@
+/**
+ * File: EventCollectior.java
+ */
+package com.marconi.fusion.tmf.i36PlugIn;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.lang.time.StopWatch;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36;
+import com.marconi.fusion.X36.X36AlarmDetailReport;
+import com.marconi.fusion.X36.X36EventDetail;
+import com.marconi.fusion.X36.X36EventDetailReport;
+import com.marconi.fusion.X36.X36Message;
+import com.marconi.fusion.X36.X36MsgAlarmDetailReport;
+import com.marconi.fusion.X36.X36MsgAlarmRefreshReport;
+import com.marconi.fusion.X36.X36MsgEventDetailReport;
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.X36.X36SBIHostName;
+import com.marconi.fusion.X36.X36SetOfAlEvent;
+import com.marconi.fusion.X36.X36SetOfNeId;
+import com.marconi.fusion.base.asn1.ASN1Obj;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.pipe.PipeConsumer;
+import com.marconi.fusion.base.util.Utility;
+import com.marconi.fusion.tmf.SBI.SBIKey;
+import com.marconi.fusion.tmf.SBIContainer.SBIContainer;
+import com.marconi.fusion.tmf.i36PlugIn.realignment.BeginRealignmentEvent;
+import com.marconi.fusion.tmf.i36PlugIn.realignment.EndRealignmentEvent;
+import com.marconi.fusion.tmf.i36PlugIn.realignment.RealignmentEvent;
+import com.marconi.fusion.tmf.i36PlugIn.realignment.RealignmentEventListener;
+import com.marconi.fusion.tmf.plugIn.IEventConsumer;
+import com.marconi.fusion.tmf.sbi.em.X36SBI;
+
+/**
+ * @author guarguag
+ * E' registrato sul RealignmentManager per avere gli event  di inizio e fine riallineamento.
+ * In tal modo si possono bufferizare gli event quando l'ne e' in riall. e buttare gli allarmi
+ */
+public class EventCollector implements PipeConsumer<X36Message<?>>, RealignmentEventListener {
+	private static Log log = LogFactory.getLog(EventCollector.class);
+
+	private SBIClientI sbiClient = null;
+
+	private IAlarmProcessor   alarmProcessor = null;
+	// Map<MEDn, EventsQueue> queues = new HashMap<MEDn, EventsQueue>();
+	Map<X36SBIHostName, Map<X36NeId, EventsQueue>> queuesPerHost = new HashMap<X36SBIHostName, Map<X36NeId, EventsQueue>>();
+	//I36PlugIn plugIn=null;
+	//EventCollector eventCollect;
+	I36Naming naming;
+	/* ***********************************************************************/
+	public EventCollector(final SBIClientI sbiClient) {
+		/* ***********************************************************************/
+		this.sbiClient          = sbiClient;
+		naming = this.sbiClient.getNaming();
+		/*eventCollect=new EventCollector(sbiClient);*/
+
+		//		this.alarmRaiser = new AlarmRaiser(sbiClient);
+	}
+
+	protected I36DatabaseManager getDBManager() {
+		return sbiClient.getDbManager();
+	}
+
+	protected IEventConsumer getEventConsumer() {
+		return sbiClient.getEventManager();
+	}
+
+	public SBIClientI getSBIClient() {
+		return sbiClient;
+	}
+
+	/* ***********************************************************************/
+	public void init() {
+
+		final String key = this.getClass().getName() + ".delegate";
+		final String className = sbiClient.getProfile().getProperty(key,
+				AlarmRaiser.class.getName());
+		alarmProcessor = (IAlarmProcessor) Utility.allocateObject(className);
+
+		alarmProcessor.initialize(sbiClient);
+	}
+
+	/* ********************************************************************** */
+	public void start(final SBIKey key) {
+
+		// getting SBI from SBI contianer. Since In EM Mode we will have a
+		// single SBI in SBIContainer. Hence retrieving like this.
+
+		((X36SBI) SBIContainer.getInstance().getSbiObj(key))
+		.registerPipeConsumer(this,
+				X36MsgAlarmDetailReport.class.getName());
+		((X36SBI) SBIContainer.getInstance().getSbiObj(key))
+		.registerPipeConsumer(this,
+				X36MsgEventDetailReport.class.getName());
+
+		alarmProcessor.startListening();
+	}
+
+	/**
+	 * @return the alarmRaiser
+	 */
+	public IAlarmProcessor getAlarmRaiser() {
+		return alarmProcessor;
+	}
+
+	/* ***********************************************************************/
+	/* (non-Javadoc)
+	 * @see com.marconi.fusion.base.pipe.PipeConsumer#onEvent(java.lang.Object)
+	 */
+	@Override
+	public void onEvent(final X36Message<?> msg) {
+		/* ** ********************************************************************/
+		if (getEventConsumer() == null){
+			return;
+		}
+		if (log.isDebugEnabled()){
+			log.debug(new DumpInfo(msg, "Managing message..."));
+		}
+
+		//		else
+		//			log.info(new DumpInfo(String.format("Managing event <%s>", evt.getIdentifier())));
+		try {
+			switch( msg.getCode() ){
+			case X36.MsgAlarmDetailReport:
+				onAlarm((X36AlarmDetailReport) msg.getBody());
+				break;
+			case X36.MsgEventDetailReport:
+				onEvent( ( X36EventDetailReport) msg.getBody());
+				break;
+			case X36.MsgAlarmRefreshReport:
+				onAlarmRefresh(msg);
+				break;
+			case X36.MsgGetReportProvisioning:
+				// TODO
+				// EventList eventsList = onAlarmRefresh( ( X36GetReportProvisioning) msg.getBody());
+				// Dumper.dumpDebug( dc, Verbosity.MEDIUM , eventsList);
+				log.warn("<MsgGetReportProvisioning> not yet managed");
+				break;
+			default:
+				break;
+			} /* endSwitch */
+		}
+		catch (final Exception ex) {
+			log.error(new DumpInfo(ex));
+		}
+
+		if (log.isDebugEnabled()){
+			log.debug(new DumpInfo(msg, "Managed message..."));
+		}
+	}
+
+	/**
+	 * This method is called when an event occurs with message MsgAlarmRefreshReport.
+	 * Calls internally onAlarm method.
+	 * @param msg - X36Message<?>
+	 */
+	private void onAlarmRefresh(final X36Message<?> msg) {
+		final X36MsgAlarmRefreshReport resp = (X36MsgAlarmRefreshReport) msg;
+		for (final X36AlarmDetailReport rep : resp.getBody().getAlEventList()) {
+			onAlarm(rep);
+		}
+	}
+
+	public void onEvent(final X36EventDetailReport item) {
+		final EventsQueue queue = getQueue(item.getNeId(),
+				item.getSbihostName());
+
+		queue.onEvent(item);
+	}
+
+	public void onAlarm(final X36AlarmDetailReport item) {
+		/*
+		 * GF If alarms management is disabled the alarms has not to be queued
+		 * GG moved into AlarmRaiser
+		 */
+
+		if (alarmProcessor.isAlarmsManagementEnabled() == false) {
+			log.debug("Alarm management disabled: alarm not queued....");
+			return;
+		}
+
+		final EventsQueue queue = getQueue(item.getNeId(), item.getSbihostName());
+		queue.onAlarm(item);
+	}
+
+	/*
+	 * GF Not Used!
+	 */
+	//	public void onAlarms(X36SetOfAlEvent setOf) {
+	//		Map<X36NeId, EventsQueue> qs = null;
+	//	   	synchronized (queues) {
+	//	   		qs = new HashMap<X36NeId, EventsQueue>(queues);
+	//	   	}
+	//	   	for (Iterator<X36AlarmDetailReport> itr = setOf.iterator(); itr.hasNext();) {
+	//			X36AlarmDetailReport item = itr.next();
+	//	   		EventsQueue queue = qs.get(item.getNeId());
+	//
+	//	   		if (queue != null)
+	//	   			queue.onAlarm(item);
+	//	   	}
+	//
+	//	}
+
+	public EventsQueue getQueue(final X36NeId neId, final X36SBIHostName sbiHostName) {
+		synchronized (queuesPerHost) {
+			Map<X36NeId, EventsQueue> queues = queuesPerHost.get(sbiHostName.getValue());
+			EventsQueue queue = null;
+			if (queues == null) {
+				queues = new HashMap<X36NeId, EventsQueue>();
+				queue = new EventsQueue();
+				queues.put(neId, queue);
+				queuesPerHost.put(sbiHostName, queues);
+
+			} else {
+				queue = queues.get(neId);
+				if (queue == null) {
+					queue = new EventsQueue();
+					queues.put(neId, queue);
+				}
+			}
+			return queue;
+		}
+	}
+
+	public void beginProvisioning(final X36SetOfNeId list, final String hostName) {
+		log.info(String.format("Begin provisioning procedure on EM <%s>", sbiClient.getName()));
+		synchronized (queuesPerHost) {
+			for (final X36NeId neId : list) {
+				final EventsQueue queue = getQueue(neId, new X36SBIHostName(hostName));
+				queue.setProvisioned(false);
+			}
+		}
+	}
+
+	public void endProvisioning(final X36SetOfNeId list, final String hostName) {
+		final StopWatch watch = new StopWatch();
+		watch.start();
+
+		if (log.isInfoEnabled()){
+			log.info(String.format("Ends provisioning procedure on EM <%s> for %d ME.", sbiClient.getName(), list.size()));
+		}
+
+		synchronized (queuesPerHost) {
+			for (final X36NeId neId : list) {
+				final EventsQueue queue = getQueue(neId, new X36SBIHostName(hostName));
+				queue.setProvisioned(true);
+			}
+		}
+
+		watch.stop();
+		if (log.isDebugEnabled()){
+			log.debug(new DumpInfo(list, String.format("Provisioning on EM <%s>: DONE in <%s> for...",
+					sbiClient.getName(), watch)));
+		}
+		else if (log.isInfoEnabled()){
+			log.info(String.format("Provisioning for %d ME on EM <%s>: DONE in <%s>",
+					list.size(), sbiClient.getName(), watch));
+		}
+	}
+
+	//	public void endProvisioning() {
+	//		StopWatch watch = new StopWatch();
+	//		watch.start();
+	//
+	//		Map<X36NeId, EventsQueue> qs = null;
+	//	   	synchronized (queues) {
+	//	   		qs = new HashMap<X36NeId, EventsQueue>(queues);
+	//	   	}
+	//
+	//		if (log.isInfoEnabled())
+	//			log.info(String.format("Ends provisioning procedure on EM <%s> for %d ME.",
+	//					sbiClient.getName(),
+	//					qs.size()));
+	//
+	//	   	X36SetOfNeId list = new X36SetOfNeId();
+	//		for (Iterator<Entry<X36NeId, EventsQueue>> itr = qs.entrySet().iterator(); itr.hasNext();) {
+	//			Entry<X36NeId, EventsQueue> item = itr.next();
+	//	   		item.getValue().setProvisioned(true);
+	//	   		list.add(item.getKey());
+	//		}
+	//
+	//	   	watch.stop();
+	//	   	if (log.isDebugEnabled())
+	//		   	log.debug(new DumpInfo(list, String.format("Provisioning on EM <%s>: DONE in <%s> for...",
+	//		   			sbiClient.getName(), watch)));
+	//	   	else if (log.isInfoEnabled())
+	//		   	log.info(String.format("Provisioning for %d ME on EM <%s>: DONE in <%s>",
+	//		   			list.size(), sbiClient.getName(), watch));
+	//	}
+
+
+	/* (non-Javadoc)
+	 * @see com.marconi.fusion.tmf.X36PlugIn.realignment.RealignmentEventListener#onRealignmentEvent
+	 * (com.marconi.fusion.tmf.X36PlugIn.realignment.RealignmentEvent)
+	 */
+	@Override
+	public void onRealignmentEvent(final RealignmentEvent event) {
+		if (event instanceof BeginRealignmentEvent) {
+			final BeginRealignmentEvent begin = (BeginRealignmentEvent) event;
+			final X36SBIHostName sbiHost = new X36SBIHostName(sbiClient.getHostName(begin.getMeDn(), false));
+			final EventsQueue queue = getQueue(begin.getNeId(), sbiHost);
+			queue.setInRealigment(true);
+		} else if (event instanceof EndRealignmentEvent) {
+			final EndRealignmentEvent end = (EndRealignmentEvent) event;
+			final X36SBIHostName sbiHost = new X36SBIHostName(sbiClient.getHostName(end.getMeDn(), false));
+			final EventsQueue queue = getQueue(end.getNeId(), sbiHost);
+			queue.setInRealigment(false);
+		}
+	}
+
+	//	public void propertyChange(PropertyChangeEvent evt) {
+	//		String name = evt.getPropertyName();
+	//		if (name.equals(RealignmentManager.RealignmentProperty.neRealignmentStarted.toString())) {
+	//			X36NeId neId = (X36NeId) evt.getNewValue();
+	//			EventsQueue queue = getQueue(neId);
+	//			queue.setInRealigment(true);
+	////			queue.setProvisioned(false);
+	//		}
+	//		else if (name.equals(RealignmentManager.RealignmentProperty.neRealignmentEnded.toString())) {
+	//			X36NeId neId = (X36NeId) evt.getNewValue();
+	//			EventsQueue queue = getQueue(neId);
+	//			queue.setInRealigment(false);
+	//		}
+	//	}
+
+	public class EventsQueue {
+		private boolean         provisioned = false;
+		private boolean         inRealigment = false;
+		private final List<Event>     events = new ArrayList<Event>();
+
+		public EventsQueue() {
+		}
+
+		/**
+		 * @param inRealigment the inRealigment to set
+		 */
+		public synchronized void setInRealigment(final boolean inRealigment) {
+			flushEvents();
+			this.inRealigment = inRealigment;
+		}
+
+		/**
+		 * @return true if the ne in realigment
+		 */
+		public synchronized boolean isInRealigment() {
+			return this.inRealigment;
+		}
+
+		/**
+		 * @return the provisioned
+		 */
+		public synchronized boolean isProvisioned() {
+			return provisioned;
+		}
+
+		/**
+		 * @param provisioned the provisioned to set
+		 */
+		public synchronized void setProvisioned(final boolean provisioned) {
+			if (provisioned){
+				flushEvents();
+			}
+			else{
+				clearAlarmEvents();
+			}
+			//events.clear();
+
+			this.provisioned = provisioned;
+		}
+
+		/*
+		 * GF Not Used!
+		 */
+		//		public synchronized void onAlarms(X36SetOfAlEvent list) {
+		//    		if (provisioned)
+		//    			EventCollector.this.alarmRaiser.onAlarmReport(list);
+		//    		else
+		//    			addAlarms(list);
+		//		}
+
+		public synchronized void onEvent(final X36EventDetailReport item) {
+			/*
+			 * GG 30/11/2007 cazzone che sono...
+			 * il test se l'NE e' provisionanto lo devo fare solo per alcuni eventi
+			 */
+			switch (item.getEventDetail().getMemberId()) {
+			case X36EventDetail.createdNe:
+			case X36EventDetail.deletedNe:
+			case X36EventDetail.modifiedNeName:
+				EventCollector.this.sbiClient.onEventReport(item);
+				if (log.isDebugEnabled()) {
+					log.debug(new DumpInfo(item, "Managed event."));
+				}
+				break;
+			default:
+				addEvent(item);
+				//	    		if (provisioned) {
+				//	    			EventCollector.this.sbiClient.onEventReport(item);
+				//	    			log.debug(new DumpInfo(item, "Managed event."));
+				//	    		} else {
+				//	    			addEvent(item);
+				//	    			log.debug(new DumpInfo(item, "Provisioning procedure not terminated: events enqueued."));
+				//	    		}
+			}
+		}
+
+		public synchronized void onAlarm(final X36AlarmDetailReport item) {
+			addAlarm(item);
+			//    		if (provisioned)
+			//    			EventCollector.this.alarmRaiser.onAlarmReport(item);
+			//    		else
+			//    			addAlarm(item);
+		}
+
+		//		public synchronized void provisioning(X36SetOfAlEvent setOf) {
+		//			provisioning.addAll(setOf);
+		//    	}
+
+		//		private void addAlarms(X36SetOfAlEvent list) {
+		//		   	for (Iterator<X36AlarmDetailReport> itr = list.iterator(); itr.hasNext();) {
+		//				X36AlarmDetailReport item = itr.next();
+		//				Event event = new Event(item);
+		//				events.add(event);
+		//		   	}
+		//		}
+
+		private void addAlarm(final X36AlarmDetailReport item) {
+			/*
+			 * PROVIAMO UNA COSA DIVERSA
+			 * li ammucchio anche se sono in reiallineamento e li smazzo alla fine
+			 * poiche' non si manda il deprovisioning al'inizio di un raill.
+			 */
+			//			if (inRealigment) {
+			//				if (log.isDebugEnabled()) {
+			//					String msg = String.format("ME <%s> is in realignment phase: alarm discarded.",
+			//							sbiClient.getNeLocator(item.getNeId()));
+			//					log.debug(msg);
+			//				}
+			//				return;
+			//			}
+			if (provisioned && ! inRealigment)
+			{
+				EventCollector.this.alarmProcessor.onAlarmReport(item);
+			}
+			else if (inRealigment) {
+				events.add(new Event(item));
+				if (log.isDebugEnabled()) {
+					final String msg = String.format("ME <%s> is in realignment phase: alarm enqued.",
+							sbiClient.getNeLocator(item.getNeId(), item.getSbihostName()));
+					log.debug(msg);
+				}
+			}
+			else { // !provisioned
+				events.add(new Event(item));
+				if (log.isDebugEnabled()) {
+					final String msg = String.format("ME <%s>. Received alarm during provisioning: alarm enqued.",
+							sbiClient.getNeLocator(item.getNeId(), item.getSbihostName()));
+					log.debug(msg);
+				}
+			}
+		}
+
+		private void addEvent(final X36EventDetailReport item) {
+			if (inRealigment) {
+				events.add(new Event(item));
+				if (log.isDebugEnabled()) {
+					final String msg = String.format("ME <%s> is in realignment phase: events enqueued.",
+							sbiClient.getNeLocator(item.getNeId(), item.getSbihostName()));
+					log.debug(new DumpInfo(item, msg));
+				}
+			}
+			else if (!provisioned && item.getEventDetail().isProtectionChangeEvent()) {
+				events.add(new Event(item));
+				if (log.isDebugEnabled()) {
+					final String msg = String.format("ME <%s> is in provisioning phase: events enqueued.",
+							sbiClient.getNeLocator(item.getNeId(), item.getSbihostName()));
+					log.debug(new DumpInfo(item, msg));
+				}
+			}
+			else {
+				EventCollector.this.sbiClient.onEventReport(item);
+				if (log.isDebugEnabled()) {
+					log.debug(new DumpInfo(item, "Managed event."));
+				}
+			}
+		}
+
+		private void clearAlarmEvents() {
+			if (events.isEmpty()) {
+				return;
+			}
+			for (int i = 0; i < events.size(); i++) {
+				if (events.get(i).isAlarmReport()) {
+					events.remove(i);
+				}
+			}
+		}
+
+
+		private void flushEvents() {
+			// EventCollector.this.alarmRaiser.provisioning(neId, provisioning);
+			// provisioning.clear();
+
+			if (events.isEmpty()) {
+				return;
+			}
+
+			/*
+			 * GG la ottimizziamo
+			 */
+			// handle in semi-sequential way
+			final X36SetOfAlEvent setOf = new X36SetOfAlEvent();
+
+			/*
+			 * Fix for TR HN 62229. When X36MsgGetAlarmResourcesDisabled message is getting processed in method
+			 * makeAlarmReportingOnResourcesDisabled() of AlarmProvisioningReporter class , if an alarm is raised during
+			 * this time, all such alarms will be added in "events" list and the alarms in that event list should be
+			 * processed in this method .But here the alarms were getting processed only when there is also an event of type
+			 * Event Report along with AlarmReports else all the alarm Events were not getting processed so for this code was
+			 * changed to process alarms even there is no event of type EventReport
+			 */
+
+			for (final Event evt : events) {
+				if (evt.isAlarmReport()) {
+					setOf.add(evt.getAlarmReport());
+				} else if (evt.isEventReport()) {
+					if (setOf.size() > 0) {
+						EventCollector.this.alarmProcessor.onAlarmReport(setOf);
+						// Clear the alarms as they are processed
+						setOf.clear();
+					}
+					EventCollector.this.sbiClient.onEventReport(evt.getEventReport());
+				}
+			}
+
+			if (setOf.size() > 0) {
+				EventCollector.this.alarmProcessor.onAlarmReport(setOf);
+			}
+
+			events.clear();
+		}
+	}
+
+	private class Event {
+		ASN1Obj event = null;
+		boolean isAlarm = false;
+
+		Event(final X36AlarmDetailReport report) {
+			event = report;
+			isAlarm = true;
+		}
+
+		Event(final X36EventDetailReport report) {
+			event = report;
+			isAlarm = false;
+		}
+
+		boolean isAlarmReport() {
+			return isAlarm;
+		}
+
+		boolean isEventReport() {
+			return !isAlarm;
+		}
+
+		X36AlarmDetailReport getAlarmReport() {
+			return (X36AlarmDetailReport)event;
+		}
+
+		X36EventDetailReport getEventReport() {
+			return (X36EventDetailReport )event;
+		}
+	}
+}

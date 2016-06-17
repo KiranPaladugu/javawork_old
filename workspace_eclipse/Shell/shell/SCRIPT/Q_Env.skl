@@ -1,0 +1,183 @@
+#!/bin/sh
+
+#
+# @(#) Revision: 1.02 "
+#
+# NOTE:    This script is not configurable!  Any changes made to this
+#          script will be overwritten when you upgrade to the next
+#          release of ServiceOn Fusion application.
+#
+# WARNING: Changing this script in any way may lead to all
+#          ServiceOn Fusion application.
+#          Do not modify this script.
+#
+
+AGENT_DIR=__AGENT_DIR__
+AGENT_TITLE=__AGENT_TITLE__
+AGENT_TYPE=__AGENT_TYPE__
+AGENT_MODE=__AGENT_MODE__
+TMF814_APP_TYPE=__TMF814_APP_TYPE__
+OBJDIR=__OBJDIR__
+OBJ_VER=__OBJ_VER__
+NMSDB_VER=__NMSDB_VER__
+JAVA_HOME=__JAVADIR__
+SG=__SG__
+SGPACK=__SGPACK__
+CLASSPATH=.
+
+typeset ret_str=""
+
+AddTailPath()
+{
+  typeset toAdd=$1
+
+  if [ ! -d "${toAdd}" ];
+  then
+    return 0
+  fi
+
+  # append ${toAdd}: to end of PATH if not in PATH somewhere
+  case $PATH in
+    *${toAdd}:*  );;
+    *${toAdd}/:* );;
+    *${toAdd}    );;
+    *${toAdd}/   );;
+    *: )  PATH=$PATH${toAdd}:;;
+    * )   PATH=$PATH:${toAdd};;
+  esac
+
+  return 0
+}
+
+CleanPath()
+{
+  typeset checkpath=$1
+  typeset saveifs="${IFS}"; IFS=":"
+  typeset new_path=""
+  typeset found
+  typeset item
+  typeset new_item
+
+  for item in ${checkpath};
+  do
+    if [ ! -d "${item}" ];
+    then
+      continue
+    fi
+    found="0"
+    for new_item in ${new_path};
+    do
+      if [ "${item}" = "${new_item}" ];
+      then
+        found="1"
+        break;
+      fi
+    done
+    if [ "${found}" = "0" ];
+    then
+      if [ "${new_path}" = "" ];
+      then
+        new_path=${item}
+      else
+        new_path=${new_path}:${item}
+      fi
+    fi
+  done
+
+  IFS="${saveifs}"
+
+  ret_str="${new_path}"
+
+  return 0
+}
+
+CheckPath()
+{
+  typeset item
+
+  if [ ! "${PATH:=""}" = "" ];
+  then
+    AddTailPath "/usr/bin/"
+    CleanPath ${PATH}
+    PATH="${ret_str}"
+  else
+    PATH="/usr/bin"
+  fi
+
+  typeset path_list="${OBJDIR}/lib ${AGENT_DIR}/BIN /usr/vue/bin ${JAVA_HOME}/bin /usr/softbench/bin ."
+
+  for item in ${path_list};
+  do
+    AddTailPath ${item}
+  done
+
+  return 0
+}
+
+CheckShlibPath()
+{
+  if [ ! "${SHLIB_PATH:=""}" = "" ];
+  then
+    CleanPath ${SHLIB_PATH}
+    SHLIB_PATH="${ret_str}"
+    SHLIB_PATH="${OBJDIR}/lib":"${AGENT_DIR}"/LIB:"${AGENT_DIR}"/BIN:"${SHLIB_PATH}"
+    CleanPath ${SHLIB_PATH}
+    SHLIB_PATH="${ret_str}"
+  else
+    SHLIB_PATH="${OBJDIR}/lib":"${AGENT_DIR}"/LIB:"${AGENT_DIR}"/BIN
+  fi
+
+  return 0
+}
+
+CheckLdlibPath()
+{
+  if [ ! "${LD_LIBRARY_PATH:=""}" = "" ];
+  then
+    CleanPath ${LD_LIBRARY_PATH}
+    LD_LIBRARY_PATH="${ret_str}"
+    LD_LIBRARY_PATH="${OBJDIR}/lib":"${AGENT_DIR}"/LIB:"${AGENT_DIR}"/BIN:"${LD_LIBRARY_PATH}"
+    CleanPath ${LD_LIBRARY_PATH}
+    LD_LIBRARY_PATH="${ret_str}"
+  else
+    LD_LIBRARY_PATH="${OBJDIR}/lib":"${AGENT_DIR}"/LIB:"${AGENT_DIR}"/BIN
+  fi
+
+  return 0
+}
+
+CheckCoreSize()
+{
+  tmp_alfa=$(ulimit -S -c)
+  if [ "${tmp_alfa}" = "0" ];
+  then
+    tmp_beta=$(ulimit -H -c)
+    ulimit -S -c ${tmp_beta}
+  fi
+
+  return 0
+}
+
+CheckCoreSize
+
+CheckPath
+
+CheckShlibPath
+
+CheckLdlibPath
+
+unset ret_str
+
+export AGENT_DIR
+export AGENT_MODE
+export TMF814_APP_TYPE
+export OBJDIR
+export OBJ_VER
+export NMSDB_VER
+export JAVA_HOME
+export PATH
+export SHLIB_PATH
+export LD_LIBRARY_PATH
+export CLASSPATH
+
+return 0

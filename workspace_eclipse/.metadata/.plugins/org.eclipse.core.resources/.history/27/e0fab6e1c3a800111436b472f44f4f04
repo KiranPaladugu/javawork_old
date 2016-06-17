@@ -1,0 +1,179 @@
+/*
+ * Created on Jun 16, 2005
+ *
+ */
+package com.marconi.fusion.tmf.i38PlugIn.converter2;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X38.X38LKId;
+import com.marconi.fusion.X38.X38Layer;
+import com.marconi.fusion.X38.X38LinkId;
+import com.marconi.fusion.X38.X38PathId;
+import com.marconi.fusion.X38.X38PortCoord;
+import com.marconi.fusion.X38.X38SNC;
+import com.marconi.fusion.X38.X38SNQueryResult;
+import com.marconi.fusion.X38.X38SignalType;
+import com.marconi.fusion.X38.X38SmartResIdtype;
+import com.marconi.fusion.X38.X38VCGId;
+import com.marconi.fusion.tmf.db.DBIdentifier;
+import com.marconi.fusion.tmf.i38PlugIn.I38Profile;
+import com.marconi.fusion.tmf.plugIn.types.GenericTPId;
+import com.marconi.fusion.tmf.plugIn.types.LayerRate;
+import com.marconi.fusion.tmf.plugIn.types.LinkDn;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEId;
+import com.marconi.fusion.tmf.plugIn.types.MLSNPPLinkDn;
+import com.marconi.fusion.tmf.plugIn.types.PortCoordinates;
+import com.marconi.fusion.tmf.plugIn.types.SNCDn;
+import com.marconi.fusion.tmf.plugIn.types.SNCId;
+import com.marconi.fusion.tmf.plugIn.types.SNDn;
+import com.marconi.fusion.tmf.plugIn.types.SNId;
+import com.marconi.fusion.tmf.plugIn.types.TPDn;
+
+/**
+ * @author mercurio
+ *
+ */
+public class I38Naming
+{
+	private static Log log = LogFactory.getLog(I38Naming.class);
+
+	private static I38NamingImpl naming = new I38NamingImpl();
+
+	public static void init(final I38Profile profile) {
+		naming.init(profile);
+	}
+
+	// == ManagedElement =====================================================
+
+	// public static MEDn toMEDn(final String emName, final int emId, final int neIdInEM, final X38SNName snName) {
+	// final MEDn meDn = new MEDn();
+	// meDn.setMe(naming.toMEId(emName, emId, neIdInEM, snName));
+	// return meDn;
+	// }
+
+	public static MEDn toMEDn(final String nmName, final int emId, final X38SNQueryResult in) {
+		final MEDn meDn = new MEDn();
+		meDn.setMe(naming.toMEId(in.getEmName().getValue(), emId, in.getNeIdInEM().getValue(), in.getName(), in.getEmName()
+				.getValue()));
+		return meDn;
+	}
+
+	// == TerminationPoint =====================================================
+
+	public static TPDn toPTPDn(final MEId meId, final X38PortCoord portCoord) {
+		return naming.toPTPDn(meId, portCoord);
+	}
+
+	// == TopologicalLink ========================================================
+
+	public static LinkDn toLinkDn(final String nmName, final X38SmartResIdtype linkId, final X38Layer layer) {
+		return naming.toLinkDn(nmName, linkId.getValue(), layer.getValue());
+	}
+
+	public static LinkDn toLinkDn(final String nmName, final X38LinkId linkId, final X38Layer layer) {
+		return naming.toLinkDn(nmName, linkId.getValue(), layer.getValue());
+	}
+
+	public static LinkDn toLinkDn(final String nmName, final X38PathId pathId, final LayerRate rate) {
+		return naming.toEthLinkDn(nmName, pathId.getValue(), rate.getValue());
+	}
+
+	// == MultiLayerSNPPLink ==============================================
+
+	public static MLSNPPLinkDn toMLSNPPLinkDn(final String nmName, final X38LKId lkId, final X38Layer layer){
+		return naming.toMLSNPPLinkDn(nmName, lkId.getlkInterface().getaddress().getValue(), layer.getValue());
+	}
+
+	// == SubnetworkConnection =================================================
+
+	public static SNCDn toSNCDn(final SNDn snDn, final X38SignalType signalType, final X38PathId pathId, final X38SNC snc) {
+		final SNCDn sncDn = new SNCDn();
+		sncDn.setSn(snDn.getSn());
+		sncDn.setSnc(naming.toSNCId(signalType, pathId, snc)) ;
+		return sncDn;
+	}
+
+	public static SNCDn toSNCDn(final SNDn snDn, final X38SignalType signalType, final X38PathId pathId) {
+		return toSNCDn(snDn, signalType, pathId, null);
+	}
+
+	public static SNCDn toSNCDn(final SNId snId, final SNCId sncId, final X38VCGId vcgId) {
+		final SNCDn sncDn = new SNCDn();
+		sncDn.setSn(snId);
+		final SNCId snc = new SNCId();
+		snc.setValue(sncId.getValue() + "/vcg=" + toString(vcgId));
+		sncDn.setSnc(snc);
+
+		return sncDn;
+	}
+
+	private static String toString(final X38VCGId vcgId) {
+		return String.format("%d:%d", vcgId.getSnId().getId().getValue(), vcgId.getVcgId().getValue());
+	}
+
+	/**
+	 * Returns the last componenet of the NameIdentifier;<br>
+	 * <b>Example: </b><br>
+	 * If the given identifier is "neId=1/shelfId=1/cardI=3", this method
+	 * returns "cardId=3"
+	 * 
+	 * @param identifier - nameIdentifier whose lastName is to be determined.
+	 * @return the last component of the dbIdentifier
+	 */
+	public static String getLastName(final DBIdentifier identifier) {
+		final Object[] idComponents = identifier.getComponents();
+		return (String)idComponents[idComponents.length - 1];
+	}
+
+	/**
+	 * Returns the Relative Distinguished Name of a given NameIdentifier;<br>
+	 * <b>Example: </b><br>
+	 * If the given identifier is "neId=1/shelfId=1/cardI=3", this method
+	 * returns "3"
+	 * 
+	 * @param identifier - nameIdentifier whose RDN is to be determined.
+	 * @return RDN of the dbIdentifier
+	 */
+	public static String getRDN(final DBIdentifier identifier) {
+		final String lastName = getLastName(identifier);
+		final String[] nameComps = lastName.split("=");
+		return nameComps[nameComps.length-1];
+	}
+
+	/**
+	 * This method forms the FTPDn for the given MEId and PortCoordinates. The
+	 * FTP component of the Name will be in the format
+	 * "/shelf=x/card=y/port=z/odu1=id". This method shall be used to find the
+	 * line-side oduFTP of Muxponder or Transponder
+	 * 
+	 * @param meId
+	 * @param portCoord
+	 * @param sigType
+	 * @param id
+	 * @return
+	 */
+	public static TPDn toOduFTpDn(final MEId meId, final PortCoordinates portCoord, final X38SignalType sigType, final int id) {
+
+		final TPDn name = new TPDn();
+		name.setMe(meId);
+		final GenericTPId genTpId = new GenericTPId();
+		genTpId.setCoord(portCoord);
+		String label = "";
+		if (sigType.isOdu1()) {
+			label = "/odu1=" + id;
+		} else if (sigType.isOdu2()) {
+			label = "/odu2=" + id;
+		} else if (sigType.isOdu3()) {
+			label = "/odu3=" + id;
+		}
+
+		genTpId.setLabel(label);
+		name.setPresentTp();
+		name.getTp().setFtp(genTpId);
+		return name;
+	}
+
+}

@@ -1,0 +1,146 @@
+#!/bin/sh
+
+###############################################################################
+#
+#  GetFingerprint
+#
+#  This script contains a TMF License GetFingerprint Utility.
+#
+###############################################################################
+
+###############################################################################
+#
+# @(#) Revision: 1.02 "
+#
+# NOTE:    This script is not configurable!  Any changes made to this
+#          script will be overwritten when you upgrade to the next
+#          release of FULLNAME application.
+#
+# WARNING: Changing this script in any way may lead to all
+#          FULLNAME application.
+#          Do not modify this script.
+#
+##############################################################################
+
+ErrExit()
+{
+  rval=$1
+
+  exit ${rval}
+}
+
+######################
+#Check Parameter     #
+######################
+
+if [ $# -ge 1 ];
+then
+   echo ""
+   echo "Usage $0"
+   echo ""
+   exit 1
+fi
+
+######## Welcome
+echo ""
+echo "========================================================="
+echo "   FULLNAME - LICENSE GET FINGERPRINT UTILITY"
+echo "========================================================="
+echo ""
+
+######## AGENT_USER only may run the script...
+if [ -x /usr/bin/whoami ];
+then
+  if [ $(/usr/bin/whoami) != "AGENT_USER" -a $(/usr/bin/whoami) != "root" ];
+  then
+    echo "\nSorry, you must be AGENT_USER or root user to run this script!"
+    echo ""
+    exit 1
+  fi
+fi
+
+######## Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+######## Set env for AGENT
+JLIMA_JAR=""
+if [ -x "${AGENT_DIR}/SCRIPT/CheckJlima" ]
+then
+    		. "${AGENT_DIR}/SCRIPT/CheckJlima"
+    		if [ $? -ne  0 ]
+       		then
+       		    echo ""
+       			echo "Cannot get Fingerprint..."
+			    echo "Check your LIMA configuration!"
+			    echo ""
+			    exit 1
+       		fi
+    		CheckJlima
+	if [ $? -ne  0 ]
+    then
+    	JLIMA_JAR=${Lima_jlima}
+    else
+    	JLIMA_JAR="${AGENT_DIR}/LIB/jlima.jar"
+    fi
+ fi
+if [ ! -r "${JLIMA_JAR}" ]
+then
+  echo ""
+  echo "Missing file jlima.jar"
+  echo "Please check your installation"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+tmp_finger=""
+
+# Added "#" while getting tmp_finger as suggessted by Franco for TR HN80421 and HN80783
+if [ -x "${JAVA_HOME}/jre/bin/java" ];
+then
+  tmp_finger=$("${JAVA_HOME}/jre/bin/java" -jar "${JLIMA_JAR}" -f "#")
+elif [ -x "${JAVA_HOME}/bin/java" ];
+then
+  tmp_finger=$("${JAVA_HOME}/bin/java" -jar "${JLIMA_JAR}" -f "#")
+else
+  echo ""
+  echo "Cannot find java on your server!"
+  echo "Please check your installation"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+if [ "${tmp_finger}" != "" ];
+then
+  echo ""
+  echo "${tmp_finger}"
+  echo ""
+else
+  echo ""
+  echo "Sorry, cannot retrieve FingerPrint"
+  echo ""
+  exit 1
+fi
+
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" ];
+then
+  if [ "${SG}" = "1" ];
+  then
+    echo ""
+    echo "Please remember to run this utility also in secondary nodes"
+    echo ""
+  fi
+fi
+
+exit 0

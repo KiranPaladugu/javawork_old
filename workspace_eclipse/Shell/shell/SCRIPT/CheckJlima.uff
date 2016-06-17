@@ -1,0 +1,135 @@
+#!/bin/sh
+
+if [ -e ENV_FILE ];
+then
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+if [ -x "${JAVA_HOME}/bin/java" ];
+then
+   JAVA="${JAVA_HOME}/bin/java"
+   
+elif [ -x "${JAVA_HOME}/jre/bin/java" ];
+then
+        JAVA="${JAVA_HOME}/jre/bin/java"
+else
+        echo "Java not installed properly.."
+        exit 1
+fi
+
+
+#TMF should not start if LIMA is not installed in the server (to fix HO80569)
+if [ -e "/opt/ericsson/LIMA" ]
+then
+	Lima_jlima=`find /opt/ericsson/LIMA -name "jlima*"`
+		if [ $? -ne  0 ] || [ Lima_jlima = '' ];
+		then
+			return 1
+		fi
+else
+	return 1
+fi 
+
+CheckJlima()
+{
+        Changed=0
+        LatestJlima="NA";
+        for item in ${Lima_jlima};
+	    do
+	      Latest=0
+		  CompareJlima ${item} ${LatestJlima}
+		  if [ $Latest -eq 1 ]
+	         then
+	        	LatestJlima=${item}
+ 	      fi
+	    done
+		Lima_jlima=$LatestJlima
+        if [ -r ${Lima_jlima} -a ${Lima_jlima} != "" ];
+        then
+        	export Lima_jlima
+        	Lima_jv1=$("${JAVA}" -jar ${Lima_jlima} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 1 )
+            Lima_jv2=$("${JAVA}" -jar ${Lima_jlima} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 2 )
+            Lima_jv3=$("${JAVA}" -jar ${Lima_jlima} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 3 )
+                            
+        	if [ -e "${AGENT_DIR}/LIB/jlima.jar" ]
+        	then
+                Tmf_jlima="${AGENT_DIR}/LIB/jlima.jar"
+                Tmf_jv1=$("${JAVA}" -jar ${Tmf_jlima} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 1 )
+                Tmf_jv2=$("${JAVA}" -jar ${Tmf_jlima} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 2 )
+                Tmf_jv3=$("${JAVA}" -jar ${Tmf_jlima} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 3 )
+                
+               	if [ $Lima_jv1 -gt $Tmf_jv1 ]
+               	then
+                    Changed=1
+				elif [ $Lima_jv1 -eq $Tmf_jv1 ]
+                then
+                    if [ $Lima_jv2 -gt $Tmf_jv2 ]
+                    then
+                        Changed=1
+                    elif [ $Lima_jv2 -eq $Tmf_jv2 ]
+                    then
+                       	if [ $Lima_jv3 -gt $Tmf_jv3 ]
+                        then
+                           	Changed=1
+                        fi
+                    fi
+                fi
+                
+           else
+            	echo "${AGENT_DIR}/LIB/jlima.jar not found"
+            	Changed=1
+           fi
+		fi
+        
+        if [ $Changed -eq 0 ]
+        then
+        	return 0
+             
+        else
+        	return 1
+             
+        fi
+}
+
+#New function added as part of TR HP69434 fix.
+CompareJlima(){
+
+	currentJlimaVer=$1
+	latestJlimaVer=$2
+
+	if [ ${latestJlimaVer} != "NA" ];
+	then
+		currentJlimaVer_jv1=$("${JAVA}" -jar ${currentJlimaVer} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 1 )
+        currentJlimaVer_jv2=$("${JAVA}" -jar ${currentJlimaVer} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 2 )
+        currentJlimaVer_jv3=$("${JAVA}" -jar ${currentJlimaVer} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 3 )
+
+        latestJlimaVer_jv1=$("${JAVA}" -jar ${latestJlimaVer} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 1 )
+        latestJlimaVer_jv2=$("${JAVA}" -jar ${latestJlimaVer} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 2 )
+        latestJlimaVer_jv3=$("${JAVA}" -jar ${latestJlimaVer} -v | grep -v grep | grep version | cut -d ":" -f 2- | cut -d "." -f 3 )
+
+        if [ $currentJlimaVer_jv1 -gt $latestJlimaVer_jv1 ]
+           	then
+                Latest=1
+			elif [ $currentJlimaVer_jv1 -eq $latestJlimaVer_jv1 ]
+            then
+                if [ $currentJlimaVer_jv2 -gt $latestJlimaVer_jv2 ]
+                then
+                    Latest=1
+                elif [ $currentJlimaVer_jv2 -eq $latestJlimaVer_jv2 ]
+                then
+                   	if [ $currentJlimaVer_jv3 -gt $latestJlimaVer_jv3 ]
+                    then
+                       	Latest=1
+                    fi
+                fi
+        fi
+	else
+		Latest=1
+        fi
+}

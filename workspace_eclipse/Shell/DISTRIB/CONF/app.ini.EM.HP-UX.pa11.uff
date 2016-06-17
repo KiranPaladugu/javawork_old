@@ -1,0 +1,140 @@
+[TRACE]
+LogFilePathName = $(LOG_DIR)/app.log
+
+[OUTPUT]
+STDIN  = /dev/null
+STDOUT = $(LOG_DIR)/app_stdout.log
+STDERR = $(LOG_DIR)/app_stderr.log
+
+[OPTIONS]
+# se MAX_NUM_RETRY <= 0 e' equivalente ad infinito
+MAX_NUM_RETRY = 0
+# per MAX_NUM_CHECK_4_ALIVE valori compresi tra 1 e 2147483647, default 100
+MAX_NUM_CHECK_4_ALIVE = 10
+# modalita' di terminazione dei processi: SERIAL (default) o PARALLEL
+TERMINATION_MODE = SERIAL
+# indica se iterare o meno il segnale di terminazione (YES/NO), default NO
+ITER_TERMINATION = NO
+# numero in secondi per l'iterazione del segnale di terminazione, default 5
+ITER_GAP = 5
+
+[PREPARE_START]
+PrepareStartProc = $(SCRIPT_DIR)/pre_start
+
+[Macro]
+JAVA_DIR = __JAVADIR__
+JAVA_BIN_DIR = $(JAVA_DIR)/bin
+
+
+IMR = jac_imr
+SERVER = server
+# Tomcat object (in OpenFusion)
+#SERVICE_NAME = OBJECT_NAME
+# Per ora lo metto cablato
+SERVICE_NAME = TMFI36
+
+ROOT_DIR = AGENT_FULL_PATH
+CONF_DIR = $(ROOT_DIR)/CONF
+SCRIPT_DIR = $(ROOT_DIR)/SCRIPT
+LOG_DIR = $(ROOT_DIR)/LOG
+BIN_DIR = $(ROOT_DIR)/BIN
+LIB_DIR = $(ROOT_DIR)/LIB
+APP_NAME = com.marconi.fusion.tmf.Main
+OPEN_FUSION_BIN_DIR = $(ROOT_DIR)/CORBA/bin
+OPEN_FUSION_LIB_DIR = $(ROOT_DIR)/CORBA/lib
+
+#[SECTIONNAME only for example]
+#SEC1..N = NAMESECTION, MIN_TIMEOUT_FOR_ALIVE, START
+#NAMESECTION nome della sezione del processo
+#MIN_TIMEOUT_FOR_ALIVE tempo minimo di sopravvivenza del processo, default 1
+#START indica se startare o meno il processo (ENABLE - DISABLE), default ENABLE
+
+[SECTIONNAME]
+SEC1 = SECTION1, 10, __CORBA_ENABLE__
+SEC2 = SECTION2, 15, __CORBA_ENABLE__
+SEC3 = SECTION3, 15, __CORBA_ENABLE__
+SEC4 = SECTION4, 5, DISABLE
+SEC5 = SECTION5, 5, __TMFASYNC_ENABLE__
+SEC6 = SECTION6, 5, ENABLE
+
+#[SECTION_NAME_GENERIC]
+#PROC e' obbligatorio, con il path e gli argomenti eventualmente con path
+#WDIR e' obbligatorio, con il path completo
+#CONTROL e' obbligatorio, valore YES NO, che indica se il processo e'
+# monitorato o meno
+#SINGLE_RESTART e' facoltativo, valore YES NO, che indica se il processo deve
+# essere restartato in maniera singola (YES) o assieme a tutti i processi,
+# il valore di default e' NO
+#ENV1...N e' facoltativo, sintassi env_name value
+
+[SECTION1]
+PROC = $(OPEN_FUSION_BIN_DIR)/$(IMR)
+WDIR = $(OPEN_FUSION_BIN_DIR)
+CONTROL = YES
+PARAM1 = -n
+PARAM2 = -a
+ENV1 = PATH $(PATH):/usr/bin:.:$(OPEN_FUSION_BIN_DIR):$(JAVA_BIN_DIR)
+ENV2 = CLASSPATH .:$(CLASSPATH)
+
+[SECTION2]
+PROC = $(OPEN_FUSION_BIN_DIR)/$(SERVER)
+WDIR = $(OPEN_FUSION_BIN_DIR)
+CONTROL = YES
+PARAM1 = -run
+PARAM2 = NameService
+ENV1 = PATH $(PATH):/usr/bin:.:$(OPEN_FUSION_BIN_DIR):$(JAVA_BIN_DIR)
+ENV2 = CLASSPATH .:$(CLASSPATH)
+
+[SECTION3]
+PROC = $(OPEN_FUSION_BIN_DIR)/$(SERVER)
+WDIR = $(OPEN_FUSION_BIN_DIR)
+CONTROL = YES
+PARAM1 = -run
+PARAM2 = NotificationService
+ENV1 = PATH $(PATH):/usr/bin:.:$(OPEN_FUSION_BIN_DIR):$(JAVA_BIN_DIR)
+ENV2 = CLASSPATH .:$(CLASSPATH)
+
+[SECTION4]
+PROC = $(BIN_DIR)/TMFA_Man
+WDIR = $(BIN_DIR)
+CONTROL = YES
+PARAM1 = -p
+PARAM2 = $(CONF_DIR)/TMFA_Man.ini
+
+[SECTION5]
+PROC = $(SCRIPT_DIR)/AsyncManager.sh
+WDIR = $(SCRIPT_DIR)
+CONTROL = YES
+PARAM1 = $(JAVA_BIN_DIR)
+
+[SECTION6]
+PROC = $(JAVA_BIN_DIR)/java
+WDIR = $(LIB_DIR)
+CONTROL = YES
+PARAM1 = -server
+PARAM2 = -Xms384m
+PARAM3 = -Xmx1024m
+PARAM4 = -V2
+PARAM5 = -XX:+UseGetTimeOfDay
+PARAM6 = -XX:MaxPermSize=256m
+PARAM7 = -Dlog4j.configuration=file:$(CONF_DIR)/log4j.xml
+PARAM8 = -Dlog4j.configuratorClass=com.marconi.fusion.base.logging.log4j.Configurator
+PARAM9 = -Dlog4j.configuration.watchEnabled=yes
+PARAM10 = -Dlog4j.configuration.watchDelay=120000
+PARAM11 = -Djlima.logHome=$(LOG_DIR)
+PARAM12 = -Djava.security.auth.login.config=file:$(CONF_DIR)/jaas.config
+PARAM13 = -Dorg.apache.cxf.Logger=org.apache.cxf.common.logging.Log4jLogger 
+PARAM14 = -classpath
+PARAM15 = $(TMF_XP)
+PARAM16 = $(APP_NAME)
+PARAM17 = $(APP_NAME)
+PARAM18 = -p
+PARAM19 = $(CONF_DIR)/Application.properties
+PARAM20 = -p
+PARAM21 = $(CONF_DIR)/ORB.properties
+PARAM22 = -p
+PARAM23 = $(CONF_DIR)/TMFFramework.properties
+ENV1 = OO_CONNECT_RETRIES 2
+ENV2 = OO_AMS_USAGE NoAMS
+ENV3 = SHLIB_PATH AGENT_SHLPATH
+ENV4 = LD_LIBRARY_PATH AGENT_LDLPATH

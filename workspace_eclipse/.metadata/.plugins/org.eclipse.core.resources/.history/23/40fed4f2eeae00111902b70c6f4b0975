@@ -1,0 +1,759 @@
+/**
+ * File: X38SBIClient.java
+ */
+
+package com.marconi.fusion.tmf.i38PlugIn.sbi;
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X38.X38EMs;
+import com.marconi.fusion.X38.X38Message;
+import com.marconi.fusion.X38.X38MsgEMLostConnection;
+import com.marconi.fusion.X38.X38MsgEMReconnection;
+import com.marconi.fusion.X38.X38MsgEMStatus;
+import com.marconi.fusion.X38.X38MsgModNMAlarmList;
+import com.marconi.fusion.X38.X38SetOfEMs;
+import com.marconi.fusion.X38.X38SetOfLoggedUser;
+import com.marconi.fusion.X38.X38SetOfNMAlarm;
+import com.marconi.fusion.base.application.BaseApplication;
+import com.marconi.fusion.base.application.WrongInitializationException;
+import com.marconi.fusion.tmf.SBI.SBIKey;
+import com.marconi.fusion.tmf.SBIContainer.SBIContainer;
+import com.marconi.fusion.tmf.additionalInformation.CircuitSystemProfile;
+import com.marconi.fusion.tmf.additionalInformation.EmSystemProfile;
+import com.marconi.fusion.tmf.additionalInformation.ManagedSystemProfile;
+import com.marconi.fusion.tmf.db.DBEms;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.Session;
+import com.marconi.fusion.tmf.i38PlugIn.Formatter;
+import com.marconi.fusion.tmf.i38PlugIn.GCTUser;
+import com.marconi.fusion.tmf.i38PlugIn.I38MessageHandler;
+import com.marconi.fusion.tmf.i38PlugIn.I38PlugIn;
+import com.marconi.fusion.tmf.i38PlugIn.I38Profile;
+import com.marconi.fusion.tmf.i38PlugIn.converter2.Converter;
+import com.marconi.fusion.tmf.i38PlugIn.db2.CTPHolder;
+import com.marconi.fusion.tmf.i38PlugIn.db2.I38Database;
+import com.marconi.fusion.tmf.i38PlugIn.db2.PTPHolder;
+import com.marconi.fusion.tmf.i38PlugIn.db2.SNCHolder;
+import com.marconi.fusion.tmf.i38PlugIn.sbi.async.I38AsyncManager;
+import com.marconi.fusion.tmf.i38PlugIn.sbi.realigner.Realigner;
+import com.marconi.fusion.tmf.plugIn.IEventConsumer;
+import com.marconi.fusion.tmf.plugIn.ISession;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.PluginEventDispatcher;
+import com.marconi.fusion.tmf.plugIn.types.AlarmEvent;
+import com.marconi.fusion.tmf.plugIn.types.EMS;
+import com.marconi.fusion.tmf.plugIn.types.Event;
+import com.marconi.fusion.tmf.plugIn.types.ExceptionType;
+import com.marconi.fusion.tmf.plugIn.types.LinkDn;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.SNCDn;
+import com.marconi.fusion.tmf.plugIn.types.SNDn;
+import com.marconi.fusion.tmf.plugIn.types.SNId;
+import com.marconi.fusion.tmf.plugIn.types.TPDn;
+import com.marconi.fusion.tmf.realignmentHandler.rh.ConnectionInfo;
+import com.marconi.fusion.tmf.sbi.em.SBIManager;
+import com.marconi.fusion.tmf.sbi.nm.AbstractBase;
+import com.marconi.fusion.tmf.sbi.nm.IStateEventListener;
+import com.marconi.fusion.tmf.sbi.nm.SBIException;
+import com.marconi.fusion.tmf.sbi.nm.X38SBI;
+
+/**
+ * @author mercurio
+ *
+ */
+public class X38SBIClient extends AbstractBase implements IStateEventListener {
+
+	private static Log log = LogFactory.getLog(X38SBIClient.class);
+
+	private I38PlugIn plugIn = null;
+	private boolean closed = false;
+	private String nmName = null;
+	private String rootSNName = null;
+	private I38AsyncManager asyncManager = null;
+	private I38Database i38Database = null;
+	private HistoryInfo historyInfo = null;
+	private I38SBIEventHandler<X38Message<?>> eventHandler = null;
+	private EmManager emManager = null;
+	private I38MessageHandler msgHandler = null;
+	private X36EventListener x36EventListener = null;
+	private boolean berRealign = false;
+	private boolean importOp = false;
+	private boolean exportOp = false;
+	/** field added to check whether control plane is enabled or not **/
+	private boolean controlPlaneManagement = false;
+	/** Index which represents the I38 version used by SO-NM **/
+	int currentI38Index = -1;
+	SBIManager sbiManager = null;
+
+	private static X38SBIClient sbiClient = null;
+	private final List<EmInfo> emInfoList = new ArrayList<EmInfo>();
+
+	public List<EmInfo> getEmInfoList() {
+		return emInfoList;
+	}
+
+	// SBIKey sbiKey = null;
+	public I38PlugIn getPlugIn() {
+		return plugIn;
+	}
+
+	public I38MessageHandler getMessageHandler() {
+		return msgHandler;
+	}
+
+	public String getEMSName() {
+		return plugIn.getName();
+	}
+
+	public String getNMName() {
+		return nmName;
+	}
+
+	public String getSNName() {
+		return rootSNName;
+	}
+
+	public SNDn getSNDn() {
+		final SNDn out = new SNDn();
+		final SNId snId = new SNId();
+		snId.setMlsnId(rootSNName);
+		out.setSn(snId);
+		return out;
+	}
+
+	public I38Profile getProfile() {
+		return plugIn.getProfile();
+	}
+
+	@Deprecated
+	public IEventConsumer getEventManager() {
+		return plugIn.getEventConsumer();
+	}
+
+	public EmManager getEmManager() {
+		return emManager;
+	}
+
+	public I38AsyncManager getAsyncManager() {
+		return asyncManager;
+	}
+
+	public I38Database getDatabase() {
+		return i38Database;
+	}
+
+	public HistoryInfo getHistoryInfo() {
+		return historyInfo;
+	}
+
+	public ISession getOrchestratorSession() {
+		return plugIn.getOrchestratorSession();
+	}
+	public boolean isFirstRealignment() {
+		return !historyInfo.exists();
+	}
+
+	public boolean isControlPlaneManagementEnabled() {
+		return controlPlaneManagement;
+	}
+
+	@Override
+	public String name() {
+
+		return "SBI[---]:" + "NULL";
+		/*
+		 * if (getSBI() == null) { return "SBI[---]:" + "NULL"; } return
+		 * String.format("SBI[%s%s]:", getSBI().isConnected ? "C" : "c",
+		 * realigned ? "R" : "r") + getSBI().name();
+		 */}
+
+	public X38SBIClient(final I38PlugIn plugIn) throws Exception {
+
+		this.plugIn = plugIn;
+		nmName = getProfile().getProperty(I38Profile.Key.NM_NAME, "MV38");
+		rootSNName = getProfile().getProperty(I38Profile.Key.ROOT_SUBNETWORK_NAME, "root");
+		controlPlaneManagement = getProfile().getBoolProperty(I38Profile.Key.CONTROLPLANE, false);
+
+		eventHandler = new I38SBIEventHandler<X38Message<?>>(this);
+		emManager = new EmManager(this);
+		x36EventListener = new X36EventListener(this);
+
+		berRealign = BaseApplication.getApplication().getCommandLine().hasOption("readBer");
+		importOp = BaseApplication.getApplication().getCommandLine().hasOption("import");
+		exportOp = BaseApplication.getApplication().getCommandLine().hasOption("export");
+		sbiClient = this;
+
+	}
+
+	public static X38SBIClient getInstance() {
+		return sbiClient;
+	}
+
+	public int flushAlarms(final LinkDn linkDn) {
+		return eventHandler.flushAlarms(linkDn);
+	}
+
+	public int flushAlarms(final SNCDn sncDn) {
+		return eventHandler.flushAlarms(sncDn);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.i38PlugIn.AbstractBase#dumpSyntax()
+	 */
+
+	@Override
+	protected boolean dumpSyntax() {
+		return false;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see
+	 * com.marconi.fusion.tmf.plugIn.SBI#init(com.marconi.fusion.tmf.plugIn.
+	 * IEventConsumer)
+	 */
+
+	public void init(final IEventConsumer event) throws WrongInitializationException {
+		log.info(format(">>> Initializing X38SBIClient..."));
+		// Passing null in setNmList method. Following needs to be modified when
+		// Multiple NM scenario has to be handled
+		plugIn.setNmList(null);
+		historyInfo = new HistoryInfo(this);
+		if (!historyInfo.isValid()) {
+			log.error(format("Invalid History Info. Unable to init DB."));
+			throw new WrongInitializationException("Invalid History Info. Unable to init DB.");
+		}
+		msgHandler = I38MessageHandler.getInstance(this);
+		i38Database = new I38Database(plugIn.getDatabaseManager(), this);
+		i38Database.init();
+		// i38Database.setNotificationEnabled(true);
+		if (!berRealign && !importOp && !exportOp) {
+			asyncManager = new I38AsyncManager(this);
+		}
+
+		log.info(format(">>> X38SBIClient initialization completed."));
+		log.info(format("Register PluginEventListeners..."));
+		PluginEventDispatcher.getPluginEventDispatcher().addPluginEventListener(x36EventListener);
+		PluginEventDispatcher.getPluginEventDispatcher().addPluginEventListener(emManager);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.plugIn.SBI#start()
+	 */
+
+	public void start() throws PlugInException {
+		log.info(format(">>> Starting X38SBIClient..."));
+		final List<ConnectionInfo> nmList = getPlugIn().getNmList();
+		final Iterator<ConnectionInfo> itrNmList = nmList.iterator();
+		while (itrNmList.hasNext()) {
+			final String hostName = itrNmList.next().getHost();
+			try {
+				log.info(format("Connecting to NM %s ...", hostName));
+
+				// Register X38SBIClient as StateEvent Listner, plugin has to
+				// handle
+				// SBI connect and disconnect events.
+				final X38SBI x38Sbi = getSBI(hostName);
+				if (x38Sbi == null) {
+					throw new Exception(" SBI is null. X38SBI not initialized");
+				}
+				if (x38Sbi.isConnected) {
+					x38Sbi.connect(this.getProfile());
+					x38Sbi.getStateEventDispatcher().addListener(this);
+
+					// register EventHandler to listen for Alarms and EM status
+					x38Sbi.getEventProvider().addConsumer(eventHandler, X38MsgModNMAlarmList.class.getName());
+					x38Sbi.getEventProvider().addConsumer(eventHandler, X38MsgEMLostConnection.class.getName());
+					x38Sbi.getEventProvider().addConsumer(eventHandler, X38MsgEMReconnection.class.getName());
+					x38Sbi.getEventProvider().addConsumer(eventHandler, X38MsgEMStatus.class.getName());
+
+					updateGctDetails(hostName);
+
+//					if (asyncManager != null && !berRealign && !importOp && !exportOp) {
+//						asyncManager.init();
+//						asyncManager.start();
+//					}
+
+
+				}
+
+			} catch (final Exception ex) {
+				log.error(ex);
+				throw PlugInExceptionHandler.internalError("SBI initialization error.");
+			}
+			if (getSBI(hostName).getUserId() == null) {
+				log.error(format(" %s NM login FAILED.", hostName));
+				throw PlugInExceptionHandler.internalError(hostName + " NM login failed.");
+			}
+
+		}
+
+		log.info(format(">>> X38SBIClient  started."));
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.plugIn.SBI#shutdown()
+	 */
+
+	public void shutdown() {
+		final String hostName = getPlugIn().getNmList().get(0).getHost();
+		log.info(format(">>> Shutdown X38SBIClient..."));
+		closed = true;
+
+		try {
+			terminate();
+			// getting SBI form conatainer then call sbi shutdown form container
+			if (getSBI(hostName) != null) {
+				getSBI(hostName).shutdown();
+			}
+		} catch (final Exception ex) {
+			log.error(format(ex));
+		}
+
+		log.info(format("Deregister PluginEventListeners..."));
+		PluginEventDispatcher.getPluginEventDispatcher().removePluginEventListener(x36EventListener);
+		PluginEventDispatcher.getPluginEventDispatcher().removePluginEventListener(emManager);
+
+		i38Database.shutdown();
+		log.info(format(">>> X38SBIClient Shutdown completed."));
+	}
+
+	@Override
+	public void onDisconnect() {
+		log.info(format(">>> X38SBIClient Disconnected."));
+		final String hostName = getPlugIn().getNmList().get(0).getHost();
+		if (isFirstRealignment()) {
+			System.exit(-1);
+		}
+		sendEMSAlarm(false);
+		getSBI(hostName).resetUserId();
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @seecom.marconi.fusion.tmf.i38PlugIn.I38Support.IStateEventListener#
+	 * onConnectionFailed(int)
+	 */
+
+	@Override
+	public void onConnectionFailed(final int retry) {
+		log.error("Connection to NM Failed: retry...");
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @seecom.marconi.fusion.tmf.i38PlugIn.I38Support.IStateEventListener#
+	 * onConnectionRetryStopped()
+	 */
+
+	@Override
+	public void onConnectionRetryStopped() {
+		shutdown();
+		System.exit(-1);
+	}
+
+	public void terminate() {
+		stopAlarms();
+		if (asyncManager != null) {
+			asyncManager.shutdown();
+		}
+	}
+
+	private void stopAlarms() {
+		try {
+			final List<ConnectionInfo> nmList = getPlugIn().getNmList();
+			for (int i = 0; i < nmList.size(); i++) {
+				if (getSBI(nmList.get(i).getHost()).isConnected && getSBI(nmList.get(i).getHost()).getUserId() != null) {
+					msgHandler.stopNMAlarmList(nmList.get(i).getHost());
+				}
+			}
+		} catch (final Exception ex) {
+			log.error(format(ex));
+		}
+	}
+
+	public void sendEMSAlarm(final boolean connected) {
+		if (closed) {
+			return;
+		}
+
+		try {
+			EMS ems = null;
+
+			try {
+				i38Database.beginSession(false);
+				final DBEms dbEms = i38Database.getDBEms();
+				if (dbEms != null) {
+					ems = dbEms.getInformation();
+				} else {
+					throw new Exception("Cannot find EMS");
+				}
+			} finally {
+				i38Database.terminateSession();
+			}
+
+			final AlarmEvent alarmEvent = Converter.getDefault().getAlarmConverter().toAlarmEvent(ems, connected);
+			if (alarmEvent == null) {
+				throw new Exception("Cannot get AlarmEvent");
+			}
+
+			final Event event = new Event();
+			event.setAlarm(alarmEvent);
+
+			plugIn.getEventConsumer().pushEvent(event);
+		} catch (final Exception ex) {
+			log.error(ex);
+		}
+	}
+
+	public void startAlarms(final String hostName) throws Exception {
+		if (!plugIn.getProfile().getBoolProperty(I38Profile.Key.SBI_NMALARM_ENABLED, true)) {
+			log.warn("NMAlarm DISABLE");
+			return;
+		}
+
+		try {
+			eventHandler.setRealignAlarms(true);
+			final X38SetOfNMAlarm setOfNMAlarm = msgHandler.getNMAlarmList(
+					getProfile().getBoolProperty(I38Profile.Key.SBI_CORRELATED_ALARMS, false), hostName);
+			eventHandler.realign(setOfNMAlarm);
+
+			eventHandler.onEvent(getEmAlarmStates());
+		} finally {
+			eventHandler.setRealignAlarms(false);
+		}
+	}
+
+	/**
+	 * To get the EMAlarmState for each em
+	 *
+	 * @return
+	 */
+
+	private X38MsgEMStatus getEmAlarmStates() {
+		final X38MsgEMStatus emStatus = new X38MsgEMStatus();
+		final X38SetOfEMs setOfEMs = emStatus.getBody().getSetofEMs();
+		final Set<Integer> emIds = emManager.getAllEMId();
+		final Iterator<Integer> itr = emIds.iterator();
+		while (itr.hasNext()) {
+			final int emId = itr.next();
+			final X38EMs ems = new X38EMs();
+			final EmInfo emInfo = emManager.getEmInfo(emId);
+			ems.setEmId(emInfo.getEMId());
+			ems.setEmName(emInfo.getEMName());
+			ems.setEmState(emInfo.getEMState());
+			ems.setEmAlarmState(emInfo.getEMAlarmState());
+			setOfEMs.add(ems);
+		}
+		return emStatus;
+	}
+
+	/*
+	 * Update GUITable with Manual logged users
+	 */
+	private void updateGctDetails(final String hostName) {
+
+		X38SetOfLoggedUser setOfLoggedUser = null;
+		try {
+			setOfLoggedUser = msgHandler.getLoggedUsersList(hostName);
+			GCTUser.loadGCTMap(setOfLoggedUser);
+
+		} catch (final SBIException ex) {
+			throw PlugInExceptionHandler.internalError(Formatter.MSG_INTERNAL_ERROR);
+		}
+
+	}
+
+	/**
+	 * Method to return SBI based on HostDetails
+	 *
+	 * @param hostDetails
+	 * @return X38SBI
+	 */
+	public X38SBI getSBI(final String hostDetails) {
+		X38SBI sbi = null;
+		SBIKey sbiKey = null;
+		ConnectionInfo nmProperty = null;
+		try {
+			final List<ConnectionInfo> nmList = plugIn.getNmList();
+			final Iterator<ConnectionInfo> nmListItr = nmList.iterator();
+			while (nmListItr.hasNext()) {
+				nmProperty = nmListItr.next();
+				final String hostName = nmProperty.getHost();
+
+				if (hostDetails.equalsIgnoreCase(hostName)) {
+					sbiKey = new SBIKey(getPlugIn().getClass().getSimpleName(), hostName);
+					sbi = (X38SBI) SBIContainer.getInstance().getSbiObj(sbiKey);
+					break;
+				}
+			}
+		} catch (final Exception e) {
+			log.error(format(e));
+			return sbi;
+		}
+		return sbi;
+	}
+
+	/**
+	 * This method gets called when SBI is disconnected from NM. This method is
+	 * not called when SBI starts for the first time, as SBIClient will not be
+	 * created by that time
+	 */
+	@Override
+	public void onConnect() {
+		try {
+			final String hostName = getPlugIn().getNmList().get(0).getHost();
+			if (getSBI(hostName).isConnected == true) {
+				sendEMSAlarm(true);
+				i38Database.buildMECache();
+				startAsyncRealign();
+
+				if (getProfile().getBoolProperty(I38Profile.Key.SBI_REALIGN_ME_NOT_INSYNC, false)) {
+					final Realigner realigner = new Realigner(this, "BOOTSTRAP");
+					realigner.realignMENotInSync(getSNDn());
+				}
+
+			}
+		} catch (final Exception e) {
+			log.error(" Error while building ME Cache ");
+			log.error(format(e));
+		}
+	}
+
+	/**
+	 * This method saves the current time stamp on HistoryInfo file
+	 */
+	public void saveTimeStamp() {
+		try {
+			String timeStamp = null;
+			if (asyncManager != null) {
+				timeStamp = asyncManager.getTimeString();
+			}
+			if (timeStamp != null) {
+				historyInfo.saveTimestamp(timeStamp);
+			}
+		} catch (final Exception e) {
+			log.error(" Could not save time stamp in HistoryInfo ");
+			log.error(format(e));
+		}
+	}
+
+	/**
+	 * Method to initiate Realign on AsyncManager
+	 */
+	public void startAsyncRealign() {
+		try {
+			if (!berRealign) {
+				log.info(format("*** Performing Async realignment..."));
+				asyncManager.realign();
+				log.info(format("*** Async realignment completed."));
+			}
+		} catch (final Exception ex) {
+			log.error(format(ex));
+		}
+	}
+
+	public String getHostDetails(final SNCHolder snc) {
+		CircuitSystemProfile circuitSystemProfile = null;
+		final DBManagedElement dbME = snc.getDBObject().getSubnetwork().get().getMEs().get(0);
+		circuitSystemProfile = getCircuitSystemProfile(dbME);
+		return circuitSystemProfile != null ? circuitSystemProfile.getSyntax().getHostId().getValue() : null;
+
+	}
+
+	public String getHostDetails(final TPDn tpDn) {
+		try {
+			CircuitSystemProfile circuitSystemProfile = null;
+			circuitSystemProfile = getCircuitSystemProfile(this.getDatabase().getManagedElement(tpDn).getDBObject());
+			return circuitSystemProfile != null ? circuitSystemProfile.getSyntax().getHostId().getValue() : null;
+		} catch (final Exception e) {
+			log.error(format(e));
+			return null;
+		}
+	}
+
+	public String getHostName(final MEDn meDn) {
+		Session session = null;
+		CircuitSystemProfile circuitSystemProfile = null;
+		boolean closeSession = false;
+		try {
+			session = getDatabase().getSession();
+			if (session == null) {
+				session = getDatabase().beginSession(false);
+				closeSession = true;
+			}
+			final DBManagedElement dbME = getDatabase().getManagedElement(meDn).getDBObject();
+			circuitSystemProfile = getCircuitSystemProfile(dbME);
+
+			if (circuitSystemProfile == null) {
+				log.error(" Could not find CircuitSystemProfile ");
+				throw new PlugInException(ExceptionType.EXCPT_INTERNAL_ERROR, "Not possible to retrieve CircuitSystemProfile.");
+			}
+			return circuitSystemProfile.getSyntax().getHostId().getValue();
+		} catch (final Exception e) {
+			log.error(" Could not get DBManagedElement for the ME %s " + meDn.toString());
+			throw new PlugInException(ExceptionType.EXCPT_INTERNAL_ERROR, "Not possible to retrieve DBManagedElement.");
+		} finally {
+			if (closeSession) {
+				session.terminate();
+				session = null;
+			}
+		}
+	}
+
+	public String getEmHostName(final MEDn meDn) {
+		Session session = null;
+		EmSystemProfile emSystemProfile = null;
+		boolean closeSession = false;
+		try {
+			session = getDatabase().getSession();
+			if (session == null) {
+				session = getDatabase().beginSession(false);
+				closeSession = true;
+			}
+			final DBManagedElement dbME = getDatabase().getManagedElement(meDn).getDBObject();
+			emSystemProfile = getEmSystemProfile(dbME);
+
+			if (emSystemProfile == null) {
+				log.error(" Could not find EmSystemProfile ");
+				throw new PlugInException(ExceptionType.EXCPT_INTERNAL_ERROR, "Not possible to retrieve EmSystemProfile.");
+			}
+			return emSystemProfile.getSyntax().getHostId().getValue();
+		} catch (final Exception e) {
+			log.error(" Could not get DBManagedElement for the ME %s " + meDn.toString());
+			throw new PlugInException(ExceptionType.EXCPT_INTERNAL_ERROR, "Not possible to retrieve DBManagedElement.");
+		} finally {
+			if (closeSession) {
+				session.terminate();
+				session = null;
+			}
+		}
+	}
+
+	public String getHostName(final SNCDn sncName) {
+		Session session = null;
+		try {
+			session = getDatabase().getSession();
+			if (session == null) {
+				session = getDatabase().beginSession(false);
+			}
+			final MEDn meDn = getDatabase().getDBSnc(sncName).getSubnetwork().get().getMEs().get(0).getManagedElementDn();
+			return getHostName(meDn);
+		} catch (final Exception e) {
+			log.error(" Could not get SNC for the sncDN %s " + sncName.toString());
+			throw new PlugInException(ExceptionType.EXCPT_INTERNAL_ERROR, "Not possible to retrieve DBManagedElement.");
+		} finally {
+			if (session != null) {
+				session.terminate();
+				session = null;
+			}
+		}
+	}
+
+	public String getHostName() {
+		return getPlugIn().getNmList().get(0).getHost();
+	}
+
+	/**
+	 * Method to retrieve hostdetails from PTP
+	 *
+	 * @param ptp
+	 * @return
+	 * @throws Exception
+	 */
+	public String getHostDetails(final CTPHolder ptp) throws Exception {
+		String hostDetails = "";
+		final boolean terminateNeed = false;
+		try {
+			if (getDatabase().getSession() == null) {
+				getDatabase().beginSession(false);
+			}
+			CircuitSystemProfile circuitSystemProfile = null;
+			circuitSystemProfile = getCircuitSystemProfile(getDatabase().getManagedElement(ptp.getDBObject().getDn().getMe())
+					.getDBObject());
+			hostDetails = circuitSystemProfile != null ? circuitSystemProfile.getSyntax().getHostId().getValue() : null;
+		} catch (final Exception e) {
+			log.error("Could not get DB object " + e);
+		} finally {
+			if (terminateNeed) {
+				getDatabase().terminateSession();
+			}
+		}
+		return hostDetails;
+	}
+
+	/**
+	 * Method to retrieve hostdetails from PTP
+	 *
+	 * @param ptp
+	 * @return
+	 * @throws Exception
+	 */
+	public String getHostDetails(final PTPHolder ptp) throws Exception {
+		CircuitSystemProfile circuitSystemProfile = null;
+		circuitSystemProfile = getCircuitSystemProfile(getDatabase().getManagedElement(ptp.getDBObject().getDn().getMe())
+				.getDBObject());
+		final String hostDetails = circuitSystemProfile != null ? circuitSystemProfile.getSyntax().getHostId().getValue() : null;
+		return hostDetails;
+	}
+
+	/**
+	 * Returns EmSystemProfile
+	 * 
+	 * @param dbME
+	 * @return
+	 */
+	public EmSystemProfile getEmSystemProfile(final DBManagedElement dbME) {
+		EmSystemProfile emSystemProfile = null;
+		try {
+			final ManagedSystemProfile systemProfiles = (ManagedSystemProfile) dbME
+					.getAdditionalInformation(ManagedSystemProfile.NAME);
+
+			if (systemProfiles != null && systemProfiles.isPresentEmSystemProfile()) {
+				emSystemProfile = systemProfiles.getEmSystemProfile();
+			}
+
+		} catch (final PlugInException e) {
+			log.error(" Error while reading ManagedSystemProfile from DBManagedElement " + e);
+		}
+		return emSystemProfile;
+	}
+
+	/**
+	 * Returns CircuitSystemProfile
+	 * 
+	 * @param dbME
+	 * @return
+	 */
+	public CircuitSystemProfile getCircuitSystemProfile(final DBManagedElement dbME) {
+		CircuitSystemProfile cktSystemProfile = null;
+		try {
+			final ManagedSystemProfile systemProfiles = (ManagedSystemProfile) dbME
+					.getAdditionalInformation(ManagedSystemProfile.NAME);
+
+			if (systemProfiles != null && systemProfiles.isPresentCktSystemProfile()) {
+				cktSystemProfile = systemProfiles.getCktSystemProfile();
+			}
+		} catch (final PlugInException e) {
+			log.error(" Error while reading ManagedSystemProfile from DBManagedElement " + e);
+		}
+		return cktSystemProfile;
+	}
+}

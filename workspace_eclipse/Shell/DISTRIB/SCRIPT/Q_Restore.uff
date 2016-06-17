@@ -1,0 +1,481 @@
+#!/bin/sh
+
+ErrExit()
+{
+  rval=$1
+  /bin/rm -rf ${agent_path}/FDBACKUP > /dev/null 2>&1
+  if [ ${rval} -ne 0 ];
+  then
+    echo "\nFULLNAME Database restore NOT performed!\n"
+  else
+    echo "\nFULLNAME Database restore successfully completed!\n"
+  fi
+  
+  cd "${cur_dir}"
+
+  exit ${rval}
+}
+
+######################
+#Check Parameter     #
+######################
+
+if [ $# -ge 2 ];
+then
+   echo ""
+   echo "Usage $0 [backup_file_fullpathname]"
+   echo ""
+   exit 1
+fi
+
+bfile=""
+if [ "$1" != "" ];
+then
+  bfile="$1"
+  if [ ! -r "${bfile}" ];
+  then
+    echo ""
+    echo "\nSorry, file ${bfile} doesn't exist."
+    echo ""
+    exit 1
+  fi
+fi
+
+######## Welcome
+echo ""
+echo "========================================================="
+echo "   FULLNAME - DATABASE RESTORE UTILITY"
+echo "========================================================="
+echo ""
+
+######## AGENT_USER only may run the script...
+if [ -x /usr/bin/whoami ];
+then
+  if [ $(/usr/bin/whoami) != "AGENT_USER" ];
+  then
+    echo "\nSorry, you must be AGENT_USER to run this script!"
+    echo ""
+    exit 1
+  fi
+fi
+
+######## Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then 
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+######## Set Env for AGENT
+
+object_path=${OBJDIR}/bin
+agent_path=${AGENT_DIR}
+set_name=$(basename agent_path)_BUP
+boot_file="SOO_TMF_DB.boot"
+boot_path=${agent_path}/DATA
+boot_empty_path=${agent_path}/DBRESTORE
+DATE=$(/bin/date '+%Y_%m_%d_%H_%M_%S')
+DATA_DIR="${AGENT_DIR}/DATA"
+CONF_DIR="${AGENT_DIR}/CONF"
+USERS_DIR="${AGENT_DIR}/USERS"
+TMP_DIR="${AGENT_DIR}/USERS"
+
+######## Controllo che i processi non siano running
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" ];
+then
+  if [ "${SG}" = "1" ];
+  then
+    HP_ARCH=pa11
+    if [ -x /usr/bin/hp-pa ];
+    then
+      /usr/bin/hp-pa
+      if [ $? -ne 0 ];
+      then
+        HP_ARCH=ia64
+        OS_SUBVER=$(uname -r | awk -F. '{print $3}')
+        if [ "${OS_SUBVER}" -ge "31" ];
+        then
+          HP_ARCH="ia64_31"
+        fi
+      fi
+    fi 
+    if [ ! "${AGENT_DIR}/BIN/monitorapp" -ef "${AGENT_DIR}/BIN/monitorapp.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/BIN/monitorapp.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/BIN/monitorapp"  
+    fi
+    #if [ ! "${AGENT_DIR}/LIB/oojava.jar" -ef "${AGENT_DIR}/LIB/oojava.jar.${curr_os}.${HP_ARCH}" ];
+    #then
+    #  ln -f -s "${AGENT_DIR}/LIB/oojava.jar.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/LIB/oojava.jar"  
+    #fi
+    if [ ! "${AGENT_DIR}/BIN/TMFA_Man" -ef "${AGENT_DIR}/BIN/TMFA_Man.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/BIN/TMFA_Man.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/BIN/TMFA_Man"  
+    fi
+    if [ ! "${AGENT_DIR}/CONF/app.ini" -ef "${AGENT_DIR}/CONF/app.ini.${curr_os}.${HP_ARCH}" ];
+    then
+      ln -f -s "${AGENT_DIR}/CONF/app.ini.${curr_os}.${HP_ARCH}" "${AGENT_DIR}/CONF/app.ini"  
+    fi
+  fi
+fi
+if [ -x ${agent_path}/BIN/monitorapp ];
+then
+  tmp_res=$("${agent_path}"/BIN/monitorapp -p "${agent_path}"/CONF/app.ini -t)
+  if [ "${tmp_res}" -gt 0 ];
+  then
+    answer=""
+    if [ "${bfile}" = "" ];
+    then
+    echo "\nWARNING: you have to stop FULLNAME application first.\n"
+    answer=""
+    while [ "${answer}" != "y" -a "${answer}" != "n" ];
+    do
+      echo "Do you want stop now the FULLNAME application?"
+      echo "[y/n] [default: n]: "
+      read answer
+      if [ "${answer}" = "" ];
+      then
+        answer="n"
+      fi
+    done
+    else
+      answer="y"
+    fi
+    if [ ${answer} = "n" ];
+    then
+      echo ""
+      echo "Exiting..."
+      echo ""
+      exit 1
+    else
+      ${agent_path}/SCRIPT/Q_Stop
+    fi
+  fi
+fi
+
+######## Last notice
+if [ "${bfile}" = "" ];
+then
+echo "\nWARNING: This operation will DELETE current FULLNAME's database!"
+answer=""
+while [ "${answer}" != "y" -a "${answer}" != "n" ];
+do
+  echo "Are you sure you want to do this? [y/n] [default: n]: "
+  read answer
+  if [ "${answer}" = "" ];
+  then
+    answer="n"
+  fi
+done
+if [ ${answer} = "n" ];
+then
+  echo ""
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+######## Gets target
+answer=""
+while [ "${answer}" = "" ];
+do
+  echo ""
+  echo "Insert path to the database to be restored"
+  echo "[name of a device or full path to a backup file]: "
+  read answer
+done
+DEV=${answer}
+else
+  DEV="${bfile}"
+fi
+
+if [ ! -r "${DEV}" ];
+then
+  echo ""
+  echo "\nSorry, file ${DEV} doesn't exist."
+  echo ""
+  exit 1
+fi
+
+count=`tar -tvf ${DEV}|grep -cw 'I38Plugin.properties'`
+
+if [ "${AGENT_MODE}" = "NM" ];
+  then
+    if [ ${count} -eq 0 ];
+    then
+        echo "\nSorry,Can not Restore the DB from EM to NM..."
+    	exit 1
+    fi
+ fi   
+ 
+ if [ "${AGENT_MODE}" = "EM" ];
+  then
+    if [ ${count} -eq 1 ];
+    then
+        echo "\nSorry,Can not Restore the DB from NM to EM..."
+    	exit 1
+    fi
+ fi    
+  
+ 
+
+######## Restores
+echo ""
+echo "Restoring FULLNAME's database from ${DEV}, please wait..."
+
+if [ -e ${agent_path}/FDBACKUP ];
+then
+  /bin/rm -rf ${agent_path}/FDBACKUP > /dev/null 2>&1
+fi
+
+cur_dir=$(pwd)
+cd ${agent_path}
+
+tar xf ${DEV}
+error=$?
+if [ ${error} -ne 0 ];
+then
+  ErrExit ${error}
+fi
+
+if [ -x /usr/contrib/bin/gzip ];
+then
+  /usr/contrib/bin/gzip -r -d ${agent_path}/FDBACKUP/* > /dev/null 2>&1
+elif [ -x /bin/gzip ];
+then
+    /bin/gzip -r -d ${agent_path}/FDBACKUP/* > /dev/null 2>&1
+fi
+
+########## start of TR HN74982 fix
+
+if [ -e ${agent_path}/sampleDBBackup ];
+then
+  /bin/rm -rf ${agent_path}/sampleDBBackup > /dev/null 2>&1
+  /bin/mkdir ${agent_path}/sampleDBBackup > /dev/null 2>&1
+else
+  /bin/mkdir ${agent_path}/sampleDBBackup > /dev/null 2>&1
+fi
+
+####Restore change Start
+home_inst=$(pwd)
+cd ${agent_path}/sampleDBBackup
+tar -xvf ${DEV} FDBACKUP/CONF/TMFFramework.properties.gz
+cd ${home_inst}
+
+#####End
+
+if [ -x /usr/contrib/bin/gzip ];
+then
+  /usr/contrib/bin/gzip -r -d ${agent_path}/sampleDBBackup/FDBACKUP/* > /dev/null 2>&1
+elif [ -x /bin/gzip ];
+then
+    /bin/gzip -r -d ${agent_path}/sampleDBBackup/FDBACKUP/* > /dev/null 2>&1
+fi
+
+if [ -e "${agent_path}"/sampleDBBackup/FDBACKUP/CONF/TMFFramework.properties ];
+then
+    tmf_agent_ver=$(grep "EMS.version=" ${agent_path}/sampleDBBackup/FDBACKUP/CONF/TMFFramework.properties | cut -d"=" -f2 )
+	tmp_ver=$(grep "EMS.version=" ${agent_path}/CONF/TMFFramework.properties | cut -d"=" -f2 )	
+	if [ "${tmp_ver}" != "4.1" ] || [ "${tmf_agent_ver}" != "4.1" ];
+	then
+	    echo "Selected incompatible TMF version ${tmf_agent_ver}"
+		   ErrExit 1
+	fi
+else
+ErrExit 1
+fi
+
+########## end of TR HN74982 fix
+
+###### Copia del database vuoto dalla directory DBRESTORE
+#/bin/rm -f ${DATA_DIR}/* > /dev/null 2>&1
+
+boot_list=$(find "${boot_path}" -type f -name "*.boot" -print)
+for item in ${boot_list};
+do
+  tmp_name=$(basename "${item}")
+  DBNAME=$(basename "${tmp_name}" .boot)
+  if [ "${DBNAME}" != "" ];
+  then
+    old_boot_file="${item}"
+    break
+  fi
+done
+
+if [ ! -e "$boot_path/$boot_file" ];
+then
+  ${agent_path}/SCRIPT/Q_ResetDB force > /dev/null 2>&1
+  error=$?
+  if [ ${error} -ne 0 ];
+  then
+    echo "Cannot delete the current db."
+    ErrExit ${error}
+  fi
+fi
+
+boot_list=$(find "${boot_path}" -type f -name "*.boot" -print)
+for item in ${boot_list};
+do
+  tmp_name=$(basename "${item}")
+  DBNAME=$(basename "${tmp_name}" .boot)
+  if [ "${DBNAME}" != "" ];
+  then
+    old_boot_file="${item}"
+    break
+  fi
+done
+
+######## DB LICENSE CHECK
+${AGENT_DIR}/SCRIPT/Q_CheckDBLic
+
+error=$?
+if [ ${error} -ne 0 ];
+then
+  ErrExit ${error}
+fi
+######## end of DB LICENSE CHECK
+
+#${object_path}/ooschemadump -encode \
+#                            -outfile ${agent_path}/FDBACKUP/.schema.ori \
+#                            -notitle \
+#                            -quiet \
+#                            -standalone \
+#                            ${old_boot_file}
+#error=$?
+#if [ ${error} -ne 0 ];
+#then
+#  ErrExit ${error}
+#fi
+
+#diff ${agent_path}/FDBACKUP/.schema.enc ${agent_path}/FDBACKUP/.schema.ori
+#error=$?
+#if [ ${error} -ne 0 ];
+#then
+#  echo "\nWARNING: Database schema mismatch, DB restore NOT performed!"
+#  ErrExit ${error}
+#fi
+
+name_host=$(hostname)
+
+if [ -r ${agent_path}/FDBACKUP/.ooset ];
+then
+  set_name=$(cat ${agent_path}/FDBACKUP/.ooset)
+fi
+
+if [ -r ${agent_path}/FDBACKUP/.boot_name ];
+then
+  set_boot=$(cat ${agent_path}/FDBACKUP/.boot_name)
+fi
+
+if [ ! -r ${agent_path}/FDBACKUP/.oodata ];
+then
+  echo "\nWARNING: Missing backup file ${agent_path}/FDBACKUP/.oodata"
+  echo "         Please check your media ditribution"
+  echo "         DB restore NOT performed!"
+  ErrExit ${error}
+fi
+
+name=$(cat "${agent_path}"/FDBACKUP/.oodata)
+
+"${object_path}"/oorestore -set ${set_name} \
+		         -backup AGENTFDBackup_${name} \
+		         -volume AGENTFDBackup \
+		         -device ${agent_path}/FDBACKUP \
+                         -quiet \
+                         -notitle \
+		         -exists delete \
+		         -newhost ${name_host} \
+		         -newdirectory ${boot_path} \
+                         -standalone \
+		         DATA/${set_boot}.boot
+error=$?
+if [ ${error} -ne 0 ];
+then
+  ErrExit ${error}
+fi
+
+echo ""
+echo "Database restored."
+
+if [ ! -e "${boot_path}/${set_boot}".boot ];
+then
+  /bin/cp -f "${boot_empty_path}"/*.boot "${boot_path}"
+fi
+
+"${agent_path}"/SCRIPT/installfd
+error=$?
+if [ ${error} -ne 0 ];
+then
+  echo ""
+  echo "Database restored but not installed."
+  ErrExit ${error}
+fi
+
+chown AGENT_USER:AGENT_GROUP "${boot_path}"/*
+chmod 644 "${boot_path}"/*
+
+if [ -e "${agent_path}/${set_boot}".boot ];
+then
+  /bin/rm -f "${agent_path}/${set_boot}".boot
+fi
+
+if [ -e "${agent_path}/FDBACKUP/HistoryInfo.properties" ];
+then
+  /bin/cp -p "${agent_path}/FDBACKUP/HistoryInfo.properties" "${DATA_DIR}/HistoryInfo.properties" > /dev/null 2>&1
+fi
+
+#Restore BER directory
+if [ -d "${agent_path}"/BER ];
+then
+  /bin/rm -rf ${agent_path}/BER > /dev/null 2>&1 
+fi	
+/bin/cp -p -R "${agent_path}/FDBACKUP/BER" . > /dev/null 2>&1
+
+#Restore USER's directory - Added code to fix the TR HO75497 
+if [ -d "${agent_path}"/USERS ];
+then
+  /bin/rm -rf ${agent_path}/USERS > /dev/null 2>&1 
+fi	
+/bin/cp -p -R "${agent_path}/FDBACKUP/USERS" . > /dev/null 2>&1
+
+#Restore TMP directory
+if [ -d "${agent_path}"/TMP ];
+then
+  /bin/rm -rf ${agent_path}/TMP > /dev/null 2>&1  
+fi
+
+/bin/cp -p -R "${agent_path}/FDBACKUP/TMP" . > /dev/null 2>&1
+
+/bin/cp -p "${agent_path}/FDBACKUP/License.xml.*" "${agent_path}/CONF" > /dev/null 2>&1
+
+chown AGENT_USER:AGENT_GROUP "${boot_path}"/*
+chmod 644 "${boot_path}"/*
+
+########## start of TR HN74982 fix
+if [ -e ${agent_path}/sampleDBBackup ];
+then
+  /bin/rm -rf ${agent_path}/sampleDBBackup > /dev/null 2>&1
+fi
+########## End of TR HN74982 fix
+
+######## DB LICENSE CHECK
+${AGENT_DIR}/SCRIPT/Q_CheckDBLic
+
+error=$?
+if [ ${error} -ne 0 ];
+then
+  ErrExit ${error}
+fi
+######## end of DB LICENSE CHECK
+cd ${cur_dir}
+error=$?
+ErrExit ${error}
+echo ""
+#echo "Database restored."
+
+exit 0

@@ -1,0 +1,150 @@
+#!/bin/sh
+
+######## Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then 
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+DB_REQ_VER=$(echo ${OBJ_VER} | cut -d "." -f 1)
+nmsdb_path="${OBJDIR}/bin"
+Exiting="Exiting..."
+inst_ver=""
+DB_boot="${AGENT_DIR}/DATA/SOO_TMF_DB.boot"
+DB_lic="${AGENT_DIR}/DBRESTORE/oolicense.txt"
+
+echo ""
+echo "Checking DB License..."
+
+if [ ! -r "${DB_lic}" ];
+then
+  echo ""
+  echo "..ERROR"
+  echo "DB License file ${DB_lic} is not present, check your installation"
+  echo "$Exiting"
+  echo ""
+  exit 1
+fi
+
+if [ ! -w "${DB_boot}" ];
+then
+  echo ""
+  echo "..ERROR"
+  echo "Database boot file ${DB_boot} is not present, check your installation"
+  echo "$Exiting"
+  echo ""
+  exit 1
+fi
+
+if [ "${DB_REQ_VER}" = "" ];
+then
+  echo ""
+  echo "..ERROR"
+  echo "Required Database version not specified, check your installation"
+  echo "$Exiting"
+  echo ""
+  exit 1
+fi
+
+######## Checks DB License Major number
+if [ -x "${nmsdb_path}/oolicense" ];
+then
+  inst_ver=$(${nmsdb_path}/oolicense -notitle "${DB_boot}" | fgrep -v fgrep | fgrep -e "Licensed up to including Objectivity version:" | cut -d ":" -f 2 | cut -d " " -f 2- )
+  if [ $? != 0 ];
+  then
+    echo ""
+    echo "..ERROR"
+    echo "Cannot exec the DB license check"
+    echo "$Exiting"
+    echo ""
+    exit 1
+  fi
+else
+  echo ""
+  echo "..ERROR"
+  echo "NMSDB server process ${nmsdb_path}/oolicense isn't present"
+  echo "$Exiting"
+  echo ""
+  exit 1
+fi
+
+######## retrieving OS type
+os_name=""
+curr_os=$(uname -s)
+if [ "${curr_os}" = "Linux" ];
+then
+  os_name="Linux" 
+else
+  if [ "${curr_os}" = "HP-UX" ];
+  then
+    if [ -x /usr/bin/hp-pa ];
+    then
+      os_name="HP-UX"
+      /usr/bin/hp-pa
+      if [ $? -ne 0 ];
+      then
+         os_name="HP-UX_on_Itanium2_64-bit"
+      fi
+    fi
+  else
+    echo ""
+    echo "..ERROR" 
+    echo "The os ${curr_os} is not yet supported"
+    echo "$Exiting"
+    echo ""
+    exit 1
+  fi
+fi
+if [ "${curr_os}" = "" ];
+then
+  echo ""
+  echo "..ERROR" 
+  echo "Impossible to retrieve current Operative System"
+  echo "$Exiting"
+  echo ""
+  exit 1
+fi
+
+update_os="0"
+######## Checks DB License os_name
+if [ -x "${nmsdb_path}/oolicense" ];
+then
+  ${nmsdb_path}/oolicense -notitle "${DB_boot}" | fgrep -v fgrep | fgrep -e "Licensed platforms:" | cut -d ":" -f 2 | fgrep -e "${os_name}" 
+  if [ $? != 0 ];
+  then
+    update_os="1"
+  fi
+else
+  echo ""
+  echo "..ERROR"
+  echo "NMSDB server process ${nmsdb_path}/oolicense isn't present"
+  echo "$Exiting"
+  echo ""
+  exit 1
+fi
+
+######## Checks DB License Update
+if [ "${inst_ver}" != "${DB_REQ_VER}" -o "${update_os}" != "0" ];
+then
+  ${nmsdb_path}/oolicense -notitle -licensefile "${DB_lic}" "${DB_boot}" > /dev/null 2>&1
+  if [ $? != 0 ];
+  then
+    echo ""
+    echo "..ERROR"
+    echo "Cannot set DB license"
+    echo "$Exiting"
+    echo ""
+    exit 1  
+  fi
+fi
+
+echo "..OK"
+echo ""
+
+exit 0

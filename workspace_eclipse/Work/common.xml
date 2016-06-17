@@ -1,0 +1,75 @@
+<fail unless="dir.project">Property 'dir.project' not set.</fail>
+<echo message="Project root: ${dir.project}"/>
+
+<!-- JAVAC PROPERTIES-->
+<property name="javac.debug" value="yes" />
+<property name="javac.listfiles" value="no" />
+
+<!-- GENERIC PROPERTIES-->
+<property name="dir.objectivity.data" value="${dir.project}/DATA/OBJY" />
+
+<!-- PROJECTS PROPERTIES-->
+
+<property name="dir.project.lib" value="${dir.project}/lib" />
+<property name="dir.project.dist" value="${dir.project}/dist"/>
+<property name="dir.project.conf" value="${dir.project}/CONF"/>
+
+
+<property name="dir.templates" value="${dir.project}/templates" />
+
+<property name="dir.base" value="${dir.project}/baseEx" />
+<property name="dir.base.dist" value="${dir.base}/dist" />
+
+
+
+<property name="dir.tmfI36PlugIn" value="${dir.project}/tmfI36PlugIn" />
+
+<!-- LIBRARIES -->
+<property name="jar.sirius-base"                value="sirius-base-2.5.005.jar" />
+<property name="jar.sirius-logging"             value="sirius-base-logging-2.5.005.jar" />
+<!-- APACHE COMMONS-->
+<property name="jar.commons-cli"           value="commons-cli-1.1.jar" />
+
+<property name="inst.dir.lib"    value="LIB" />
+<property name="inst.dir.conf"   value="CONF" />
+<property name="inst.dir.script" value="SCRIPT" />
+<property name="inst.dir.bin"    value="BIN" />
+<property name="inst.dir.log"    value="LOG" />
+<property name="inst.dir.data"   value="DATA" />
+
+<property name="mf.attribute.main-class" value="Main-Class" />
+<property name="mf.attribute.jar-name" value="Jar-Name" />
+<property name="mf.attribute.created" value="Created" />
+<property name="mf.attribute.class-path" value="Class-Path" />
+
+
+<fileset dir="${dir.project.dist}" id="fileset.agent">
+</fileset>
+
+
+<fileset dir="${dir.maintenance.dist}" id="fileset.maintenance" >
+	<include name="${jar.maintenance}"/>
+</fileset>
+
+
+
+<fileset dir="${dir.project.lib}" id="fileset.logging" >
+    <include name="${jar.commons-logging}"/>
+</fileset>
+
+
+
+
+<fileset dir="${dir.project.lib}" id="fileset.ehcache" >
+	<include name="${jar.ehcache}"/>
+</fileset>
+
+<!-- ************************************************************* -->
+
+<!-- Jar della directory lib necessari a runtime -->
+<fileset dir="${dir.project.lib}" id="fileset.lib.run">
+	<include name="${jar.sirius-base}"/>
+    <include name="${jar.sirius-logging}"/>
+    <include name="${jar.commons-logging}"/>
+</fileset>
+

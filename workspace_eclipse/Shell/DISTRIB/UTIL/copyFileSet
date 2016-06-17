@@ -1,0 +1,129 @@
+#!/bin/ksh
+
+if [ $# -lt 1 ]
+then
+  echo "Usage: $0 <fileSet> [<target_dir>]"
+  exit 0
+fi
+
+FILE_SET=$1
+
+FILE_COPIED=$1.copied
+
+if [ -f $FILE_COPIED ]
+then
+    /bin/rm $FILE_COPIED
+fi
+
+if [ $# -gt 1 ]
+then
+  TARGET_DIR=$2
+else
+  TARGET_DIR="."
+fi
+
+CP="/bin/cp -r"
+STRIP="strip"
+
+AWK1='$1'
+AWK2='$2'
+AWK3='$3'
+AWK4='$4'
+AWK5='$5'
+
+while read item
+do
+  if [ "$item" = "" ]
+  then
+    item="#"
+  fi
+
+  COMM=`expr substr "$item" 1 1`
+  if [ "$COMM" != "#" ]
+  then
+    FILE=`echo "$item" | awk -F, "{print $AWK1;}"`
+    INPUT_DIR=`echo "$item" | awk -F, "{print $AWK2;}"`
+    DDD=`echo "$item" | awk -F, "{print $AWK3;}"`
+    NEWNAME=`echo "$item" | awk -F, "{print $AWK4;}"`
+    ISBIN=`echo "$item" | awk -F, "{print $AWK5;}"`
+    
+    OUTPUT_DIR="$TARGET_DIR/$DDD"
+    if [ "$FILE" != "" -a "$INPUT_DIR" != "" -a "$OUTPUT_DIR" != "" ]
+    then
+      echo "Copying <$FILE> from <$INPUT_DIR> to <$OUTPUT_DIR/$NEWNAME>"
+      if [ ! -d $OUTPUT_DIR ]
+      then
+	mkdir -p $OUTPUT_DIR
+      fi
+      
+      if [ "$NEWNAME" = "" ]
+      then
+	NEWNAME=$FILE
+      fi
+
+      if [ "$NEWNAME" = "*" ]
+      then
+	NEWNAME=""
+      fi
+      
+      if [ ! -d "$INPUT_DIR" ]
+      then
+	echo ""
+	echo "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"
+	echo ""
+	echo "ERROR: directory $INPUT_DIR not found"
+	echo " EXIT"
+	echo ""
+	echo "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n"
+
+	exit 1
+      fi
+
+      if [ ! "$FILE" = "*" -a ! -f "$INPUT_DIR/$FILE" ]
+      then
+	echo ""
+	echo "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"
+	echo ""
+	echo "ERROR: file $INPUT_DIR/$FILE not found"
+	echo " EXIT"
+	echo ""
+	echo "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n"
+
+	exit 1
+      fi
+      $CP $INPUT_DIR/$FILE $OUTPUT_DIR/$NEWNAME
+      echo "$DDD/$NEWNAME" >> $FILE_COPIED
+      if [ "$ISBIN" = "YES" ]
+      then
+	if [ ! -x "$INPUT_DIR/$FILE" ]
+	then
+	    echo ""
+	    echo "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"
+	    echo ""
+	    echo "ERROR: file $INPUT_DIR/$FILE is not EXECUTABLE"
+	    echo " EXIT"
+	    echo
+	    echo "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n"
+
+	    exit 1
+	fi
+	$STRIP $OUTPUT_DIR/$NEWNAME
+      fi  
+    fi
+    
+    if [ "$FILE" = "" -a "$INPUT_DIR" = "" -a "$DDD" != "" ] ;
+                then
+                        echo "Creating a <$DDD> folder in <$TARGET_DIR>"
+                        if [ ! -d $OUTPUT_DIR ] ;
+                                then
+                                        mkdir -p $OUTPUT_DIR
+                                        chmod -R 755 "${OUTPUT_DIR}/*"  > /dev/null 2>&1
+                        fi
+                        echo "$DDD/$NEWNAME" >> $FILE_COPIED
+        fi
+    
+    
+  fi
+done < $FILE_SET
+
+exit 0

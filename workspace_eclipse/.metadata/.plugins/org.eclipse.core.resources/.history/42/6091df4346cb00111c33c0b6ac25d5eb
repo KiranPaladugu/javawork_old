@@ -1,0 +1,1679 @@
+package com.marconi.fusion.tmf.sbi.em;
+
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.SocketAddress;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.*;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.application.WrongInitializationException;
+import com.marconi.fusion.base.asn1.ASN1Obj;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.pipe.GenericMsgClientException;
+import com.marconi.fusion.base.pipe.MessageProvider;
+import com.marconi.fusion.base.pipe.MultiplePayloadCustomer;
+import com.marconi.fusion.base.pipe.PipeConsumer;
+import com.marconi.fusion.base.pipe.TimeoutExpiredException;
+import com.marconi.fusion.tmf.SBI.SBI;
+import com.marconi.fusion.tmf.i36PlugIn.I36PlugIn.PluginProperty;
+import com.marconi.fusion.tmf.plugIn.IEventConsumer;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.realignmentHandler.rh.ConnectionInfo;
+
+/**
+ * <p>
+ * Title: X36SBI.java
+ * </p>
+ * <p>
+ * Description: <br/>
+ * This class implements an interface (X36MsgClient) where every message that
+ * can be sent has the correspondent "request" method. These methods are
+ * synchronous, according to the type of message the correct underlying client
+ * is used. other over the other client or both the clients.
+ *
+ * List of X36 messages: - AbortCollection (AbortCollection) - GetCollection
+ * (GetCollection) - GetVersion (GetVersion) - GetNodeCrossConnections
+ * (GetNodeCrossConnections) - GetProtectionConfiguration
+ * (GetProtectionConfiguration) - SetPortParameter (SetPortParameter) -
+ * SetBshrProtection (SetBshrProtection) - GetPortConfiguration
+ * (GetPortConfiguration) - GetNodeList (GetNodeList) - SetMSP (SetMSP) -
+ * ExportPerfDataCompleted (ExportPerfDataCompleted) - StartCollection
+ * (StartCollection) - GetProvisioning (GetProvisioning) - GetNodeConfiguration
+ * (GetNodeConfiguration) - GetMSP (GetMSP) - UserInterfaceManagement
+ * (UserInterfaceManagement) - GetBshrProtection (GetBshrProtection) -
+ * AlarmRefresh (AlarmRefresh) - GetWorkingSide (GetWorkingSide) -
+ * GetEquipmentProtection (GetEquipmentProtection) - SetCrossConnections
+ * (SetCrossConnections) - GetDeprovisioning (GetDeprovisioning) -
+ * ExportPerfData (ExportPerfData) - GetLinks (GetLinks) - GetDataProfiles
+ * (GetDataProfiles) - GetBridgeState (GetBridgeState) - GetTMplsTunnelEnds
+ * (GetTMplsTunnelEnds) - GetVPNCrossConnections (GetVPNCrossConnections)
+ * 
+ * </p>
+ * 
+ * <p>
+ * Copyright: Copyright (c) 2008
+ * </p>
+ * <p>
+ * Company: Ericsson
+ * </p>
+ * 
+ * @author Luca Vassalli
+ * @version 1.5
+ * @since 1.5
+ */
+public class X36SBI implements SBI, X36MsgClient, PropertyChangeListener {
+
+	LSBI i36Client;
+	LSBI penClient;
+
+	/**
+	 * the property file with the converter class names that are used to merge
+	 * messages
+	 */
+	protected static Properties sbiProps;
+
+	/** THis variable is used to say that a channel is now closed */
+	public static final String SBI_CLOSED = "Closed";
+	/** THis variable is used to say that a channel is now connected */
+	public static final String SBI_CONNECTED = "Connected";
+
+	/** The logger */
+	private static Log log = LogFactory.getLog(X36SBI.class);
+
+	/** a list of registered property change listeners */
+	final private List<PropertyChangeListener> sbiStateListeners = new ArrayList<PropertyChangeListener>();
+
+	/**
+	 * The variable to indicate the connection status of both the
+	 * I36MsgDoubleClient and the PENPDMCorbaClient
+	 */
+	boolean doubleClientsConnected = false;
+
+	/** lock for state listeners */
+	private final Object stateListenerLock = new Object();
+
+	/**
+	 * This variable is used as a means to check if I36 and PEN/PDM clients are
+	 * registered to X36SBI or not
+	 */
+	boolean isListenersRegistered = false;
+
+	public Profile profile = null;
+
+	public String plugInName = null;
+	/**
+	 * Variable used to store the connection information related to the
+	 * underlying Element Manager
+	 */
+	private ConnectionInfo connectionInfo = null;
+
+	/**
+	 * Constructor The name of the SBI.
+	 * 
+	 * @param plugInName
+	 */
+	public X36SBI() throws Exception {
+	}
+
+	public X36SBI(final String plugInName) {
+		this.plugInName = plugInName;
+	}
+
+	/**
+	 * Constructor The name of the SBI.
+	 * 
+	 * @param plugInName
+	 */
+	public X36SBI(final Profile profile) {
+		this.profile = profile;
+	}
+
+	/**
+	 * Constructor The name of the SBI.
+	 * 
+	 * @param sbiClient
+	 * @param plugInName
+	 */
+	public X36SBI(final Profile profile, final String plugInName) {
+
+		this.plugInName = plugInName;
+		this.profile = profile;
+	}
+
+	/**
+	 * returns SBI spcific profile
+	 * 
+	 * @return
+	 */
+	public Profile getProfile() {
+		return profile;
+	}
+
+	/**
+	 * This method is used to connect the two channels, and make them ready to
+	 * send messages.
+	 * 
+	 * @param profile
+	 *            - a profiler which is used to read the end points of the
+	 *            connections
+	 */
+	@Override
+	public void start(final Profile profiler) throws X36MsgClientException {
+		if (profiler.getBoolProperty("PlugIn.standAlone", true)) {
+			final String host = profiler.getProperty(EmSBIPluginProperty.sbiHost, "localhost");
+			final String confPort = profiler.getProperty(EmSBIPluginProperty.sbiConfigurationPort, "9070");
+			final String evtPort = profiler.getProperty(EmSBIPluginProperty.sbiEventsPort, "9071");
+			final String pdmPort = profiler.getProperty(EmSBIPluginProperty.sbiPENPort, "9071");
+
+			connectionInfo = new ConnectionInfo(host, confPort, evtPort, pdmPort);
+		}
+		penClient.start(profiler);
+		i36Client.start(profiler);
+	}
+
+	/**
+	 * This method has to be used to un-register the client to the two channels
+	 * (PEN-PDM and I36) in order to receive async notification of the I36
+	 * channel.
+	 *
+	 * @param consumer
+	 *            a client which is going to receive notifications on async
+	 *            messages event
+	 */
+	@Override
+	public void deregisterPipeConsumer(final PipeConsumer<X36Message<?>> consumer) {
+		i36Client.deregisterPipeConsumer(consumer);
+		penClient.deregisterPipeConsumer(consumer);
+	}
+
+	/**
+	 * This method has to be used to register a client to the two channels
+	 * (PEN-PDM and I36) in order to receive async notification of the I36
+	 * channel.
+	 *
+	 * @param consumer
+	 *            a client which is going to receive notifications on async
+	 *            messages event
+	 */
+	@Override
+	public void registerPipeConsumer(final PipeConsumer<X36Message<?>> consumer) {
+		i36Client.registerPipeConsumer(consumer);
+		penClient.registerPipeConsumer(consumer);
+	}
+
+	/**
+	 * This method has to be used to register a client to the two channels
+	 * (PEN-PDM and I36) in order to receive async notification of the I36
+	 * channel.
+	 *
+	 * @param consumer
+	 *            a client which is going to receive notifications on async
+	 *            messages event
+	 * @param name
+	 *            indicates the kind of message I am registering to ("*" means
+	 *            all messages)
+	 */
+	@Override
+	public void registerPipeConsumer(final PipeConsumer<X36Message<?>> consumer, final String name) {
+		i36Client.registerPipeConsumer(consumer, name);
+		penClient.registerPipeConsumer(consumer, name);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see To add SBI listeners (PropertyChangeListeners)
+	 */
+	@Override
+	public void addListener(final PropertyChangeListener sbiListener) {
+		if (!isListenersRegistered) {
+			i36Client.addListener(this);
+			penClient.addListener(this);
+			isListenersRegistered = true;
+		}
+		synchronized (stateListenerLock) {
+			sbiStateListeners.add(sbiListener);
+		}
+	}
+
+	/**
+	 * Fix for the TR HM76131. This method is called to check and update the
+	 * list which contains all the PEN NEs when a createdNE event is received in
+	 * TMF.
+	 * 
+	 * @param neId
+	 *            - NEId to be checked if it is a PEN NE
+	 * @throws Exception
+	 */
+
+	public void checkIfPENNE(final int neId) throws Exception {
+
+		if (penClient != null) {
+			// Call the method defined in PENPDMCorbaClient to update the NE
+			// list if the NE is a PEN NE
+			// Fix for TR HO78186
+			final PENPDMActions penPdmActions = ((PENPDMCorbaClient) penClient).getPenPdmActions();
+			if (penPdmActions != null) {
+				penPdmActions.checkIfPENNE(neId);
+			}
+		}
+	}
+
+	/**
+	 * Fix for the TR HM76131. This method is called to check and delete the
+	 * NEId from the pen network elements list when a deletedNE event is
+	 * received in TMF.
+	 * 
+	 * @param neId
+	 *            - NEId to be checked if it is a PEN NE
+	 * @throws Exception
+	 */
+
+	public void removeIfPENNE(final int neId) throws Exception {
+
+		if (penClient != null) {
+			// Call the method defined in PENPDMCorbaClient to delete the NE ID
+			// from the PEN network elements list
+			// Fix for TR HO78186
+			final PENPDMActions penPdmActions = ((PENPDMCorbaClient) penClient).getPenPdmActions();
+			if (penPdmActions != null) {
+				penPdmActions.removeIfPENNE(neId);
+			}
+		}
+	}
+
+	/**
+	 * This method should not be used. Use "init()" instead. This method is
+	 * present since this class implements an interface which is used also in
+	 * other cases.
+	 * 
+	 * @param arg0
+	 *            this parameter is ignored
+	 * @throws IOException
+	 *             it never throws this exception
+	 * @throws BadUseOfSBIException
+	 *             it always throws this RuntimeException
+	 * @deprecated use "init()" method instead.... it takes the host and port
+	 *             parameters from the specified profile
+	 */
+	@Override
+	@Deprecated
+	public void connect(final SocketAddress arg0) throws IOException {
+		throw new BadUseOfSBIException("The connect method of the " + this.getClass().getName()
+				+ " should not be used. Use \"init(Profile)\" instead.");
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#getAvailableRetry()
+	 */
+	@Override
+	public int getAvailableRetry() {
+		return Math.min(i36Client.getAvailableRetry(), penClient.getAvailableRetry());
+	}
+
+	/**
+	 * This method is used to thrown away the pending request in case of any
+	 * error.
+	 */
+	@Override
+	public void flushPendingRequest() {
+		penClient.flushPendingRequest();
+	}
+
+	/**
+	 * This method has not to be used. Use the register and deregister methods
+	 * instead. Or add a new method to this class if needed.
+	 * 
+	 * @return the I36 async message dispatcher
+	 */
+	@Override
+	public MessageProvider<X36Message<?>> getDispatcher() {
+		throw new BadUseOfSBIException("The getDispatcher method of the " + this.getClass().getName()
+				+ " should not be used. Use \"register\" and \"deregister\" instead.");
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#getTimeout()
+	 */
+	@Override
+	public long getTimeout() {
+		return Math.min(i36Client.getTimeout(), penClient.getTimeout());
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#isAutoReconnect()
+	 */
+	@Override
+	public boolean isAutoReconnect() {
+		return (i36Client.isAutoReconnect() && penClient.isAutoReconnect());
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#isConnected()
+	 */
+	@Override
+	public boolean isConnected() {
+		return (i36Client.isConnected() && penClient.isConnected());
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#isOpen()
+	 */
+	@Override
+	public boolean isOpen() {
+		return (i36Client.isOpen() && penClient.isOpen());
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see
+	 * com.marconi.fusion.base.pipe.MsgClient#removeListener(com.marconi.fusion
+	 * .base.application.io.ChannelStateEventListener)
+	 */
+	@Override
+	public synchronized void removeListener(final PropertyChangeListener sbiListener) {
+		if (isListenersRegistered) {
+			i36Client.removeListener(this);
+			penClient.removeListener(this);
+			isListenersRegistered = false;
+		}
+		synchronized (stateListenerLock) {
+			sbiStateListeners.remove(sbiListener);
+		}
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#setAutoReconnect(boolean)
+	 */
+	@Override
+	public void setAutoReconnect(final boolean autoReconnect) {
+		i36Client.setAutoReconnect(autoReconnect);
+		penClient.setAutoReconnect(autoReconnect);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#setConnectionTimeout(long)
+	 */
+	@Override
+	public void setConnectionTimeout(final long connectionTimeout) {
+		i36Client.setConnectionTimeout(connectionTimeout);
+		penClient.setConnectionTimeout(connectionTimeout);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#setMaxRetry(int)
+	 */
+	@Override
+	public void setMaxRetry(final int maxRetry) {
+		i36Client.setMaxRetry(maxRetry);
+		penClient.setMaxRetry(maxRetry);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#setTimeout(long)
+	 */
+	@Override
+	public void setTimeout(final long timeout) {
+		i36Client.setTimeout(timeout);
+		penClient.setTimeout(timeout);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see com.marconi.fusion.base.pipe.MsgClient#shutdown()
+	 */
+	@Override
+	public void shutdown() {
+		i36Client.shutdown();
+		penClient.shutdown();
+	}
+
+	/**
+	 * This method always throws a RuntimeException. It should be used the
+	 * specific method for the particular message which has to be sent, not this
+	 * generic method.
+	 * 
+	 * @throws BadUseOfSBIException
+	 *             this method always throws that exception
+	 * @deprecated
+	 */
+	@Override
+	@Deprecated
+	public X36Message<? extends ASN1Obj> sendRequest(final X36Message<? extends ASN1Obj> request) {
+		throw new BadUseOfSBIException("The sendRequest method of the " + this.getClass().getName() + " should not be used.");
+	}
+
+	/**
+	 * This method is inherited from the X36MsgClient interface. It is used to
+	 * set for a particular pipe the object responsible to send to the
+	 * registered clients the async messages. Since this class is itself a
+	 * dispatcher, extending the MessageProvider class, this method cannot be
+	 * used. Clients of this class should instead register themselves on this
+	 * class and should implement the PipeConsumer interface.
+	 * 
+	 * @param dispatcher
+	 *            an object responsible to send async messages when they are
+	 *            raised from the underlying pipe channel
+	 * @throws a
+	 *             runtime BadUseOfSBIException all the times this method is
+	 *             used
+	 */
+	@Override
+	public void setDispatcher(final MessageProvider<X36Message<? extends ASN1Obj>> dispatcher) {
+		throw new BadUseOfSBIException("The setDispatcher method of the " + this.getClass().getName() + " should not be used.");
+	}
+
+	/**
+	 * This method will check weather the signal type is belongs pen support
+	 * signal type
+	 * 
+	 * @param signalType
+	 * @return it will return true if
+	 */
+	private boolean isPENSignalType(final X36AlSignalType signalType) {
+		if (signalType.isEthernet() || signalType.isFibreChannel() || signalType.isOts() || signalType.isOPI()
+				|| signalType.isOch()) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	/**
+	 * Method to request the message 'AbortCollection' This is a I36 message
+	 * called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgAbortCollection'
+	 * @return X36MsgReportAbortCollection
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportAbortCollection request(final X36MsgAbortCollection msg) throws GenericMsgClientException {
+		/*
+		 * if singaltype is related to ethernet,then performance counters are
+		 * related to PEN(Ethernet Layer Rates)
+		 */
+		if (isPENSignalType(msg.getBody().getSignalType())) {
+			return penClient.request(msg);
+		} else {
+			return i36Client.request(msg);
+		}
+	}
+
+	/**
+	 * Method to request the message 'GetCollection' This is a common message
+	 * supported by both I36 and PEN. So call is given on both clients
+	 * 'i36Client' and 'penClient'
+	 * 
+	 * @param in
+	 *            - request message 'X36MsgGetCollection'
+	 * @return X36MsgReportGetCollection
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportGetCollection request(final X36MsgGetCollection msg) throws GenericMsgClientException {
+		NeMapper neMap = new NeMapper();
+
+		if (msg.getBody().isPresentRequestType()) {
+			final X36RequestType requestType = msg.getBody().getRequestType();
+
+			if (requestType.isPresentI36() && requestType.isPresentPen()) {
+				i36Client.request(msg, neMap);
+				if (log.isDebugEnabled()) {
+					log.debug("GetCollection only I36 response in X36 format for reqId " + msg.getBody().getReqId()
+							+ " and NeId " + msg.getBody().getNeId());
+					log.debug(new DumpInfo(neMap.getReportGetCollection()));
+				}
+
+			} else if (requestType.isPresentPdm() && requestType.isPresentPen()) {
+
+				if (neMap.getReportGetCollection() != null) {
+					final X36ReportGetCollection neMapBody = neMap.getReportGetCollection().getBody();
+					if (neMapBody != null) {
+						final X36Compliance i36Comp = neMapBody.getCompliance();
+						if (i36Comp != null && i36Comp.isResOk()) {
+							penClient.request(msg, neMap);
+							if (log.isDebugEnabled()) {
+								log.debug("GetCollection X36 (Composed I36 and PDM) response for reqId "
+										+ msg.getBody().getReqId() + " and NeId " + msg.getBody().getNeId());
+								log.debug(new DumpInfo(neMap.getReportGetCollection()));
+							}
+						}
+					}
+				}
+			}
+
+			else if (requestType.isPresentAll()) {
+				neMap = msgReportGetCollection(neMap, msg);
+			} else {
+				neMap = msgReportGetCollection(neMap, msg);
+			}
+		} else {
+			neMap = msgReportGetCollection(neMap, msg);
+		}
+
+		return neMap.getReportGetCollection();
+	}
+
+	private NeMapper msgReportGetCollection(final NeMapper neMap, final X36MsgGetCollection msg) throws PlugInException {
+		try {
+			i36Client.request(msg, neMap);
+			if (log.isDebugEnabled()) {
+				log.debug("GetCollection only I36 response in X36 format for reqId " + msg.getBody().getReqId() + " and NeId "
+						+ msg.getBody().getNeId());
+				log.debug(new DumpInfo(neMap.getReportGetCollection()));
+			}
+
+			// PEN request is given only when the I36 Message Compliance is OK.
+			// Requirement as part of TR HO89451
+			if (neMap.getReportGetCollection() != null) {
+				final X36ReportGetCollection neMapBody = neMap.getReportGetCollection().getBody();
+				if (neMapBody != null) {
+					final X36Compliance i36Comp = neMapBody.getCompliance();
+					if (i36Comp != null && i36Comp.isResOk()) {
+						penClient.request(msg, neMap);
+						if (log.isDebugEnabled()) {
+							log.debug("GetCollection X36 (Composed I36 and PDM) response for reqId " + msg.getBody().getReqId()
+									+ " and NeId " + msg.getBody().getNeId());
+							log.debug(new DumpInfo(neMap.getReportGetCollection()));
+						}
+					}
+				}
+			}
+		} catch (final Exception ex) {
+			log.error(new DumpInfo(ex, "Exception while trying to GetCollection :"));
+			throw PlugInExceptionHandler.internalError(ex.getMessage());
+		}
+		return neMap;
+	}
+
+	/**
+	 * Method to request the message 'GetVersion' This is a I36 message called
+	 * on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetVersion'
+	 * @return X36MsgReportGetVersion
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportGetVersion request(final X36MsgGetVersion msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'GetNodeCrossConnections' This is a common
+	 * message supported by both I36 and PEN/PDM. So call is given on both
+	 * clients 'i36Client' and 'penClient'
+	 * 
+	 * @param in
+	 *            - request message 'X36MsgGetNodeCrossConnections'
+	 * @return X36MsgGetReportNodeCrossConnections
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportNodeCrossConnections request(final X36MsgGetNodeCrossConnections msg) throws GenericMsgClientException {
+		NeMapper neMap = new NeMapper();
+		if (msg.getBody().isPresentRequestType()) {
+			final X36RequestType requestType = msg.getBody().getRequestType();
+
+			if (requestType.isPresentI36() && requestType.isPresentPen()) {
+				i36Client.request(msg, neMap);
+				if (log.isDebugEnabled()) {
+					log.debug("GetNodeCrossConnections only I36 response in X36 format for reqId " + msg.getBody().getReqId()
+							+ " and NeId " + msg.getBody().getNeId());
+					log.debug(new DumpInfo(neMap.getNodeCrossConnections()));
+				}
+			}
+
+			else if (requestType.isPresentPdm() && requestType.isPresentPen()) {
+				if (neMap.getNodeCrossConnections() != null) {
+					final X36GetReportNodeCrossConnections neMapBody = neMap.getNodeCrossConnections().getBody();
+					if (neMapBody != null) {
+						final X36Compliance i36Comp = neMapBody.getCompliance();
+						if (i36Comp != null && i36Comp.isResOk()) {
+							penClient.request(msg, neMap);
+							if (log.isDebugEnabled()) {
+								log.debug("GetNodeCrossConnections X36 (Composed I36 and PDM) response for reqId "
+										+ msg.getBody().getReqId() + " and NeId " + msg.getBody().getNeId());
+								log.debug(new DumpInfo(neMap.getNodeCrossConnections()));
+							}
+						}
+					}
+				}
+			}
+
+			else if (requestType.isPresentAll()) {
+				neMap = msgGetReportNodeCrossConnections(neMap, msg);
+			} else {
+				neMap = msgGetReportNodeCrossConnections(neMap, msg);
+			}
+		} else {
+			neMap = msgGetReportNodeCrossConnections(neMap, msg);
+		}
+		return neMap.getNodeCrossConnections();
+	}
+
+	private NeMapper msgGetReportNodeCrossConnections(final NeMapper neMap, final X36MsgGetNodeCrossConnections msg)
+			throws PlugInException {
+		try {
+			i36Client.request(msg, neMap);
+			if (log.isDebugEnabled()) {
+				log.debug("GetNodeCrossConnections only I36 response in X36 format for reqId " + msg.getBody().getReqId()
+						+ " and NeId " + msg.getBody().getNeId());
+				log.debug(new DumpInfo(neMap.getNodeCrossConnections()));
+			}
+
+			// PDM request is given only when the I36 Message Compliance is OK.
+			// Requirement as part of TR HO89451
+			if (neMap.getNodeCrossConnections() != null) {
+				final X36GetReportNodeCrossConnections neMapBody = neMap.getNodeCrossConnections().getBody();
+				if (neMapBody != null) {
+					final X36Compliance i36Comp = neMapBody.getCompliance();
+					if (i36Comp != null && i36Comp.isResOk()) {
+						penClient.request(msg, neMap);
+						if (log.isDebugEnabled()) {
+							log.debug("GetNodeCrossConnections X36 (Composed I36 and PDM) response for reqId "
+									+ msg.getBody().getReqId() + " and NeId " + msg.getBody().getNeId());
+							log.debug(new DumpInfo(neMap.getNodeCrossConnections()));
+						}
+					}
+				}
+			}
+		} catch (final Exception ex) {
+			log.error(new DumpInfo(ex, "Exception while trying to getNodeCrossConnections :"));
+			throw PlugInExceptionHandler.internalError(ex.getMessage());
+		}
+		return neMap;
+	}
+
+	/**
+	 * Method to request the message 'GetProtectionConfiguration' This is a I36
+	 * message called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetProtectionConfiguration'
+	 * @return X36MsgGetReportProtectionConfiguration
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportProtectionConfiguration request(final X36MsgGetProtectionConfiguration msg)
+			throws GenericMsgClientException {
+		X36MsgGetReportProtectionConfiguration response = null;
+
+		response = i36Client.request(msg);
+
+		return response;
+	}
+
+	/**
+	 * Method to request the message 'SetPortParameter' This is a I36 message
+	 * called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgSetPortParameter'
+	 * @return X36MsgSetReportPortParameter
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgSetReportPortParameter request(final X36MsgSetPortParameter msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'SetBshrProtection' This is a I36 message
+	 * called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgSetBshrProtection'
+	 * @return X36MsgSetReportBshrProtection
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgSetReportBshrProtection request(final X36MsgSetBshrProtection msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'GetPortConfiguration' This is a I36
+	 * message called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetPortConfiguration'
+	 * @return X36MsgGetReportPortConfiguration
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportPortConfiguration request(final X36MsgGetPortConfiguration msg) throws GenericMsgClientException {
+		X36MsgGetReportPortConfiguration out = null;
+		final NeMapper neMap = new NeMapper();
+		try {
+			i36Client.request(msg, neMap);
+			if (log.isDebugEnabled()) {
+				log.debug("GetReportPortConfiguration only I36 response in X36 format for reqId " + msg.getBody().getReqId()
+						+ " and NeId " + msg.getBody().getNeId());
+				log.debug(new DumpInfo(neMap.getPortConfiguration()));
+			}
+
+			if (neMap.getPortConfiguration() != null && neMap.getPortConfiguration().getBody() != null) {
+				final X36Compliance i36Comp = neMap.getPortConfiguration().getBody().getCompliance();
+				if (i36Comp != null && !i36Comp.isResOk()) {
+					// store I36 response, return it in case we don't receive anything from PDM
+					out = neMap.getPortConfiguration();
+					neMap.setPortConfiguration(null);
+					// May be the port is pure ethernet port and not managed by I36
+				}
+			}
+
+			penClient.request(msg, neMap);
+			if (log.isDebugEnabled()) {
+				log.debug("GetReportPortConfiguration X36 (Composed I36 and PDM) response for reqId " + msg.getBody().getReqId()
+						+ " and NeId " + msg.getBody().getNeId());
+				log.debug(new DumpInfo(neMap.getPortConfiguration()));
+			}
+
+			if (neMap.getPortConfiguration() != null) {
+				out = neMap.getPortConfiguration();
+			}
+
+		} catch (final Exception ex) {
+			log.error(new DumpInfo(ex, "Exception while trying to GetReportPortConfiguration :"));
+			throw PlugInExceptionHandler.internalError(ex.getMessage());
+		}
+
+		return out;
+	}
+
+	/**
+	 * Method to request the message 'GetNodeList' This is a common message
+	 * supported by both I36 and PEN/PDM. So call is given on both clients
+	 * 'i36Client' and 'penClient'
+	 * 
+	 * @param in
+	 *            - request message 'X36MsgGetNodeList'
+	 * @return X36MsgGetReportNodeList
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportNodeList request(final X36MsgGetNodeList msg) throws GenericMsgClientException {
+		final NeMapper neMap = new NeMapper();
+
+		i36Client.request(msg, neMap);
+		if (log.isDebugEnabled()) {
+			log.debug("GetNodeList only I36 response in X36 format for reqId " + msg.getBody().getReqId());
+			log.debug(new DumpInfo(neMap.getNodeList()));
+		}
+
+		// PDM request is given only when the I36 Message Compliance is OK.
+		// Requirement as part of TR HO89451
+		if (neMap.getNodeList() != null) {
+			final X36GetReportNodeList neMapBody = neMap.getNodeList().getBody();
+			if (neMapBody != null) {
+				final X36Compliance i36Comp = neMapBody.getCompliance();
+				if (i36Comp != null && i36Comp.isResOk()) {
+					penClient.request(msg, neMap);
+					if (log.isDebugEnabled()) {
+						log.debug("GetNodeList X36 (Composed I36 and PDM) response for reqId " + msg.getBody().getReqId());
+						log.debug(new DumpInfo(neMap.getNodeList()));
+					}
+				}
+			}
+		}
+
+		return neMap.getNodeList();
+	}
+
+	/**
+	 * Method to request the message 'SetMSP' This is a I36 message called on
+	 * 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgSetMSP'
+	 * @return X36MsgSetReportMSP
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgSetReportMSP request(final X36MsgSetMSP msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'ExportPerfDataCompleted' This is a I36
+	 * message called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgExportPerfDataCompleted'
+	 * @return X36MsgReportExportPerfData
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportExportPerfData request(final X36MsgExportPerfDataCompleted msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'StartCollection' This is a I36 message
+	 * called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgStartCollection'
+	 * @return X36MsgReportStartCollection
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportStartCollection request(final X36MsgStartCollection msg) throws GenericMsgClientException {
+		/*
+		 * if singaltype is related to ethernet,then performance counters are
+		 * related to PEN(Ethernet Layer Rates)
+		 */
+		if (isPENSignalType(msg.getBody().getSignalType())) {
+			return penClient.request(msg);
+		} else {
+			return i36Client.request(msg);
+		}
+	}
+
+	/**
+	 * Method to request the message 'GetProvisioning' This is a I36 message
+	 * called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetProvisioning'
+	 * @return X36MsgGetReportProvisioning
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportProvisioning request(final X36MsgGetProvisioning msg) throws GenericMsgClientException {
+		final X36MsgGetReportProvisioning i36Events = i36Client.request(msg);
+		// final X36MsgGetReportProvisioning penEvents = penClient.request(msg);
+		// i36Events.getBody().getAlEventList().addAll(penEvents.getBody().getAlEventList());
+		return i36Events;
+	}
+
+	/**
+	 * Method to request the message 'GetNodeConfiguration' This is a common
+	 * message supported by both I36 and PEN/PDM. So call is given on both
+	 * clients 'i36Client' and 'penClient'
+	 * 
+	 * @param in
+	 *            - request message 'X36MsgGetNodeConfiguration'
+	 * @return X36MsgGetReportNodeConfiguration
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportNodeConfiguration request(final X36MsgGetNodeConfiguration msg) throws GenericMsgClientException {
+		NeMapper neMap = new NeMapper();
+
+		if (msg.getBody().isPresentRequestType()) {
+			final X36RequestType requestType = msg.getBody().getRequestType();
+
+			if (requestType.isPresentI36() && requestType.isPresentPen()) {
+				i36Client.request(msg, neMap);
+				if (log.isDebugEnabled()) {
+					log.debug("GetNodeConfiguration only I36 response in X36 format for reqId " + msg.getBody().getReqId()
+							+ " and NeId " + msg.getBody().getNeId());
+					log.debug(new DumpInfo(neMap.getNodeConfiguration()));
+				}
+			} else if (requestType.isPresentPdm() && requestType.isPresentPen()) {
+				// PDM request is given only when the I36 Message Compliance is
+				// OK.
+				// Requirement as part of TR HO89451
+				if (neMap.getNodeConfiguration() != null) {
+					final X36GetReportNodeConfiguration neMapBody = neMap.getNodeConfiguration().getBody();
+					if (neMapBody != null) {
+						final X36Compliance i36Comp = neMapBody.getCompliance();
+						if (i36Comp != null && i36Comp.isResOk()) {
+							penClient.request(msg, neMap);
+							if (log.isDebugEnabled()) {
+								log.debug("GetNodeConfiguration X36 (Composed I36 and PDM) response for reqId "
+										+ msg.getBody().getReqId() + " and NeId " + msg.getBody().getNeId());
+								log.debug(new DumpInfo(neMap.getNodeConfiguration()));
+							}
+						}
+					}
+				}
+
+			} else if (requestType.isPresentAll()) {
+				neMap = msgGetReportNodeConfiguration(neMap, msg);
+			} else {
+				neMap = msgGetReportNodeConfiguration(neMap, msg);
+			}
+		} else {
+
+			neMap = msgGetReportNodeConfiguration(neMap, msg);
+		}
+
+		return neMap.getNodeConfiguration();
+	}
+
+	private NeMapper msgGetReportNodeConfiguration(final NeMapper neMap, final X36MsgGetNodeConfiguration msg)
+			throws PlugInException {
+		try {
+			i36Client.request(msg, neMap);
+			if (log.isDebugEnabled()) {
+				log.debug("GetNodeConfiguration only I36 response in X36 format for reqId " + msg.getBody().getReqId()
+						+ " and NeId " + msg.getBody().getNeId());
+				log.debug(new DumpInfo(neMap.getNodeConfiguration()));
+			}
+			// PDM request is given only when the I36 Message Compliance is OK.
+			// Requirement as part of TR HO89451
+			if (neMap.getNodeConfiguration() != null) {
+				final X36GetReportNodeConfiguration neMapBody = neMap.getNodeConfiguration().getBody();
+				if (neMapBody != null) {
+					final X36Compliance i36Comp = neMapBody.getCompliance();
+					if (i36Comp != null && i36Comp.isResOk()) {
+						penClient.request(msg, neMap);
+						if (log.isDebugEnabled()) {
+							log.debug("GetNodeConfiguration X36 (Composed I36 and PDM) response for reqId "
+									+ msg.getBody().getReqId() + " and NeId " + msg.getBody().getNeId());
+							log.debug(new DumpInfo(neMap.getNodeConfiguration()));
+						}
+					}
+				}
+			}
+		} catch (final Exception ex) {
+			log.error(new DumpInfo(ex, "Exception while trying to getnodeconfiguraion :"));
+			throw PlugInExceptionHandler.internalError(ex.getMessage());
+		}
+		return neMap;
+	}
+
+	/**
+	 * Method to request the message 'GetNodePossibleConfiguration' This is a
+	 * common message supported by I36 only
+	 * 
+	 * @param in
+	 *            - request message 'X36MsgGetNodePossibleConfiguration'
+	 * @return X36MsgGetReportNodePossibleConfiguration
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportNodePossibleConfiguration request(final X36MsgGetNodePossibleConfiguration msg)
+			throws GenericMsgClientException {
+		final X36MsgGetReportNodePossibleConfiguration response = i36Client.request(msg);
+		return response;
+	}
+
+	/**
+	 * Method to request the message 'GetMSP' This is a I36 message called on
+	 * 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetMSP'
+	 * @return X36MsgGetReportMSP
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportMSP request(final X36MsgGetMSP msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'UserInterfaceManagement' This is a I36
+	 * message called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgUserInterfaceManagement'
+	 * @return X36MsgReportUserInterfaceManagement
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportUserInterfaceManagement request(final X36MsgUserInterfaceManagement msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'GetBshrProtection' This is a I36 message
+	 * called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetBshrProtection'
+	 * @return X36MsgGetReportBshrProtection
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportBshrProtection request(final X36MsgGetBshrProtection msg) throws GenericMsgClientException {
+		X36MsgGetReportBshrProtection response = null;
+
+		response = i36Client.request(msg);
+
+		return response;
+	}
+
+	/**
+	 * This method is called when there is a change to the state of one the two
+	 * channels used by this double channel. The is called because this class
+	 * implements the ChannelStateEventListener interface and this class has
+	 * been added as a listener of both the clients.
+	 *
+	 * WHY HERE WE ARE USING SBI_CONNECTED AND SBI_CLOSED INSTEAD OF
+	 * SBI_CONNECTION_STATE
+	 * 
+	 * 
+	 * @param evt
+	 *            the event which was raised
+	 */
+	@Override
+	public void propertyChange(final PropertyChangeEvent evt) {
+
+		synchronized (stateListenerLock) {
+			// now one or more double clients are connected
+			if (evt.getPropertyName().equalsIgnoreCase(SBI_CONNECTED)) {
+				if (!doubleClientsConnected && (i36Client.isConnected() && penClient.isConnected())) {
+					doubleClientsConnected = true;
+					final int sbiListenersSize = sbiStateListeners.size();
+					log.info(String.format(" EM [%s(%s,%s)] SBI is Connected", connectionInfo.getHost(),
+							connectionInfo.getConfPort(), connectionInfo.getEvtPort()));
+					for (int i = 0; i < sbiListenersSize; i++) {
+						sbiStateListeners.get(i).propertyChange(
+								new PropertyChangeEvent(this, SBI_CONNECTED, SBI_CLOSED, SBI_CONNECTED));
+					}
+				}
+			}
+
+			// now one or more double clients are closed
+			else if (evt.getPropertyName().equalsIgnoreCase(SBI_CLOSED)) {
+				if (doubleClientsConnected && (!i36Client.isConnected() || !penClient.isConnected())) {
+					doubleClientsConnected = false;
+					final int sbiListenersSize = sbiStateListeners.size();
+					log.info(String.format(" EM [%s(%s,%s)] SBI is disconnected", connectionInfo.getHost(),
+							connectionInfo.getConfPort(), connectionInfo.getEvtPort()));
+					for (int i = 0; i < sbiListenersSize; i++) {
+						sbiStateListeners.get(i).propertyChange(
+								new PropertyChangeEvent(this, SBI_CLOSED, SBI_CONNECTED, SBI_CLOSED));
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Method to request the message 'GetDeprovisioning' This is a I36 message
+	 * called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetDeprovisioning'
+	 * @return X36MsgGetReportDeprovisioning
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportDeprovisioning request(final X36MsgGetDeprovisioning msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'AlarmRefresh' This is a I36 message called
+	 * on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgAlarmRefresh'
+	 * @return X36MsgAlarmRefreshReport
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgAlarmRefreshReport request(final X36MsgAlarmRefresh msg) throws GenericMsgClientException {
+		final X36MsgAlarmRefreshReport i36Events = i36Client.request(msg);
+		//final X36MsgAlarmRefreshReport penEvents = penClient.request(msg);
+		//i36Events.getBody().getAlEventList().addAll(penEvents.getBody().getAlEventList());
+		return i36Events;
+	}
+
+	/**
+	 * Method to request the message 'GetWorkingSide' This is a I36 message
+	 * called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetWorkingSide'
+	 * @return X36MsgGetReportWorkingSide
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportWorkingSide request(final X36MsgGetWorkingSide msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'GetLinks' This is a I36 message called on
+	 * 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetLinks'
+	 * @return X36MsgGetReportLinks
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportLinks request(final X36MsgGetLinks msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'GetEquipmentProtection' This is a I36
+	 * message called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetEquipmentProtection'
+	 * @return X36MsgGetReportEquipmentProtection
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportEquipmentProtection request(final X36MsgGetEquipmentProtection msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'SetCrossConnections' This is a common
+	 * message supported by both I36 and PEN/PDM. So call is given on both
+	 * clients 'i36Client' and 'penClient' If the CrossConnection is a
+	 * DataCrossConnection, then 'penClient' handles it. If it is any other
+	 * CrossConnection other than DataCrossConnection, 'i36Client' handles it.
+	 * 
+	 * @param in
+	 *            - request message 'X36MsgSetCrossConnections'
+	 * @return X36MsgSetReportCrossConnections
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgSetReportCrossConnections request(final X36MsgSetCrossConnections msg) throws GenericMsgClientException {
+		final NeMapper neMap = new NeMapper();
+		i36Client.request(msg, neMap);
+		penClient.request(msg, neMap);
+		if (log.isDebugEnabled()) {
+			log.debug("SetCrossConnections message response for reqId " + msg.getBody().getReqId() + " and NeId "
+					+ msg.getBody().getNeId());
+			log.debug(new DumpInfo(neMap.getReportSetCrossConnections()));
+		}
+		return neMap.getReportSetCrossConnections();
+	}
+
+	/**
+	 * Method to request the message 'ExportPerfData' This is a I36 message
+	 * called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgExportPerfData'
+	 * @return X36MsgReportExportPerfData
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportExportPerfData request(final X36MsgExportPerfData msg) throws GenericMsgClientException {
+		/*
+		 * if singaltype is related to ethernet,then performance counters are
+		 * related to PEN(Ethernet Layer Rates)
+		 */
+		if (isPENSignalType(msg.getBody().getAlSgType())) {
+			return penClient.request(msg);
+		} else {
+			return i36Client.request(msg);
+		}
+	}
+
+	// added for 12.1.3 v
+	/**
+	 * Method to request the message 'GetAlarmResourcesDisabled' This is a I36
+	 * message called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetAlarmResourcesDisabled'
+	 * @return X36MsgGetReportAlarmResourcesDisabled
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgGetReportAlarmResourcesDisabled request(final X36MsgGetAlarmResourcesDisabled msg)
+			throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'SetReportAlarmReporting' This is a I36
+	 * message called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgSetAlarmReporting'
+	 * @return X36MsgSetReportAlarmReporting
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgSetReportAlarmReporting request(final X36MsgSetAlarmReporting msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'SetSdhFrameStructure' This is a I36
+	 * message called on 'i36Client'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgSetSdhFrameStructure'
+	 * @return X36MsgSetReportSdhFrameStructure
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgSetReportSdhFrameStructure request(final X36MsgSetSdhFrameStructure msg) throws GenericMsgClientException {
+		return i36Client.request(msg);
+	}
+
+	// PDM Messages
+
+	/**
+	 * Method to request the message 'GetDataProfiles' This is a PEN/PDM message
+	 * called on 'penClient' For Future use
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetDataProfiles'
+	 * @return X36MsgReportGetDataProfiles
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportGetDataProfiles request(final X36MsgGetDataProfiles msg) throws GenericMsgClientException {
+		X36MsgReportGetDataProfiles response = null;
+		if (msg.getBody().isPresentRequestType()) {
+			final X36RequestType requestType = msg.getBody().getRequestType();
+
+			if ((requestType.isPresentPdm() && requestType.isPresentPen())
+					|| requestType.isPresentAll()) {
+				response = penClient.request(msg);
+			}
+		}
+		return response;
+	}
+
+	/**
+	 * Method to request the message 'GetBridgeState' This is a PEN/PDM message
+	 * called on 'penClient' For Future use
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetBridgeState'
+	 * @return X36MsgReportGetBridgeState
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportGetBridgeState request(final X36MsgGetBridgeState msg) throws GenericMsgClientException {
+		return penClient.request(msg);
+	}
+
+	/**
+	 * Method to request the message 'GetTMplsTunnelEnds' This is a PEN/PDM
+	 * message called on 'penClient' For Future use
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetTMplsTunnelEnds'
+	 * @return X36MsgReportGetTMplsTunnelEnds
+	 * @throws GenericMsgClientException
+	 */
+	/*
+	 * public X36MsgReportGetTMplsTunnelEnds request(X36MsgGetTMplsTunnelEnds
+	 * in) throws GenericMsgClientException { return penClient.request(in); }
+	 */
+
+	/**
+	 * Method to request the message 'GetVPNCrossConnections' This is a PEN/PDM
+	 * message called on 'penClient' For Future use
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetVPNCrossConnections'
+	 * @return X36MsgReportGetVPNCrossConnections
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportGetVPNCrossConnections request(final X36MsgGetVPNCrossConnections msg) throws GenericMsgClientException {
+		return penClient.request(msg);
+	}
+
+	// Commented as they are not used now...They can be used in future
+	/*
+	 * public X36MsgRespSetOperation request(X36MsgSetDataPortParameters in)
+	 * throws GenericMsgClientException { return penClient.request(in); }
+	 */
+
+	/*
+	 * public X36MsgRespSetOperation request(X36MsgCreateDataCrossConnection in)
+	 * throws GenericMsgClientException { return penClient.request(in); }
+	 */
+
+	/*
+	 * public X36MsgRespSetOperation request(X36MsgModifyDataCrossConnection in)
+	 * throws GenericMsgClientException { return penClient.request(in); }
+	 */
+
+	/*
+	 * public X36MsgRespSetOperation request(X36MsgDeleteDataCrossConnection in)
+	 * throws GenericMsgClientException { return penClient.request(in); }
+	 */
+
+	/*
+	 * public X36MsgRespSetOperation request(X36MsgCreateVPNCrossConnection in)
+	 * throws GenericMsgClientException { return penClient.request(in); }
+	 */
+
+	/*
+	 * public X36MsgRespSetOperation request(X36MsgModifyVPNCrossConnection in)
+	 * throws GenericMsgClientException { return penClient.request(in); }
+	 */
+
+	/*
+	 * public X36MsgRespSetOperation request(X36MsgDeleteVPNCrossConnection in)
+	 * throws GenericMsgClientException { return penClient.request(in); }
+	 */
+
+	/**
+	 * This method should not be used
+	 */
+	@Override
+	public List<X36Message<? extends ASN1Obj>> sendRequest(final X36Message<? extends ASN1Obj> arg0,
+			final MultiplePayloadCustomer<X36Message<? extends ASN1Obj>> arg1) throws TimeoutExpiredException {
+		throw new BadUseOfSBIException("The sendRequest method of the " + this.getClass().getName() + " should not be used.");
+	}
+
+	/**
+	 * Method to request the message 'X36MsgExportThresholdsValueFromNe' This is
+	 * a PEN message called on 'penClient'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgExportThresholdsValueFromNe'
+	 * @return X36MsgReportExportThresholdsValueFromNe
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportExportThresholdsValueFromNe request(final X36MsgExportThresholdsValueFromNe msg)
+			throws GenericMsgClientException {
+		return penClient.request(msg);
+	}
+
+	/*
+	 * public X36MsgReportExportAllThresholdsValueFromNe request(final
+	 * X36MsgExportAllThresholdsValueFromNe msg) throws
+	 * GenericMsgClientException { return penClient.request(msg); }
+	 */
+
+	/**
+	 * Method to request the message 'X36MsgGetPMCapabilities' This is a PEN
+	 * message called on 'penClient'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetPMCapabilities'
+	 * @return X36MsgReportGetPMCapabilities
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportGetPMCapabilities request(final X36MsgGetPMCapabilities msg) throws GenericMsgClientException {
+		return penClient.request(msg);
+	}
+
+	/**
+	 * This request is added as part of setTCATPParmeter operation to be
+	 * supported via PEN interface Method to request the message
+	 * 'X36MsgSetThresholdsValueOnNe' This is a PEN message called on
+	 * 'penClient'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgSetThresholdsValueOnNe'
+	 * @return X36MsgReportSetThresholdsValueOnNe
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportSetThresholdsValueOnNe request(final X36MsgSetThresholdsValueOnNe msg) throws GenericMsgClientException {
+		return penClient.request(msg);
+	}
+
+	/**
+	 * This request is added as part of EnableThresholdsOnNe operation to be
+	 * supported via PEN interface Method to request the message
+	 * 'X36MsgEnableThresholdsOnNe' This is a PEN message called on 'penClient'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgEnableThresholdsOnNe'
+	 * @return X36MsgReportEnableThresholdsOnNe
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportEnableThresholdsOnNe request(final X36MsgEnableThresholdsOnNe in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+	/**
+	 * This request is added as part of DisableThresholdsOnNe operation to be
+	 * supported via PEN interface Method to request the message
+	 * 'X36MsgDisableThresholdsOnNe' This is a PEN message called on 'penClient'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgDisableThresholdsOnNe'
+	 * @return X36MsgReportDisableThresholdsOnNe
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportDisableThresholdsOnNe request(final X36MsgDisableThresholdsOnNe in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+	/**
+	 * This request is added as part of ResetPMCountersOnNe operation to be
+	 * supported via PEN interface Method to request the message
+	 * 'X36MsgResetPMCountersOnNe' This is a PEN message called on 'penClient'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgResetPMCountersOnNe'
+	 * @return X36MsgReportResetPMCountersOnNe
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportResetPMCountersOnNe request(final X36MsgResetPMCountersOnNe in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+	/**
+	 * This request is added as part of GetPMDataStorageTime operation to be
+	 * supported via PEN interface Method to request the message
+	 * 'X36MsgGetPMDataStorageTime' This is a PEN message called on 'penClient'
+	 * 
+	 * @param msg
+	 *            - request message 'X36MsgGetPMDataStorageTime'
+	 * @return X36MsgReportGetPMDataStorageTime
+	 * @throws GenericMsgClientException
+	 */
+	@Override
+	public X36MsgReportGetPMDataStorageTime request(final X36MsgGetPMDataStorageTime in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+	/**
+	 * This method returns true if PEN / PDM is connected otherwise false.
+	 * 
+	 * @return boolean
+	 */
+	public boolean isPENPDMConnected() {
+		boolean isConnected = false;
+		if (penClient != null) {
+			isConnected = ((PENPDMCorbaClient) penClient).isConnected();
+		}
+		return isConnected;
+	}
+
+	@Override
+	public X36MsgReportExportAllThresholdsValueFromNe request(final X36MsgExportAllThresholdsValueFromNe in)
+			throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+	@Override
+	public void init(final IEventConsumer evm) throws WrongInitializationException {
+		try {
+			i36Client = new I36MsgDoubleClient(plugInName);
+			penClient = new PENPDMCorbaClient();
+
+		} catch (final IOException e) {
+			log.error(new DumpInfo("Error initializing the i36Client", e));
+			throw new WrongInitializationException("Error initializing the i36Client " + e.getLocalizedMessage());
+		}
+
+		if (sbiProps == null) {
+			sbiProps = new Properties();
+			// loading the X36 SBI properties file
+			final String sbiPropsFile = "/" + X36SBI.class.getName().replaceAll("[.]", "/") + ".properties";
+			// the file is inside the jar file
+			final URL url = getClass().getResource(sbiPropsFile);
+			InputStream stream = null;
+			try {
+				stream = url.openStream();
+				sbiProps.load(stream);
+				stream.close();
+			} catch (final IOException e) {
+				log.error(new DumpInfo("IO Error reading the sbi prop file. It should be called " + sbiPropsFile, e));
+				throw new WrongInitializationException("IO Error reading the sbi prop file. It should be called " + sbiPropsFile
+						+ "\n The error is: " + e.getMessage());
+			}
+		}
+	}
+
+	@Override
+	public void start() throws PlugInException {
+		try {
+
+
+
+			/*
+			 * Fix for the TR HP65378 starts here Before starting the i36Client
+			 * and penClient, X36SBI(this) should be added as Listener. But in
+			 * TMF over NM mode X36SBI(this) had been added after the start of
+			 * i36Client and penClient. Hence if "isListenersRegistered" is
+			 * false add the X36SBI as listener first.
+			 */
+			if (!isListenersRegistered) {
+				i36Client.addListener(this);
+				penClient.addListener(this);
+				isListenersRegistered = true;
+			}
+			/*
+			 * Fix for the TR HP65378 Ends here
+			 */
+
+			this.start(this.profile);
+		} catch (final X36MsgClientException exSbi) {
+			log.error(exSbi);
+			throw new PlugInException(com.marconi.fusion.tmf.plugIn.types.ExceptionType.EXCPT_INTERNAL_ERROR, exSbi.getMessage());
+		}
+
+	}
+
+	/*
+	 * Below method will be called by Sirius-Fort, when TMF runs over IPT-NMS
+	 * Circuit
+	 */
+	/**
+	 * Method to get the Connection information.
+	 * 
+	 * @param connInfo
+	 *            , connection information of EM to which SBI has to connect
+	 */
+	@Override
+	public void setConnectionInfo(final ConnectionInfo connInfo) {
+		this.connectionInfo = connInfo;
+		// Form the hostName, Configuration port and Event Port information,
+		// this information is sent by RealignmentHandler
+		if ((connInfo.getExtensions()).getBoolProperty(PluginProperty.standAlone, false)) {
+			this.profile = connInfo.getExtensions();
+		} else {
+			profile = connInfo.getExtensions().clone();
+			profile.setProperty(EmSBIPluginProperty.sbiHost, connInfo.getHost());
+			profile.setProperty(EmSBIPluginProperty.sbiConfigurationPort, connectionInfo.getConfPort());
+			profile.setProperty(EmSBIPluginProperty.sbiEventsPort, connInfo.getEvtPort());
+			if (connInfo.getPdmPort() != null) {
+				profile.setProperty(EmSBIPluginProperty.sbiPENPort, connInfo.getPdmPort());
+			}
+		}
+
+	}
+
+	/**
+	 * Method to return the available Connection Information
+	 * 
+	 * @return
+	 */
+	public ConnectionInfo getConnectionInfo() {
+		return connectionInfo;
+	}
+
+	public String getHostName() {
+		String hostName = null;
+		if (connectionInfo != null) {
+			hostName = connectionInfo.getHost();
+		} else if (profile != null) {
+			hostName = profile.getProperty(EmSBIPluginProperty.sbiHost);
+		}
+		return hostName;
+	}
+
+
+	@Override
+	public X36MsgReportGetMplsProtectionInfo request(final X36MsgGetMplsProtectionInfo in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+
+	/**
+	 * Method to perform the MPLS protection command
+	 */
+	@Override
+	public X36MsgReportSetMplsProtectionCommand request(final X36MsgSetMplsProtectionCommand in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+	/**
+	 * Method to perform the MPLS Monitoring request
+	 */
+	@Override
+	public X36MsgReportSetOAMMonitoring request(final X36MsgSetOAMMonitoring in)
+			throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+
+	@Override
+	public X36MsgReportCreateLAGPort request(final X36MsgCreateLAGPort in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+	@Override
+	public X36MsgReportModifyLAGPort request(final X36MsgModifyLAGPort in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+	@Override
+	public X36MsgReportDeleteLAGPort request(final X36MsgDeleteLAGPort in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+
+	@Override
+	public X36MsgReportSetPortConfiguration request(final X36MsgSetPortConfiguration in) throws GenericMsgClientException {
+		return penClient.request(in);
+	}
+}

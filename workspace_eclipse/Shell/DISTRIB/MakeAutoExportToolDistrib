@@ -1,0 +1,222 @@
+#!/bin/sh
+
+x=`basename $0`
+if test $# = 0; then
+  echo usage: ${x} files...
+  exit 1
+fi
+
+tmp=au$$
+trap "rm -f $tmp; exit 1" 1 2 3 5 10 13 15
+
+autocrea=0
+res=0
+
+echo hi > zfoo1$$
+echo hi > zfoo2$$
+if test -z "`(${CPMOD-cpmod} zfoo1$$ zfoo2$$) 2>&1`"; then
+  cpmod=${CPMOD-cpmod}
+fi
+rm -f zfoo[12]$$
+
+tail=""
+IFS="${IFS= 	}"; saveifs="$IFS"; IFS="${IFS}:"
+for dir in $PATH; do
+  test -z "$dir" && dir=.
+  if test -f $dir/tail; then
+    #tail="$dir/tail"
+    tail="tail"
+    break
+  fi
+done
+IFS="$saveifs"
+if test -z "$tail"; then
+  echo cannot find tail
+  exit 1
+fi
+
+for i do
+  if test ! -f "$i" ; then
+    echo ${x}: $i not a file
+    res=1
+    continue
+  fi
+  if ls -l "$i" | grep '^...[sS]' > /dev/null; then
+    echo "${x}: $i has setuid permission, unchanged"
+    continue
+  fi
+  if ls -l "$i" | grep '^......[sS]' > /dev/null; then
+    echo "${x}: $i has setgid permission, unchanged"
+    continue
+  fi
+  case "`basename $i`" in
+  ${x} | gzip | tail | chmod | ln | sleep | rm)
+	echo "${x}: $i would depend on itself"; continue ;;
+  esac
+  if test -z "$cpmod"; then
+    cp -p "$i" $tmp 2>/dev/null || cp "$i" $tmp
+    if test -w $tmp 2>/dev/null; then
+      writable=1
+    else
+      writable=0
+      chmod u+w $tmp 2>/dev/null
+    fi
+  fi
+
+  curr_os=$(uname -s)
+  if [ "${curr_os}" = "HP-UX" ];
+  then
+    com_size="ls -s"
+    ZIP_PATH="/usr/contrib/bin"
+  elif [ "${curr_os}" = "Linux" ];
+  then
+    com_size="ls -s --block-size=512"
+    ZIP_PATH="/bin"
+  else
+    tmp_os=$(echo ${curr_os} |grep -i cygwin)
+    if [ "${tmp_os}" != "" ];
+    then
+      curr_os="Cygwin"
+      com_size="ls -s --block-size=512"
+      ZIP_PATH="/bin"
+    else
+      echo "Unsupported OS: ${curr_os}"
+      echo "Exiting..."
+      exit 1
+    fi
+  fi
+
+  typeset -i dimtarA=`/bin/ls -s $i | awk '{print $1}'`
+  (( dimtarA /= 2    ))
+  (( dimtarA /= 1024 ))
+  (( dimtarA += 5    ))
+
+  if test $autocrea -eq 0; then
+    sed 1q $0 > $tmp
+    sed "s|^if tail|if $tail|" >> $tmp <<'EOF'
+skip=83
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" ];
+then
+  ZIP_PATH="/usr/contrib/bin"
+elif [ "${curr_os}" = "Linux" ];
+then
+  ZIP_PATH="/bin"
+else 
+  tmp_os=$(echo ${curr_os} |grep -i cygwin)
+  if [ "${tmp_os}" != "" ];
+  then
+    curr_os="Cygwin"
+    ZIP_PATH="./BIN_WIN"
+  else
+    echo "Unsupported OS: ${curr_os}"
+    echo "Exiting..."
+    exit 1
+  fi
+fi
+
+typeset -i DIMENSION=DIMTARA
+if [ "${curr_os}" != "Cygwin" ];
+then
+  if test -x /usr/bin/whoami; then
+     if [[ `/usr/bin/whoami` != "root" ]]; then
+        echo ""
+        echo "Sorry, you must be root to run this script!"
+        echo "$Exiting"
+        exit 1
+     fi
+  else
+     echo "ERROR: unable to locate the utility 'whoami'."
+     echo "       Please add the location for '/usr/bin/whoami' in your PATH and retry."
+     exit 1
+  fi
+fi
+
+cksum_file=$(basename $0 .exe)
+if [ -r ./${cksum_file}.cksum ];
+then
+  CK_IN0=$(cat ./${cksum_file}.cksum | awk '{print $1}')
+  CK_IN1=$(cat ./${cksum_file}.cksum | awk '{print $2}')
+  CK_OUT0=$(cksum $0 | awk '{print $1}')
+  CK_OUT1=$(cksum $0 | awk '{print $2}')
+  if [ "${CK_IN0}" != "${CK_OUT0}" -o "${CK_IN1}" != "${CK_OUT1}" ];
+  then
+     echo "ERROR: the cksum of this file is wrong"
+     echo "       Please check your media"
+     exit 1
+  fi
+fi
+
+CWD=`pwd`
+if [[ "${CWD}" = "" ]]; then
+   echo "ERROR: unable to locate the utility 'pwd'."
+   echo "       Please add the location for 'pwd' in your PATH and retry."
+   exit 1
+fi
+
+typeset -i DIM_FS=$(df -l -k -P "${CWD}" | grep -vi "filesystem" | awk '{print $4}')
+(( DIM_FS /= 1024 ))
+if (( $DIMENSION > $DIM_FS )); then
+  echo ""
+  echo "You have not enough space"
+  echo "You need of $DIMENSION Mb free but You have only $DIM_FS Mb free"
+  echo ""
+  echo "Exiting"
+  echo ""
+  exit 1
+fi
+if tail +$skip $0 | "${ZIP_PATH}"/gzip -cd > "$CWD"/autmp$$; then
+  /bin/chmod 700 "$CWD"/autmp$$
+  trap '/bin/rm -f "$CWD"/autmp$$ "$CWD"/Agent* "$CWD"/Tmf* "$CWD"/setup.bat "$CWD"/.tool "$CWD"/.version "$CWD"/.tool_contents "$CWD"/.release "$CWD"/TOOL.README.* ; exit $res' 0
+  (/bin/sleep 5; /bin/rm -f "$CWD"/autmp$$) 2>/dev/null &
+  tar xvf "$CWD"/autmp$$ ${1+"$@"} 2>/dev/null; res=$?
+  ./AgentExportToolInst.sh; res=1
+else
+  echo Impossible unzip, test if your gzip is in ${ZIP_PATH} ; exit 1
+fi; exit $res
+This is the last line of header
+EOF
+   ex << DIM_LABEL $tmp > /dev/null
+   g/DIMTARA/s//$dimtarA/g
+   w!
+DIM_LABEL
+    echo Starting compression for $i
+    "${ZIP_PATH}"/gzip -cv9 "$i" >> $tmp || {
+      /bin/rm -f $tmp
+      echo ${x}: compression not possible for $i, file unchanged.
+      res=1
+      continue
+    }
+
+  else
+    echo Nothing to do
+    continue
+  fi
+  rm -f "$i~"
+  mv "$i" "$i~" || {
+    echo ${x}: cannot backup $i as $i~
+    rm -f $tmp
+    res=1
+    continue
+  }
+  mv $tmp "$i" || cp -p $tmp "$i" 2>/dev/null || cp $tmp "$i" || {
+    echo ${x}: cannot create $i
+    rm -f $tmp
+    res=1
+    continue
+  }
+  rm -f $tmp
+  if test -n "$cpmod"; then
+    $cpmod "$i~" "$i" 2>/dev/null
+  elif test $writable -eq 0; then
+    chmod u-w $i 2>/dev/null
+  fi
+  mv "$i" "$i.exe" || {
+    echo ${x}: cannot create $i.exe from $i
+    res=1
+    continue
+  }
+  chmod u+x $i.exe 2>/dev/null
+  rm -f "$i~"
+done
+exit $res

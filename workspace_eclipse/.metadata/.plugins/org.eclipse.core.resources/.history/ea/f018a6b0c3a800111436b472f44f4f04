@@ -1,0 +1,216 @@
+/*
+ * Created on Jun 16, 2005
+ *
+ */
+package com.marconi.fusion.tmf.i38PlugIn.converter2;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X38.X38PathId;
+import com.marconi.fusion.X38.X38PortCoord;
+import com.marconi.fusion.X38.X38SNC;
+import com.marconi.fusion.X38.X38SNName;
+import com.marconi.fusion.X38.X38SignalType;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.tmf.i38PlugIn.I38Profile;
+import com.marconi.fusion.tmf.naming.Naming;
+import com.marconi.fusion.tmf.plugIn.types.LinkDn;
+import com.marconi.fusion.tmf.plugIn.types.MEId;
+import com.marconi.fusion.tmf.plugIn.types.MLSNPPLinkDn;
+import com.marconi.fusion.tmf.plugIn.types.SNCId;
+import com.marconi.fusion.tmf.plugIn.types.TPDn;
+
+/**
+ * @author mercurio
+ *
+ */
+class I38NamingImpl
+{
+	private static final Log LOG = LogFactory.getLog(I38NamingImpl.class);
+
+	private final String separator = Naming.getSeparator();
+
+	// %1$s = NM name
+	// %2$d = EMId
+	// %3$d = NEId in EM
+	// %4$s = SNName longSNName
+	// %5$s = SNName shortSNName
+	// %6$s = SNName snSuffix OPTIONAL
+	// private final String DEFAULT_ME_NAME_FORMAT = "%1$s:%2$d:%3$d";
+	private final String DEFAULT_ME_NAME_FORMAT = "%7$s:%3$d";
+	private String ME_NAME_FORMAT         = DEFAULT_ME_NAME_FORMAT;
+
+	public void init(final I38Profile profile) {
+		LOG.info(new DumpInfo(">>> Init I38Naming..."));
+
+		final String format = profile.getString(I38Profile.Key.SBI_NAME_FORMAT_ME);
+		if (format != null && format.length() > 0) {
+			try {
+				ME_NAME_FORMAT = format;
+
+				final X38SNName snName = new X38SNName();
+				snName.setLongSNName("longSNName");
+				snName.setShortSNName("shortSNName");
+				snName.setSnSuffix("snSuffix");
+				final String name = makeMEName("NmName", 1, 11, snName,"EmName");
+				LOG.debug(String.format("ME names format: '%s'", name));
+			}
+			catch (final Throwable ex) {
+				LOG.error(String.format("Invalid %s='%s'. Using default.",
+						I38Profile.Key.SBI_NAME_FORMAT_ME.toString(), format));
+				ME_NAME_FORMAT = DEFAULT_ME_NAME_FORMAT;
+			}
+		}
+	}
+
+	// == ManagedElement =====================================================
+
+	public MEId toMEId(final String nmName, final int emId, final int neIdInEM, final X38SNName snName,String emName) {
+		final MEId meId = new MEId();
+		meId.setValue(makeMEName(nmName, emId, neIdInEM, snName,emName));
+		return meId;
+	}
+
+	private String makeMEName(final String nmName, final int emId, final int neIdInEM, final X38SNName snName,String emName) {
+		return String.format(ME_NAME_FORMAT, nmName, emId, neIdInEM, snName.getLongSNName().getValue(), snName.getShortSNName()
+				.getValue(), snName.isPresentSnSuffix() ? snName.getSnSuffix().getValue() : "-", nmName);
+	}
+
+	// == TerminationPoint =====================================================
+
+	public TPDn toPTPDn(final MEId meId, final X38PortCoord portCoord) {
+		return Naming.makePTPDn(
+				meId,
+				portCoord.getShelfId().getValue(),
+				portCoord.getCardId().getValue(),
+				portCoord.getPortId().getValue());
+	}
+
+	// == TopologicalLink ========================================================
+
+	//	public LinkDn toLinkDn(NMName nmName, int linkId, int layer) {
+	//    	LinkDn linkDn = new LinkDn();
+	//    	linkDn.getlink().setnmName(nmName);
+	//
+	//    	//linkDn.getlink().setlnName(String.format("%d-%d", linkId, layer));
+	////    	StringBuilder sb = new StringBuilder();
+	////    	sb.append(linkId);
+	////    	sb.append("-");
+	////    	sb.append(layer);
+	////    	linkDn.getlink().setlnName(sb.toString());
+	//    	StringBuilder sb = new StringBuilder("/layer=");
+	//    	sb.append(layer);
+	//    	sb.append("/id=");
+	//    	sb.append(linkId);
+	//    	linkDn.getlink().setlnName(sb.toString());
+	//
+	//    	return linkDn;
+	//	}
+	public LinkDn toLinkDn(final String nmName, final int linkId, final int layer) {
+		final LinkDn linkDn = new LinkDn();
+
+		final StringBuilder sb = new StringBuilder();
+		sb.append("/nm=");
+		sb.append(nmName);
+		sb.append("/layer=");
+		sb.append(layer);
+		sb.append("/id=");
+		sb.append(linkId);
+		linkDn.setLink(sb.toString());
+
+		return linkDn;
+	}
+	public MLSNPPLinkDn toMLSNPPLinkDn(final String nmName, final String lkId, final int layer) {
+		final MLSNPPLinkDn mlsnppLinkDn = new MLSNPPLinkDn();
+
+		final StringBuilder sb = new StringBuilder();
+		sb.append("/nm=");
+		sb.append(nmName);
+		sb.append("/layer=");
+		sb.append(layer);
+		sb.append("/id=");
+		sb.append(lkId);
+		mlsnppLinkDn.setLink(sb.toString());
+
+		return mlsnppLinkDn;
+	}
+
+	public LinkDn toEthLinkDn(final String nmName, final int sncId, final int rate) {
+		final LinkDn linkDn = new LinkDn();
+
+		final StringBuilder sb = new StringBuilder();
+		sb.append("/nm=");
+		sb.append(nmName);
+		sb.append("/rate=");
+		sb.append(rate);
+		sb.append("/id=");
+		sb.append(sncId);
+		linkDn.setLink(sb.toString());
+
+		return linkDn;
+	}
+
+	// == SubnetworkConnection =================================================
+
+	public SNCId toSNCId(final X38SignalType signalType, final X38PathId pathId, final X38SNC snc) {
+		final SNCId sncId = new SNCId();
+
+		//    	StringBuilder sb = new StringBuilder();
+		//
+		//    	sb.append(signalType.getValue());
+		//    	sb.append(separator);
+		//    	sb.append(pathId.getValue());
+		//
+		//    	if (snc != null) {
+		//    		sb.append(separator);
+		//        	sb.append(snc.getsncId().getsnId().getid().getValue());
+		//        	sb.append(separator);
+		//        	sb.append(snc.getsncId().getsncId().getValue());
+		//    	}
+		final StringBuilder sb = new StringBuilder("/layer=");
+
+		sb.append(signalType.getValue());
+		sb.append("/id=");
+		sb.append(pathId.getValue());
+
+		if (snc != null) {
+			sb.append("/leg-sn=");
+			sb.append(snc.getSncId().getSnId().getId().getValue());
+			sb.append("-snc=");
+			sb.append(snc.getSncId().getSncId().getValue());
+		}
+
+		sncId.setValue(sb.toString());
+		return sncId;
+	}
+
+	//    public I38SNCId split(SNCDn sncDn, I38SignalType signalType, I38PathId pathId)
+	//    	throws Exception
+	//	{
+	//    	String[] ss = sncDn.getsnc().getValue().split(separator);
+	//
+	//    	if (ss.length == 2) {
+	//        	signalType.set(new I38SignalType(Integer.valueOf(ss[0]).intValue()));
+	//        	pathId.set(new IntegerType(Integer.valueOf(ss[1]).intValue()));
+	//        	return null;
+	//    	}
+	//    	else if (ss.length == 4) {
+	//        	signalType.set(new I38SignalType(Integer.valueOf(ss[0]).intValue()));
+	//        	pathId.set(new IntegerType(Integer.valueOf(ss[1]).intValue()));
+	//
+	//        	I38SNCId sncId = new I38SNCId();
+	//        	sncId.getsnId().setid(Integer.valueOf(ss[2]).intValue());
+	//        	sncId.setsncId(Integer.valueOf(ss[3]).intValue());
+	//
+	//        	return sncId;
+	//    	}
+	//    	else {
+	//    		log.error(new DumpInfo(sncDn, "Invalid SNCDn:"));
+	//        	throw PlugInExceptionHandler.invalidInput();
+	//    	}
+	//	}
+
+	// == Private ==============================================================
+
+}

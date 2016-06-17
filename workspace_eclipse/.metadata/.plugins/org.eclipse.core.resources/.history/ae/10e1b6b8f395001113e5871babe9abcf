@@ -1,0 +1,2583 @@
+/**
+ *
+ */
+package com.marconi.fusion.tmf.i36PlugIn;
+
+import static com.marconi.fusion.tmf.exportimport.ExportImportConstants.EI_ALARM_DATA;
+import static com.marconi.fusion.tmf.exportimport.ExportImportConstants.EI_CUSTOMER_DATA;
+import static com.marconi.fusion.tmf.exportimport.ExportImportConstants.EI_SLASH;
+import static com.marconi.fusion.tmf.exportimport.ExportImportConstants.EI_UNDERSCORE;
+
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.util.BitSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.Vector;
+
+import org.apache.commons.lang.time.DurationFormatUtils;
+import org.apache.commons.lang.time.StopWatch;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36AlContext;
+import com.marconi.fusion.X36.X36AlFunction;
+import com.marconi.fusion.X36.X36AlarmDetailReport;
+import com.marconi.fusion.X36.X36CardId;
+import com.marconi.fusion.X36.X36ChannelIdentification;
+import com.marconi.fusion.X36.X36KLM;
+import com.marconi.fusion.X36.X36MegPointData;
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.X36.X36PortIdentification;
+import com.marconi.fusion.X36.X36SetOfAlEvent;
+import com.marconi.fusion.X36.X36ShelfId;
+import com.marconi.fusion.X36.X36SlotId;
+import com.marconi.fusion.X36.X36TimeSlot;
+import com.marconi.fusion.X36.X36TrafficType;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.asn1.ASN1Exception;
+import com.marconi.fusion.base.asn1.ASN1Obj;
+import com.marconi.fusion.base.asn1.EnumeratedType;
+import com.marconi.fusion.base.asn1.Int16Type;
+import com.marconi.fusion.base.asn1.Int32Type;
+import com.marconi.fusion.base.asn1.Int8Type;
+import com.marconi.fusion.base.asn1.IntegerType;
+import com.marconi.fusion.base.asn1.RealType;
+import com.marconi.fusion.base.asn1.StringType;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.util.Holder;
+import com.marconi.fusion.base.util.Utility;
+import com.marconi.fusion.tmf.SBI.SBIKey;
+import com.marconi.fusion.tmf.SBIContainer.SBIContainer;
+import com.marconi.fusion.tmf.additionalInformation.AdditionalInfoUtils;
+import com.marconi.fusion.tmf.additionalInformation.ProprietaryAdditionalInfo;
+import com.marconi.fusion.tmf.additionalInformation.SetOfServiceStateInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AIServiceStateInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AISetOfServiceStateInfo;
+import com.marconi.fusion.tmf.db.DBAlarmEvent;
+import com.marconi.fusion.tmf.db.DBCommon;
+import com.marconi.fusion.tmf.db.DBComponent;
+import com.marconi.fusion.tmf.db.DBComponent.TMFObject;
+import com.marconi.fusion.tmf.db.DBCtp;
+import com.marconi.fusion.tmf.db.DBEquipment;
+import com.marconi.fusion.tmf.db.DBEquipmentHolder;
+import com.marconi.fusion.tmf.db.DBFtp;
+import com.marconi.fusion.tmf.db.DBIdentifier;
+import com.marconi.fusion.tmf.db.DBIterator;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.DBPortTp;
+import com.marconi.fusion.tmf.db.DBPtp;
+import com.marconi.fusion.tmf.db.DBTCAlert;
+import com.marconi.fusion.tmf.db.DBTp;
+import com.marconi.fusion.tmf.db.Index;
+import com.marconi.fusion.tmf.db.LayerRateHolder;
+import com.marconi.fusion.tmf.db.LayerRateListHolder;
+import com.marconi.fusion.tmf.db.Session;
+import com.marconi.fusion.tmf.exportimport.AL_TCAImportUtility;
+import com.marconi.fusion.tmf.i36PlugIn.AlarmConfiguration.TagKey;
+import com.marconi.fusion.tmf.i36PlugIn.I36PlugIn.PluginProperty;
+import com.marconi.fusion.tmf.i36PlugIn.X36AdditionalDefinitions.MEventType;
+import com.marconi.fusion.tmf.i36PlugIn.X36AdditionalDefinitions.MProbableCause;
+import com.marconi.fusion.tmf.i36PlugIn.actions.AlarmAction;
+import com.marconi.fusion.tmf.i36PlugIn.actions.InterCardProtTranspAlarmAction;
+import com.marconi.fusion.tmf.i36PlugIn.actions.InterPortDataMuxpProtAlarmAction;
+import com.marconi.fusion.tmf.i36PlugIn.actions.InternalODUAlarmAction;
+import com.marconi.fusion.tmf.i36PlugIn.alarmConf.ACBehaviour;
+import com.marconi.fusion.tmf.i36PlugIn.alarmConf.ACBehaviourObjectInfo;
+import com.marconi.fusion.tmf.i36PlugIn.alarmConf.ACBehaviourObjectInfoList;
+import com.marconi.fusion.tmf.i36PlugIn.alarmConf.ACBehavioursList;
+import com.marconi.fusion.tmf.i36PlugIn.alarmConf.ACClassType;
+import com.marconi.fusion.tmf.i36PlugIn.keys.AlarmKey;
+import com.marconi.fusion.tmf.i36PlugIn.keys.IndexesHelper;
+import com.marconi.fusion.tmf.plugIn.IEventConsumer;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.types.AIDDn;
+import com.marconi.fusion.tmf.plugIn.types.AIHolder;
+import com.marconi.fusion.tmf.plugIn.types.AcknowledgeIndication;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.AlarmEvent;
+import com.marconi.fusion.tmf.plugIn.types.AlarmInfo;
+import com.marconi.fusion.tmf.plugIn.types.CtpName;
+import com.marconi.fusion.tmf.plugIn.types.CtpNameComponent;
+import com.marconi.fusion.tmf.plugIn.types.CtpNameComponents;
+import com.marconi.fusion.tmf.plugIn.types.EMS;
+import com.marconi.fusion.tmf.plugIn.types.EMSDn;
+import com.marconi.fusion.tmf.plugIn.types.Equipment;
+import com.marconi.fusion.tmf.plugIn.types.EquipmentDn;
+import com.marconi.fusion.tmf.plugIn.types.EquipmentHolder;
+import com.marconi.fusion.tmf.plugIn.types.Event;
+import com.marconi.fusion.tmf.plugIn.types.EventList;
+import com.marconi.fusion.tmf.plugIn.types.HolderDn;
+import com.marconi.fusion.tmf.plugIn.types.HolderId;
+import com.marconi.fusion.tmf.plugIn.types.LayerRate;
+import com.marconi.fusion.tmf.plugIn.types.LayerRateList;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEDnList;
+import com.marconi.fusion.tmf.plugIn.types.NVList;
+import com.marconi.fusion.tmf.plugIn.types.NVSList;
+import com.marconi.fusion.tmf.plugIn.types.NameAndAnyValue;
+import com.marconi.fusion.tmf.plugIn.types.NameAndStringValue;
+import com.marconi.fusion.tmf.plugIn.types.NotificationId;
+import com.marconi.fusion.tmf.plugIn.types.ObjectName;
+import com.marconi.fusion.tmf.plugIn.types.ObjectType;
+import com.marconi.fusion.tmf.plugIn.types.OperationalState;
+import com.marconi.fusion.tmf.plugIn.types.ServiceState;
+import com.marconi.fusion.tmf.plugIn.types.SpecificProblem;
+import com.marconi.fusion.tmf.plugIn.types.SpecificProblemsList;
+import com.marconi.fusion.tmf.plugIn.types.TPDn;
+import com.marconi.fusion.tmf.plugIn.types.TPDnList;
+import com.marconi.fusion.tmf.plugIn.types.TerminationPoint;
+import com.marconi.fusion.tmf.plugIn.types.ThresholdCrossedAlert;
+import com.marconi.fusion.tmf.plugIn.types.Time;
+import com.marconi.fusion.tmf.plugIn.types.X733Info;
+import com.marconi.fusion.tmf.sbi.em.X36SBI;
+import com.marconi.fusion.tmf.tmfFramework.DateConverter;
+import com.marconi.fusion.tmf.tmfFramework.EntityName;
+import com.marconi.fusion.tmf.tmfFramework.TmfUtilities2;
+import com.marconi.fusion.tmf.tmfFramework.db.DnIdentifier;
+import com.marconi.fusion.tmf.tmfFramework.db.IndexIdentifier;
+import com.marconi.fusion.tmf.tmfFramework.eventManagement.AlarmKeyMaker;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayerRateManager;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayeredParameterManager.ParameterName;
+import com.marconi.fusion.tmf.utilities.Utilities;
+import com.marconi.fusion.tmf.utils.AIHelper;
+import com.marconi.fusion.tmf.utils.LayeredParametersUtils;
+import com.marconi.fusion.tmf.utils.actions.Action;
+import com.marconi.fusion.tmf.utils.actions.ActionHandler;
+import com.marconi.fusion.tmf.utils.actions.ActionHolder;
+import com.marconi.fusion.tmf.utils.actions.EventInfoList;
+
+/**
+ * @author guarguag
+ *
+ */
+@SuppressWarnings("deprecation")
+public class AlarmRaiser implements PropertyChangeListener, IAlarmProcessor {
+	private static final Log LOG = LogFactory.getLog(AlarmRaiser.class);
+	private static Log trace = LogFactory.getLog("alarms.unresolved");
+	static private final Log HISTORY_LOG = LogFactory.getLog(AlarmRaiser.class.getName() + ".alarm.history");
+
+	private final Set<String>   unresolvedAlarms = new TreeSet<String>();
+	private SBIClientI    sbiClient = null;
+	//	private AtomicBoolean sbiConnected = new AtomicBoolean(false);
+	private final BitSet        alarmProcessing = new BitSet(AlarmProperty.LAST_ONE.ordinal());
+	private boolean       onlyStmOptical = false;
+
+	private String neModelKey = null;
+	private String neModelFmt = null;
+	private NameAndAnyValue neModelNulVal = null;
+	/*
+	 * dicardedAlarms contains the key of the alarm which doesn't have
+	 * XConnetion on the port
+	 */
+	private final Set<String> discardedAlarms = new HashSet<String>();
+
+	private static boolean alarmsInitialized = false;
+	private static Vector<Map<String,String>> alarmInfos;
+
+	// Updated as part of fix for TR HK54224
+	static private Event emAlarmEvent = null;
+
+	public enum AlarmProperty {
+		// alarms
+		FORCE_PROCESSING_ALARM("alarm.forceProcessingAlarm"), OPERATIONAL_STATE_ON_SERVICE_STATE(
+						"alarm.mapOperationlStateOnServiceState"), OPERATIONAL_STATE_ON_SERVICE_AFFECTING(
+										"alarm.mapOperationlStateOnServiceAffecting"), X733_ADDITIONALINFO("alarm.x733.additionalInfo"), LAST_ONE(""),
+										// Updated as part of fix for TR HK54224
+										EM_COMMUNICATION_ALARM("alarm.em.communication"), ALARMS_MANAGEMENT_ENABLED("alarm.alarmsManagementEnabled"), NE_PROVISIONING_ENABLED(
+														"alarm.provisioning.neProvisiongEnabled"), CHECK_UNIT_FOR_TCA("alarm.provisioning.checkUnitForTCA"), ME_LINK_UP_DOWN(
+																		"alarm.ME.linkUpDown"), FORCE_CLEAR_OLD_ALARMS("alarm.provisioning.forceClearOldAlarms");
+
+		private final String value;
+
+		private AlarmProperty(final String value) {
+			this.value = value;
+		}
+
+
+		@Override
+		public String toString() {
+			return "PlugIn." + value;
+		}
+
+	}
+
+	enum ActionOnObject {
+		VALID, NOT_VALID, SKIP
+	}
+
+	/* ***********************************************************************/
+
+
+	@Override
+	public boolean isAlarmsManagementEnabled() {
+		return alarmProcessing.get(AlarmProperty.ALARMS_MANAGEMENT_ENABLED.ordinal());
+	}
+
+
+	@Override
+	public boolean isProvisioningEnabled() {
+		return alarmProcessing.get(AlarmProperty.NE_PROVISIONING_ENABLED.ordinal());
+	}
+
+	public boolean isCheckingUnitForTCAEnabled() {
+		return alarmProcessing.get(AlarmProperty.CHECK_UNIT_FOR_TCA.ordinal());
+	}
+
+	public boolean isForceClearOldAlarmsEnabled() {
+		return alarmProcessing.get(AlarmProperty.FORCE_CLEAR_OLD_ALARMS.ordinal());
+	}
+
+	public String getNeModelKey() {
+		return neModelKey;
+	}
+
+	public String getNeModelFmt() {
+		return neModelFmt;
+	}
+
+	public NameAndAnyValue getNeModelNulVal() {
+		return neModelNulVal;
+	}
+
+	static synchronized void initalizeEMSAlarms(final Profile profile) {
+		if (alarmsInitialized){
+			return;
+		}
+		// Updated as part of fix for TR HK54224
+		final String str = profile.getProperty(AlarmProperty.EM_COMMUNICATION_ALARM, "");
+		if (str.length() > 0) {
+			try {
+				final Event event = new Event();
+				event.parse(str);
+				emAlarmEvent = event;
+			} catch (final ASN1Exception ex) {
+				LOG.error("Unable to parse <" + str + "> for <" + AlarmProperty.EM_COMMUNICATION_ALARM + ">");
+			}
+		}
+
+		if (HISTORY_LOG.isDebugEnabled()){
+			HISTORY_LOG.debug("#############################\n" + "          RESTARTED\n" + "#############################");
+		}
+		alarmsInitialized = true;
+	}
+
+	protected I36DatabaseManager getDBManager() {
+		return sbiClient.getDbManager();
+	}
+
+	protected IEventConsumer getEventConsumer() {
+		return sbiClient.getEventManager();
+	}
+
+	/* ***********************************************************************/
+
+	@Override
+	public void initialize(final SBIClientI sbiClient) {
+		this.sbiClient = sbiClient;
+
+		onlyStmOptical = sbiClient.getPlugIn().getProfile().getBoolProperty(PluginProperty.onlyStmOptical, onlyStmOptical);
+
+		LOG.info(String.format("Alarm signal type convertion from electrical to optical: %s", (onlyStmOptical ? "ENABLED"
+						: "DISABLED")));
+
+		boolean value = sbiClient.getProfile().getBoolProperty(AlarmProperty.FORCE_PROCESSING_ALARM, false);
+		alarmProcessing.set(AlarmProperty.FORCE_PROCESSING_ALARM.ordinal(), value);
+
+		value = sbiClient.getProfile().getBoolProperty(AlarmProperty.OPERATIONAL_STATE_ON_SERVICE_STATE, false);
+		alarmProcessing.set(AlarmProperty.OPERATIONAL_STATE_ON_SERVICE_STATE.ordinal(), value);
+
+		value = sbiClient.getProfile().getBoolProperty(AlarmProperty.OPERATIONAL_STATE_ON_SERVICE_AFFECTING, false);
+		alarmProcessing.set(AlarmProperty.OPERATIONAL_STATE_ON_SERVICE_AFFECTING.ordinal(), value);
+		value = sbiClient.getProfile().getBoolProperty(AlarmProperty.ALARMS_MANAGEMENT_ENABLED, true);
+		alarmProcessing.set(AlarmProperty.ALARMS_MANAGEMENT_ENABLED.ordinal(), value);
+
+		if (!value) {
+			LOG.warn("Alarm management disabled....");
+		}
+
+		value = sbiClient.getProfile().getBoolProperty(AlarmProperty.NE_PROVISIONING_ENABLED, true);
+		alarmProcessing.set(AlarmProperty.NE_PROVISIONING_ENABLED.ordinal(), value);
+
+		if (!value ) {
+			LOG.warn("Ne provisioning disabled....");
+		}
+
+		value = sbiClient.getProfile().getBoolProperty(AlarmProperty.CHECK_UNIT_FOR_TCA, false);
+		alarmProcessing.set(AlarmProperty.CHECK_UNIT_FOR_TCA.ordinal(), value);
+
+		if (!value ) {
+			LOG.warn("Check unit field for TCA during provisioning disabled....");
+		}
+
+		value = sbiClient.getProfile().getBoolProperty(AlarmProperty.FORCE_CLEAR_OLD_ALARMS, false);
+		alarmProcessing.set(AlarmProperty.FORCE_CLEAR_OLD_ALARMS.ordinal(), value);
+
+		if (value == false) {
+			LOG.warn("Forced clear of old alarms during provisioning disabled....");
+		}
+
+		initializeNeModelKey();
+
+		initalizeEMSAlarms(sbiClient.getProfile());
+
+	}
+
+	/**
+	 * Method to establish connection with SBI and start listening
+	 */
+	@Override
+	public void startListening() {
+		// getting SBI from SBI contianer. Since In EM Mode we will have a single SBI in SBIContainer. Hence retrieving like this.
+		if (sbiClient.isStandAlone()) {
+			((X36SBI) SBIContainer.getInstance().getSbiObj(sbiClient.getSbiKey())).addListener(this);
+		}
+		else
+		{
+			// Iterate through each Host and add listener
+			final Set<String> emHostNameSet = sbiClient.getPlugIn().gethostIds().keySet();
+			final Iterator<String> iter = emHostNameSet.iterator();
+			while (iter.hasNext()) {
+				final String hostName = iter.next();
+				final SBIKey key = new SBIKey(sbiClient.getPlugIn().getClass().getSimpleName(), hostName);
+				((X36SBI) SBIContainer.getInstance().getSbiObj(key))
+				.addListener(this);
+			}
+		}
+
+	}
+
+	public void initializeNeModelKey() {
+		final String fieldNames = sbiClient.getProfile().getProperty(AlarmProperty.X733_ADDITIONALINFO, "");
+		final String []items = fieldNames.trim().split(",");
+
+		for (String item : items) {
+			if (item.length() == 0) {
+				continue;
+			}
+			item = item.trim();
+
+			if (!item.equalsIgnoreCase("neModel")) {
+				continue;
+			}
+
+			String key = AlarmProperty.X733_ADDITIONALINFO + "." + item + ".name";
+
+			final String name = sbiClient.getProfile().getProperty(key, item);
+			if ((name == null) || (name.length() == 0)) {
+				continue;
+			}
+
+			key = AlarmProperty.X733_ADDITIONALINFO + "." + item + ".value";
+			neModelFmt = sbiClient.getProfile().getProperty(key, "%s");
+
+			neModelKey = new String(item);
+
+			final StringType st = new StringType();
+
+			neModelNulVal = Utilities.buildNameAndAnyValue(name, st);
+
+			break;
+		}
+
+		if (neModelKey == null) {
+			LOG.info(String.format("neModel not present in configuration files"));
+		}
+
+		return;
+	}
+
+	/**
+	 * Called to manage a single X36AlarmDetailReport
+	 * 
+	 * @param report
+	 *            the alarm to be managed
+	 */
+
+	@Override
+	public void onAlarmReport(final X36AlarmDetailReport report) {
+
+		final EventInfoList<Action> list = getEvent(report);
+		if (list != null){
+
+			if (list.getEventList().size() > 0){
+				getEventConsumer().pushEventList(list.getEventList());
+			}
+			if (list.getActionList().size() > 0){
+				ActionHandler.getInstance().addActionList(list.getActionList());
+			}
+		}
+	}
+
+
+	@Override
+	public void onAlarmReport(final X36SetOfAlEvent report) {
+		if (report.size() == 0){
+			return;
+		}
+		final EventInfoList<Action> list = getEventList(report);
+		if (list.getEventList().size() > 0) {
+			getEventConsumer().pushEventList(list.getEventList());
+		}
+		if (list.getActionList().size() > 0) {
+			ActionHandler.getInstance().addActionList(list.getActionList());
+		}
+
+	}
+
+	/**
+	 * Called to manage a set of alarms on a ME.<br>
+	 * Tries to evaluate the alarmList delta in order to delete alarms from DB.
+	 * 
+	 * @param setOf
+	 *            the alarm set of to be managed
+	 */
+
+	@Override
+	public void provisioning(final X36NeId neId, final X36SetOfAlEvent setOf) {
+		final MEDn meDn = sbiClient.getNaming().makeMEDn(neId);
+		if (meDn == null) {// capita se l'ne non riallinea affatto
+			return;
+		}
+		final String neLocator = sbiClient.getNeLocator(neId);
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(setOf, String.format("Provisioning alarms on ME <%s>: START...", neLocator)));
+		} else if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("Provisioning %d alarms on ME <%s>: START...", setOf.size(), neLocator));
+		}
+		EventList toBeCleared = null;
+
+		final EventInfoList<Action> el = getEventList(setOf);
+		/*
+		 * The following code has been added to support the importing of
+		 * Acknowledged alarms (CR375 WI1.2)
+		 */
+		final boolean acknowledgeAlarms = sbiClient.getProfile().getBoolProperty("PlugIn.alarms.acknowledgeAlarms", false);
+		if (acknowledgeAlarms) {
+			if(alarmInfos == null){
+				final String defaultDir = sbiClient.getProfile().getProperty("Framework.home") + EI_SLASH + EI_CUSTOMER_DATA + EI_SLASH;
+				final String fileDir = sbiClient.getProfile().getProperty("PlugIn.alarms.acknowledgeAlarmFile", defaultDir);
+				final String filePath = fileDir+EI_ALARM_DATA+EI_UNDERSCORE;
+				alarmInfos = AL_TCAImportUtility.loadAllAlarms(filePath);
+			}
+			final EventList eventLst = el.getEventList();
+			for (int inc = 0; inc < eventLst.size(); inc++) {
+				final Event event = eventLst.get(inc);
+				if (event.isAlarm()) {
+					final AlarmEvent ae = event.getAlarm();
+					if (AL_TCAImportUtility.isAlarmAlreadyAcknowledged(alarmInfos,ae,sbiClient.isStandAlone())) {
+						ae.setAcknowledgeIndication(AcknowledgeIndication.AI_EVENT_ACKNOWLEDGED);
+					}
+				}
+			}
+		}
+		//Code for CR375 WI1.2 ends here.
+
+		final EventClassifier classifier = new EventClassifier(el.getEventList());
+
+		el.getEventList().clear();
+		el.getEventList().addAll(classifier.getRemainingEvent());
+
+		final DeltaEvent de = new DeltaEvent(meDn, classifier.getAlarmEvent());
+		toBeCleared = de.clearAllAlarms();
+		final EventList delta = de.doDelta();
+
+		el.getEventList().addAll(toBeCleared);
+		el.getEventList().addAll(delta);
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(el, String.format("Ready to apply alarms delta on ME <%s>...", neLocator)));
+		} else if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("Ready to apply %d alarms delta on ME <%s> and %d actions...", el.getEventList().size(),
+							neLocator, el.getActionList().size()));
+		}
+
+		if (el.getEventList().size() > 0) {
+			getEventConsumer().pushEventList(el.getEventList());
+			if (el.getActionList().size() > 0) {
+				ActionHandler.getInstance().addActionList(el.getActionList());
+			}
+		}
+		if (LOG.isInfoEnabled()) {
+			LOG.info(String.format("Provisioning %d alarms (with %d actions) on ME <%s>: DONE.", setOf.size(), el.getActionList()
+							.size(), neLocator));
+		}
+
+		if (HISTORY_LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(el, String.format("Provisioning %d alarms on ME <%s>: DONE.", setOf.size(), neLocator)));
+		}
+
+	}
+
+	/**
+	 * Converts a set of X36 alarms into a set of TMF events
+	 * 
+	 * @param setOf
+	 *            the X36 alarms to be converted
+	 * @return the resulting set of TMF event
+	 */
+	public EventInfoList<Action> getEventList(final X36SetOfAlEvent setOf) {
+		/* ***********************************************************************/
+		final EventInfoList<Action> evList = new EventInfoList<Action>();
+
+		Session session = null;
+		try {
+			final StopWatch watch = new StopWatch();
+			watch.start();
+
+			session = getDBManager().beginSession(true);
+
+			for (final X36AlarmDetailReport x36AlarmDetailReport : setOf) {
+				final EventInfoList<Action> list = getEventImpl(x36AlarmDetailReport);
+				if (list == null){
+					continue;
+				}
+				evList.addAll(list);
+			} /* endWhile */
+
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(evList, "Evaluated " + evList.getEventList().size() + " eventa and "
+								+ evList.getActionList().size() + " actions"));
+			} else if (LOG.isInfoEnabled()) {
+				LOG.info("Evaluated " + evList.getEventList().size() + " event.");
+			}
+
+			session.commit();
+			watch.stop();
+			LOG.info(String.format("Managed %d alarm detail report in %s", setOf.size(), DurationFormatUtils
+							.formatDurationHMS(watch.getTime())));
+
+		} catch (final Exception e) {
+			LOG.error(new DumpInfo("Error on DB managin alarms", e));
+		} finally {
+			if (session != null){
+				session.terminate();
+			}
+		}
+		return evList;
+	}
+
+	/**
+	 * Converts a X36 alarm into a TMF event
+	 * 
+	 * @param setOf
+	 *            the X36 alarm to be converted
+	 * @return the resulting TMF event
+	 */
+	protected EventInfoList<Action> getEvent(final X36AlarmDetailReport ad) {
+		/* ***********************************************************************/
+		Session session = null;
+
+		EventInfoList<Action> evtInfoList = new EventInfoList<Action>();
+		try {
+			final StopWatch watch = new StopWatch();
+			watch.start();
+
+			session = getDBManager().beginSession(true);
+
+			evtInfoList = getEventImpl(ad);
+
+			session.commit();
+
+			watch.stop();
+			LOG
+			.info(String.format("Managed 1 alarm detail report in %s", DurationFormatUtils.formatDurationHMS(watch
+							.getTime())));
+		} catch (final Exception e) {
+			LOG.error(new DumpInfo("Error on managing alarms report", e));
+		} finally {
+			if (session != null){
+				session.terminate();
+			}
+		}
+		return evtInfoList;
+	}
+
+	/* ***********************************************************************/
+	protected EventInfoList<Action> getEventImpl(final X36AlarmDetailReport ad) {
+		/* ***********************************************************************/
+
+		if (onlyStmOptical && ad.getAlSignalType().isPhEl()){
+			ad.getAlSignalType().setPhOpt();
+		}
+		// set pen related values
+		if (ad.getPenAlarm() != null && ad.getPenAlarm().getValue()) {
+			try {
+				final String alProbableStr = MProbableCause.get(ad.getAlProbableCause().getValue());
+				if (alProbableStr != null) {
+					ad.setAlProbableStr(alProbableStr);
+				}
+
+				final String eventTypeStr = AlarmConfiguration.penEventTypeTable.get(ad.getAlProbableCause().getValue());
+				if (eventTypeStr != null) {
+					ad.setAlEventType(MEventType.get(eventTypeStr));
+					final String alContextStr = AlarmConfiguration.penAlContextTable.get(eventTypeStr);
+					final X36AlContext alContext = new X36AlContext();
+					if (alContextStr != null) {
+						alContext.set(alContextStr);
+					}
+					ad.setAlContext(alContext);
+				}
+			} catch (final ASN1Exception e) {
+				LOG.error(e);
+			}
+		}
+
+		final ACBehavioursList behaviours = AlarmConfiguration.get(ad);
+
+		final EventList list = new EventList();
+		EventInfoList<Action> evtInfoList = new EventInfoList<Action>();
+		try {
+			if (behaviours == null) {
+
+				String neLocator = null;
+				// Get the NELocator based on sbiHostName when running TMF on NM Mode, when TMF running on EM Mode, use NeId.
+				if (ad.isPresentSbihostName()) {
+					neLocator = sbiClient.getNeLocator(ad.getNeId(), ad.getSbihostName());
+				} else {
+					neLocator = sbiClient.getNeLocator(ad.getNeId());
+				}
+				if (LOG.isDebugEnabled()){
+					LOG.debug(new DumpInfo(ad, String.format("No behaviours for ME <%s>: DISCARDED....", neLocator)));
+				} else {
+					LOG.info(String.format("No behaviours for ME <%s>: DISCARDED....", neLocator));
+				}
+				if (trace.isInfoEnabled()) {
+					final TagKey key = new TagKey(ad);
+					synchronized (unresolvedAlarms) {
+						if (!unresolvedAlarms.contains(key.toString())) {
+							unresolvedAlarms.add(key.toString());
+							trace
+							.info(new DumpInfo(ad, String.format("No behaviours for ME <%s>: tag = <%s>...", neLocator,
+											key)));
+						}
+					}
+				}
+
+				return evtInfoList;
+			}
+			if (LOG.isDebugEnabled()) {
+				final String neLocator = sbiClient.getNeLocator(ad.getNeId());
+				LOG.debug(new DumpInfo(new Object[] { ad, behaviours }, String.format("Found behaviours for alarm on ME <%s>.",
+								neLocator)));
+			}
+			evtInfoList = getEventImpl(ad, behaviours);
+		} finally {
+			if (HISTORY_LOG.isDebugEnabled()){
+				HISTORY_LOG.debug(new DumpInfo(new Object[] {ad, list}, "Managed alarm..."));
+			}
+		}
+
+		return evtInfoList;
+	}
+
+	/* ***********************************************************************/
+	protected EventInfoList<Action> getEventImpl(final X36AlarmDetailReport ad, final ACBehavioursList behaviours) {
+		/* ***********************************************************************/
+		/*
+		 * mi fermo appena trovo un item che ritorna almeno un evento
+		 */
+		String neLocator = null;
+		if (ad.isPresentSbihostName()) {
+			neLocator = sbiClient.getNeLocator(ad.getNeId(), ad.getSbihostName());
+		} else {
+			neLocator = sbiClient.getNeLocator(ad.getNeId());
+		}
+
+		final EventList aidEvents = new EventList();
+		EventInfoList<Action> evtInfoList = new EventInfoList<Action>();
+
+		for (final ACBehaviour item : behaviours) {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(new Object[] { ad, item }, String.format("Processing behaviour for alarm on ME <%s>.",
+								neLocator)));
+			}
+
+			if (item.isPresentTca()){
+				evtInfoList.getEventList().clear();
+				evtInfoList.getEventList().addAll(getTCAEventImpl(ad, item, aidEvents));
+			} else {
+				evtInfoList = getAlarmEventImpl(ad, item, aidEvents);
+			}
+
+			if (evtInfoList.getEventList().size() > 0){
+				break;
+			}
+		}
+
+		if (evtInfoList.getEventList().size() == 0) {
+			//list = aidEvents;
+			/* The alarms should be mapped to AID object, only if the DBObject on which the alarm is raised is not found.*/
+			if (aidEvents.isEmpty()) {
+				traceUnresolvedAlarm(ad, behaviours, "The alarm is discarded due to no LayerRate intersection found");
+			} else {
+				evtInfoList.getEventList().addAll(aidEvents);
+				traceUnresolvedAlarm(ad, behaviours, "mapped to AID object");
+			}
+		}
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(new Object[] { evtInfoList.getEventList(), evtInfoList.getActionList() }, String.format(
+							"Loaded %d event and %d action from %d behaviours  on ME <%s>.", evtInfoList.getEventList().size(),
+							evtInfoList.getActionList().size(), behaviours.size(), neLocator)));
+		}
+
+		return evtInfoList;
+	}
+
+	/* ***********************************************************************/
+	protected EventInfoList<Action> getAlarmEventImpl(final X36AlarmDetailReport ad, final ACBehaviour behaviour,
+					final EventList aidEvents) {
+		/* ***********************************************************************/
+		final ACBehaviourObjectInfoList list = behaviour.getObjInfo();
+
+		final OperationalState opState = behaviour.getState();
+		/*
+		 * I want to create a set of AID alarms only for one behaviour So before
+		 * starting to manage a new behaviour it is checked if aidEvents is
+		 * still empty. If not the aidEvents will not be filled anymore
+		 */
+		final boolean fAidEmpty = (aidEvents.size() == 0)? true : false;
+
+		final EventInfoList<Action> evtInfoList = new EventInfoList<Action>();
+		// EventList storeEvents = new EventList();
+
+		for (final ACBehaviourObjectInfo objInfo : list) {
+			final LayerRateList lrList = objInfo.getLr();
+
+			try {
+				final ObjectType  objectType = objInfo.getObjectType(); //getObjectType(behaviour);
+				final ACClassType classType  = objInfo.getObj();
+
+				final Holder<DBCommon<?, ?>> holder = new Holder<DBCommon<?, ?>>();
+				final Holder<String> additionalInfo = new Holder<String>();
+				final ObjectName objectName = new ObjectName();
+				final ActionOnObject action = findObject(objectType, classType, ad, holder, objectName, additionalInfo, lrList);
+				DBCommon<?, ?> obj = holder.getTarget();
+
+				if (obj == null) {
+					// if Equipment is unprovisioned. Equipmnt object doesn't
+					// exist in the database. Alaram is not raised
+					final DBEquipmentHolder dbEquipHolder = getDBEquipmentHolder(ad);
+					if (dbEquipHolder != null) {
+						final EquipmentHolder eqptHolder = dbEquipHolder.getInformation();
+						if (eqptHolder != null) {
+							final AdditionalInfo addInfo = eqptHolder.getAdditionalInfo();
+							final String tmfProvisioningStatus = AdditionalInfoUtils.find(addInfo,
+											ProprietaryAdditionalInfo.TMFProvisioningStatus.name());
+
+							if (tmfProvisioningStatus != null && (tmfProvisioningStatus.equals("Unprovisioned"))) {
+								continue;
+							}
+						}
+					}
+				}
+
+				if (action == ActionOnObject.SKIP) {
+					continue;
+				} else if (action == ActionOnObject.NOT_VALID) {
+					continue;
+				}  else if (obj instanceof DBTp) {
+					final ClearDiscardAlarm clearDiscardAlarm = new ClearDiscardAlarm(sbiClient);
+					//FIX FOR TR HN25394
+					if (clearDiscardAlarm.discardAlarmInRealign(ad.getNeId(), ad.getChId().getPort())) {
+						// FIX For TR HN40181 : storing weather port Contain
+						// XConn or not.
+						discardedAlarms.add( (new TagKey(ad)).toString());
+						continue;
+					}
+				}
+
+				final AlarmEvent  ae = new AlarmEvent();
+
+				if (behaviour.isPresentAction() && (obj != null)) {
+					// AlarmAction bhAct =
+					// (AlarmAction)Utility.allocateObject(behaviour.getAction().getValue());
+					final ActionHolder<AlarmAction> actHold = new ActionHolder<AlarmAction>();
+
+					for (final StringType stringType : behaviour.getAction()) {
+						AlarmAction bhAct = (AlarmAction) Utility.allocateObject(stringType.getValue());
+
+						if ((obj instanceof DBTp) && (bhAct != null)) {
+							// Action defined for TrailSignalFailure alarm
+							// raised on odu CTP
+							if (bhAct instanceof InterCardProtTranspAlarmAction) {
+								bhAct = new InterCardProtTranspAlarmAction(obj, ad, behaviour, objInfo);
+								bhAct.setSBIClient(sbiClient);
+								bhAct.exec();
+								if (bhAct.getObj() != null) {
+									// Set the new object as the target object
+									holder.setTarget(bhAct.getObj());
+									obj = holder.getTarget();
+									// Set the objectName of the new object
+									objectName.set(obj.getObjectName());
+									// Set the ACBehaviourObjectInfo for the new
+									// object
+									final ACBehaviourObjectInfo ftpObjInfo = new ACBehaviourObjectInfo();
+									final ACClassType ftpClassType = new ACClassType();
+									ftpClassType.setOduTTP();
+									ftpObjInfo.setObj(ftpClassType);
+									final ObjectType ftpObjType = new ObjectType();
+									ftpObjType.setOt_floating_termination_point();
+									ftpObjInfo.setObjectType(ftpObjType);
+									ftpObjInfo.setLr(objInfo.getLr());
+									objInfo.set(ftpObjInfo);
+									ae.clear();
+									final AlarmInfo aiFtp = fillAlarmInfo(obj, objectName, ad, objInfo, opState);
+									ae.set(aiFtp);
+									ae.setAdditionalText(additionalInfo.getTarget());
+									if (behaviour.isPresentPc()) {
+										ae.getProbableCause().set(behaviour.getPc());
+									}
+								}
+
+							} else if (bhAct instanceof InternalODUAlarmAction) {
+								/*
+								 * Moving alarms on CTPs of InternalODU Port to
+								 * FTP of InternalODU Port in case of opuk_nv
+								 * with Probable Cause "Loss of Alignment"
+								 */
+								bhAct = new InternalODUAlarmAction(obj, ad, behaviour, objInfo);
+								bhAct.setSBIClient(sbiClient);
+								bhAct.exec();
+
+								if (bhAct.getObj() != null) {
+									// Set the new object as the target object
+									holder.setTarget(bhAct.getObj());
+									obj = holder.getTarget();
+
+									// Set the objectName of the new object
+									objectName.set(obj.getObjectName());
+
+									// Set the ACBehaviourObjectInfo for the new
+									// object
+									final ACBehaviourObjectInfo ftpObjInfo = new ACBehaviourObjectInfo();
+									final ACClassType ftpClassType = new ACClassType();
+									ftpClassType.setOduTTP();
+									ftpObjInfo.setObj(ftpClassType);
+									final ObjectType ftpObjType = new ObjectType();
+									ftpObjType.setOt_floating_termination_point();
+									ftpObjInfo.setObjectType(ftpObjType);
+									ftpObjInfo.setLr(objInfo.getLr());
+									objInfo.set(ftpObjInfo);
+
+									// Set the AlarmInfo for the new object
+									// Remove previously added CTP object from
+									// AlarmEvent and add the AlarmInfo of the
+									// new object
+									ae.clear();
+									final AlarmInfo aiFtp = fillAlarmInfo(obj, objectName, ad, objInfo, opState);
+									ae.set(aiFtp);
+									ae.setAdditionalText(additionalInfo.getTarget());
+
+									if (behaviour.isPresentPc()) {
+										ae.getProbableCause().set(behaviour.getPc());
+									}
+								}
+							}
+
+							else if (bhAct instanceof InterPortDataMuxpProtAlarmAction) {
+								// TR HO40512 - Modify the object details only
+								// if object has been modified from CTP to FTP
+								if (obj instanceof DBFtp) {
+									// Set the ACBehaviourObjectInfo for the new
+									// object
+									final ACBehaviourObjectInfo ftpObjInfo = new ACBehaviourObjectInfo();
+									final ACClassType ftpClassType = new ACClassType();
+									ftpClassType.setOduTTP();
+									ftpObjInfo.setObj(ftpClassType);
+									final ObjectType ftpObjType = new ObjectType();
+									ftpObjType.setOt_floating_termination_point();
+									ftpObjInfo.setObjectType(ftpObjType);
+									ftpObjInfo.setLr(objInfo.getLr());
+									objInfo.set(ftpObjInfo);
+									// Set the AlarmInfo for the new object
+									// Remove previously added CTP object from
+									// AlarmEvent and add the AlarmInfo of the
+									// new FTP object
+									ae.clear();
+									final AlarmInfo aiFtp = fillAlarmInfo(obj, objectName, ad, objInfo, opState);
+									ae.set(aiFtp);
+									ae.setAdditionalText(additionalInfo.getTarget());
+									if (behaviour.isPresentPc()) {
+										ae.getProbableCause().set( behaviour.getPc());
+									}
+								}
+								/*
+								 * Check if the TrailSignalFailure alarm is
+								 * raised on Protected Ptp of data Muxponder
+								 * with Inter Port protection. If yes then shift
+								 * the target object for raising the alarm to
+								 * the CTP of Coupler of the same transponder
+								 */
+								bhAct = new InterPortDataMuxpProtAlarmAction(obj, sbiClient);
+								bhAct.setSBIClient(sbiClient);
+
+								bhAct.exec();
+								final DBCommon<?, ?> bhActObj = bhAct.getObj();
+								if (bhActObj != null) {
+									// Set the new object as the target object
+									holder.setTarget(bhActObj);
+									obj = holder.getTarget();
+									// Set the objectName of the new object
+									objectName.set(obj.getObjectName());
+
+								}
+							}
+							final TerminationPoint tp = ((DBTp) obj).getInformation();
+							bhAct.setSBIClient(sbiClient);
+							bhAct.setTP(tp);
+							actHold.addAction(bhAct);
+
+							if (LOG.isDebugEnabled()) {
+
+								LOG.debug(new DumpInfo(bhAct, "Generating AlarmAction event on behaviour"));
+							}
+						}
+					}
+					evtInfoList.addAction(actHold);
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(behaviour.getAction(), String.format(
+										"Generating %d AlarmAction events on ME<%s>... by behaviour", behaviour.getAction().size(),
+										sbiClient.getNeLocator(ad.getNeId()))));
+					}
+				}
+
+				if (objInfo.isPresentAction() && (obj != null)) {
+					// AlarmAction bhAct =
+					// (AlarmAction)Utility.allocateObject(behaviour.getAction().getValue());
+					final ActionHolder<AlarmAction> actHold = new ActionHolder<AlarmAction>();
+
+					for (final StringType stringType : objInfo.getAction()) {
+						final AlarmAction bhAct = (AlarmAction) Utility.allocateObject(stringType.getValue());
+
+						if ((obj instanceof DBTp) && (bhAct != null)) {
+							final TerminationPoint tp = ((DBTp) obj).getInformation();
+							bhAct.setSBIClient(sbiClient);
+							bhAct.setTP(tp);
+							actHold.addAction(bhAct);
+
+							if (LOG.isDebugEnabled()) {
+
+								LOG.debug(new DumpInfo(new Object[] { bhAct, objInfo },
+												"Generating AlarmAction event on objecInfo"));
+							}
+						}
+					}
+					evtInfoList.addAction(actHold);
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(behaviour.getAction(), String.format(
+										"Generating %d AlarmAction events on ME<%s>... by objecInfo", objInfo.getAction().size(),
+										sbiClient.getNeLocator(ad.getNeId()))));
+					}
+				}
+
+				final AlarmInfo alarmInfo = fillAlarmInfo(obj, objectName, ad, objInfo, opState);
+				if (alarmInfo == null) {
+					continue;
+				}
+
+				ae.set(alarmInfo);
+				ae.setAdditionalText(additionalInfo.getTarget());
+
+				if (behaviour.isPresentPc()) {
+					ae.getProbableCause().set(behaviour.getPc());
+				}
+
+				ae.getNativeProbableCause().set(ad.getAlProbableStr().getValue());
+				ae.setProbableCauseQualifier(FC.probableCauseQualifier(ad));
+
+				ae.setServiceAffecting(FC.serviceAffecting(ad, behaviour, alarmProcessing));
+
+				// ae.setaffectedTPList( FC.affectedTPList( ad, behaviour));
+				// obsolete
+				ae.getAdditionalText().set(ad.getAlDetailStr());
+
+				ae.setRcaiIndicator(false);
+
+				fillAffectedTPList(obj, ae.getAffectedTPList());
+
+				final X733Info x733Info = ae.getX733Info();
+
+				// TODO come cacchio si riempie?
+				// x733Info.setadditionalInfo( ad.getAlDetailStr());
+				if (behaviour.isPresentSNT()) {
+					x733Info.setEventType(behaviour.getSNT());
+				}
+
+				if (behaviour.isPresentSSP()) {
+					final String[] sps = behaviour.getSSP().getValue().split("/");
+
+					final SpecificProblemsList spl = new SpecificProblemsList();
+					for (final String item : sps) {
+						spl.add(new SpecificProblem(item.trim()));
+					}
+					if (spl.size() > 0) {
+						x733Info.setSpecificProblems(spl);
+					}
+				}
+
+				fillX733AdditionalInfo(x733Info, ad);
+
+				x733Info.setPresentTrend();
+				x733Info.getTrend().setNo_change();
+
+				// ae.setadditionalInformation( FC.additionalInformation( ad,
+				// behaviour, me));
+				if (LOG.isDebugEnabled()) {
+					final String neLocator = sbiClient.getNeLocator(ad.getNeId());
+					LOG.debug(new DumpInfo(ae, String.format("Generating ALARM event on ME<%s>...", neLocator)));
+				}
+
+				if (obj != null) {
+					final Event event = new Event();
+					event.setAlarm(ae);
+					evtInfoList.addEvent(event);
+					// storeEvents.add(event);
+				} else if (fAidEmpty) {
+					final Event event = new Event();
+					event.setAlarm(ae);
+					aidEvents.add(event);
+				}
+			} catch (final Exception ex) {
+				LOG.error(new DumpInfo(ex,"Exception while trying to get the AlarmEvent : "));
+			}
+		}
+
+		return evtInfoList;
+	}
+	/************************************************************************/
+	protected EventList getTCAEventImpl(final X36AlarmDetailReport ad, final ACBehaviour behaviour, final EventList aidEvents) {
+		/************************************************************************/
+		final ACBehaviourObjectInfoList list = behaviour.getObjInfo();
+
+		/*
+		 * I want to create a set of AID alarms only for one behaviour So before
+		 * starting to manage a new behaviour it is checked if aidEvents is
+		 * still empty. If not the aidEvents will not be filled anymore
+		 */
+		final boolean fAidEmpty = (aidEvents.size() == 0) ? true : false;
+		final EventList storeEvents = new EventList();
+
+		for (final ACBehaviourObjectInfo objInfo : list) {
+			final LayerRateList lrList = objInfo.getLr();
+			try {
+				final ObjectType objectType = objInfo.getObjectType();
+				final ACClassType classType = objInfo.getObj();
+
+				final Holder<DBCommon<?, ?>> holder = new Holder<DBCommon<?, ?>>();
+				final Holder<String> additionalInfo = new Holder<String>();
+				final ObjectName objectName = new ObjectName();
+
+				final ActionOnObject action = findObject(objectType, classType, ad, holder, objectName, additionalInfo, lrList);
+				final DBCommon<?, ?> obj = holder.getTarget();
+
+				if (obj == null) {
+					// if Equipment is unprovisioned. Equipmnt object doesn't
+					// exist in the database. Alaram is not raised
+					final DBEquipmentHolder dbEquipHolder = getDBEquipmentHolder(ad);
+					if (dbEquipHolder != null) {
+						final EquipmentHolder eqptHolder = dbEquipHolder.getInformation();
+						if (eqptHolder != null) {
+							final AdditionalInfo addInfo = eqptHolder.getAdditionalInfo();
+							final String tmfProvisioningStatus = AdditionalInfoUtils.find(addInfo,
+											ProprietaryAdditionalInfo.TMFProvisioningStatus.name());
+
+							if (tmfProvisioningStatus != null && (tmfProvisioningStatus.equals("Unprovisioned"))) {
+								continue;
+							}
+						}
+					}
+				}
+
+				if (action == ActionOnObject.SKIP) {
+					continue;
+				} else if (action == ActionOnObject.NOT_VALID) {
+					// traceUnresolvedAlarm(ad, behaviour, objInfo,
+					// "object not found");
+					continue;
+				} else if (obj instanceof DBTp) {// FIX FOR TR HN25394
+					final ClearDiscardAlarm clearDiscardAlarm = new ClearDiscardAlarm(sbiClient);
+					if (clearDiscardAlarm.discardAlarmInRealign(ad.getNeId(), ad.getChId().getPort())) {
+						continue;
+					}
+				}
+
+				final ThresholdCrossedAlert tca = new ThresholdCrossedAlert();
+
+				final AlarmInfo ai = fillAlarmInfo(obj, objectName, ad, objInfo, null);
+				if (ai == null) {
+					continue;
+				}
+
+				tca.set(ai);
+
+				tca.setGranularity(behaviour.getGranularity());
+				tca.setPmParameterName(behaviour.getParameter());
+				tca.setPmLocation(behaviour.getLocation());
+				if (behaviour.isPresentThresholdType()) {
+					tca.setThresholdType(behaviour.getThresholdType());
+				} else {
+					tca.getThresholdType().setHigh();
+				}
+
+				/*
+				 * TODO mancano il value e la unit poerche' non ci sono su X36
+				 */
+				if (sbiClient.getProfile().getBoolProperty(PluginProperty.tcaUnitIdEnable, false)) {
+					tca.setUnit(String.valueOf(ad.getAlarmId().getValue()));
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(ad.getAlarmId().getValue(), "Geronimooooooo .... TCA UnitID: "));
+					}
+				}
+
+				if (LOG.isDebugEnabled()) {
+					final String neLocator = sbiClient.getNeLocator(ad.getNeId());
+					LOG.debug(new DumpInfo(tca, String.format("Generating TCA event on ME <%s>...", neLocator)));
+				}
+
+				if (obj != null) {
+					final Event event = new Event();
+					event.setThresholdCrossed(tca);
+					storeEvents.add(event);
+				} else if (fAidEmpty) {
+					final Event event = new Event();
+					event.setThresholdCrossed(tca);
+					aidEvents.add(event);
+				}
+			} catch (final Exception ex) {
+				LOG.error(new DumpInfo(ex));
+			}
+		}
+
+		return storeEvents;
+	}
+
+	/**
+	 * This method gets the DB Equipment Holder object from Database
+	 * 
+	 * @param ad
+	 *            - X36AlarmDetailReport
+	 * @return DBEquipmentHolder - DB Equipment Holder object
+	 */
+	private DBEquipmentHolder getDBEquipmentHolder(final X36AlarmDetailReport ad) {
+		final X36NeId neId = ad.getNeId();
+		final MEDn meDn = sbiClient.getNaming().makeMEDn(neId);
+
+		final X36PortIdentification portIden = ad.getChId().getPort();
+		final X36CardId cardId = portIden.getCardId();
+		final X36ShelfId shelfId = portIden.getShelfId();
+
+		final HolderDn holderDn = new HolderDn();
+		holderDn.setMe(meDn.getMe());
+		final HolderId holderId = new HolderId();
+		holderId.setShelf(String.valueOf(shelfId.getValue()));
+		holderId.setSlot(String.valueOf(cardId.getValue()));
+		holderDn.setHolder(holderId);
+
+		return getDBManager().getEquipmentHolder(holderDn);
+	}
+
+	/************************************************************************/
+	private AlarmInfo fillAlarmInfo(final DBCommon<?, ?> obj, final ObjectName objectName, final X36AlarmDetailReport ad,
+					final ACBehaviourObjectInfo objInfo, final OperationalState opState) {
+		LayerRate layerRate = null;
+		TMFObject tmfObj = null;
+		String nativeEMSName = "";
+
+		if (obj != null) {
+			layerRate = getLayerRate(obj, objInfo.getLr());
+			tmfObj = obj.getType();
+			nativeEMSName = obj.getNativeEMSName().getValue();
+			if ((layerRate != null) && (opState != null)) {
+				updateServiceState(obj, ad.getAlFunction(), layerRate, opState);
+			}
+		} else { // FIX FOR TR HN25394
+			final ClearDiscardAlarm clearDiscardAlarm = new ClearDiscardAlarm(sbiClient);
+			if (clearDiscardAlarm.discardAlarmInRealign(ad.getNeId(), ad.getChId().getPort())) {
+				return null;
+			}
+			tmfObj = TMFObject.AID;
+			// make the nativeEmsName - TR HL37856 & HL37850
+			if (ad.isPresentPortLabel() && !ad.getPortLabel().getValue().equals("")) {
+				nativeEMSName = ad.getPortLabel().getValue();
+			} else if (!ad.getCardDetailStr().getValue().equals("")) {
+				nativeEMSName = ad.getCardDetailStr().getValue();
+			} else {
+				final String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.namingAIDNativeNameFormat,
+								"%1$s-%2$s-%3$s-%4$s");
+				try {
+					nativeEMSName = String.format(format, ad.getNeId().getValue(),
+									ad.getChId().getPort().getShelfId().getValue(), ad.getChId().getPort().getCardId().getValue(), ad
+									.getChId().getPort().getPortId().getValue());
+				} catch (final Exception e) {
+					LOG.error(new DumpInfo(e));
+				}
+			}
+			// prendo il primo layer tanto non so come discriminare
+			if (objInfo.getLr().size() > 0) {
+				layerRate = objInfo.getLr().get(0);
+			} else {
+				layerRate = LayerRateManager.getLayerRate("LR_Not_Applicable");
+			}
+		}
+
+		if (layerRate == null) {
+			return null;
+		}
+		return fillAlarmInfo(objectName, tmfObj, layerRate, nativeEMSName, ad);
+	}
+
+	/************************************************************************/
+	private void updateServiceState(final DBCommon<?, ?> obj, final X36AlFunction onOff, final LayerRate layerRate,
+					final OperationalState opState) {
+		/*
+		 * If the alarm doesn't disable the layer then the service state doesn't
+		 * change and I have nothing to do
+		 */
+		if (opState.isEnabled()) {
+			return;
+		}
+		if (!alarmProcessing.get(AlarmProperty.OPERATIONAL_STATE_ON_SERVICE_STATE.ordinal())) {
+			return;
+		}
+		boolean fOn = true;
+		if (onOff.isCleared()) {
+			fOn = false;
+		}
+
+		/*
+		 * The service state has a meaning for TP and Equipment
+		 */
+		if (obj instanceof DBTp) {
+			updateServiceStateOnTp((DBTp) obj, fOn, layerRate, opState);
+		} else if (obj instanceof DBEquipment) {
+			updateServiceStateOnEqp((DBEquipment) obj, fOn, layerRate, opState);
+		}
+	}
+
+	/************************************************************************/
+	private void updateServiceStateOnTp(final DBTp obj, final boolean fOn, final LayerRate layerRate,
+					final OperationalState opState) {
+		final SetOfServiceStateInfo setOfInfo = getSetOfServiceStateInfo(obj);
+		final AIServiceStateInfo serviceStateInfo = getServiceStateInfo(setOfInfo, layerRate);
+
+		/*
+		 * Increment/decrement the disabling alarm (oparational state already
+		 * checked above)
+		 */
+		String strValue = null;
+		int newValue = serviceStateInfo.getNumOfDisablingAlarms().getValue();
+		if (fOn) {
+			newValue++;
+			/*
+			 * If newValue = 1 => I need to change the service state value
+			 */
+			if (newValue == 1) {
+				strValue = "OUT_OF_SERVICE";
+			}
+		} else {
+			newValue--;
+			/*
+			 * If newValue = 0 => I need to change the service state value
+			 */
+			if (newValue == 0) {
+				strValue = "IN_SERVICE";
+			}
+		}
+
+		serviceStateInfo.setNumOfDisablingAlarms(newValue);
+		obj.setAdditionalInformation(setOfInfo);
+
+		if (strValue == null) {
+			return;
+		}
+
+		/*
+		 * Update the service state
+		 */
+		LayeredParametersUtils.setLayeredParameter(obj, layerRate, ParameterName.ServiceState.name(), strValue);
+	}
+
+	/************************************************************************/
+	private void updateServiceStateOnEqp(final DBEquipment obj, final boolean fOn, final LayerRate layerRate,
+					final OperationalState opState) {
+		final SetOfServiceStateInfo setOfInfo = getSetOfServiceStateInfo(obj);
+		final AIServiceStateInfo serviceStateInfo = getServiceStateInfo(setOfInfo, layerRate);
+
+		/*
+		 * Increment/decrement the disabling alarm (oparational state already
+		 * checked above)
+		 */
+		ServiceState serviceState = null;
+		int newValue = serviceStateInfo.getNumOfDisablingAlarms().getValue();
+		if (fOn) {
+			newValue++;
+			/*
+			 * If newValue = 1 => I need to change the service state value
+			 */
+			if (newValue == 1) {
+				serviceState = ServiceState.OUT_OF_SERVICE;
+			}
+		} else {
+			newValue--;
+			/*
+			 * If newValue = 0 => I need to change the service state value
+			 */
+			if (newValue == 0) {
+				serviceState = ServiceState.IN_SERVICE;
+			}
+		}
+
+		serviceStateInfo.setNumOfDisablingAlarms(newValue);
+		obj.setAdditionalInformation(setOfInfo);
+
+		if (serviceState == null) {
+			return;
+		}
+
+		final Equipment eqInfo = obj.getInformation();
+
+		eqInfo.setServiceState(serviceState);
+
+		obj.setInformation(eqInfo);
+	}
+
+	/************************************************************************/
+	private SetOfServiceStateInfo getSetOfServiceStateInfo(final DBCommon<?, ?> obj) {
+		/*
+		 * If there is no info for service state on the TP I'll create\add it
+		 */
+		SetOfServiceStateInfo setOfInfo = (SetOfServiceStateInfo) obj.getAdditionalInformation(SetOfServiceStateInfo.NAME);
+		if (setOfInfo == null) {
+			setOfInfo = new SetOfServiceStateInfo(AIHelper.buildSetOfServiceStateInfo());
+			obj.addAdditionalInformation(setOfInfo);
+		}
+
+		return setOfInfo;
+	}
+
+	/************************************************************************/
+	private AIServiceStateInfo getServiceStateInfo(final SetOfServiceStateInfo setOfInfo, final LayerRate layerRate) {
+		/*
+		 * I'm going to look for the proper layer
+		 */
+		AIServiceStateInfo serviceStateInfo = null;
+		final AISetOfServiceStateInfo setOfServiceStateInfo = setOfInfo.getSyntax();
+
+		for (final AIServiceStateInfo current : setOfServiceStateInfo) {
+
+			if (current.getLayerRate().getValue() != layerRate.getValue()) {
+				continue;
+			}
+
+			serviceStateInfo = current;
+
+			break;
+		}
+
+		/*
+		 * If I haven't found the layer rate then I create\add it
+		 */
+		if (serviceStateInfo == null) {
+			serviceStateInfo = AIHelper.buildServiceStateInfo(layerRate);
+			setOfServiceStateInfo.add(serviceStateInfo);
+		}
+
+		return serviceStateInfo;
+	}
+
+	/************************************************************************/
+	private AlarmInfo fillAlarmInfo(final ObjectName name, final TMFObject tmfObj, final LayerRate layerRate,
+					final String nativeEMSName, final X36AlarmDetailReport ad) {
+		final AlarmInfo ai = new AlarmInfo();
+
+		ai.setObjectName(name);
+		ai.setAlarmIdentifier(sbiClient.getNaming().getEMId() + "." + ad.getAlarmId().getValue());
+
+		ai.setObjectType(tmfObj.getObjectType());
+		// ai.setObjectTypeQualifier(tmfObj.getObjectTypeQualifier());
+
+		final Time emsTime = getTime(ad.getAlDetailrcvTime().getValue());
+		final Time neTime = getTime(ad.getAlDetailTime().getValue());
+
+		if (emsTime != null) {
+			ai.setEmsTime(emsTime);
+		}
+
+		if (neTime != null) {
+			ai.setNeTime(neTime);
+		}
+
+		ai.setNativeEMSName(nativeEMSName);
+
+		ai.setPerceivedSeverity(FC.severity(ad));
+		ai.setIsClearable(!ad.getAlFunction().isCleared());
+
+		ai.setLayerRate(layerRate);
+
+		if (sbiClient.isAlarmsUnacknowledged()) {
+			ai.getAcknowledgeIndication().setAi_event_unacknowledged();
+		} else {
+			ai.getAcknowledgeIndication().setAi_na();
+		}
+
+		return ai;
+	}
+
+	private Time getTime(final String timeStr) {
+		 Time timeValue = null;
+		try {
+			if (timeStr != null && !timeStr.equals("")) {
+				timeValue = DateConverter.getTime(timeStr);
+			}
+		} catch (final Exception ex) {
+			LOG.error(new DumpInfo(ex, String
+							.format("Exception while trying to convert the time String <%s>. Probably the string format is not correct.",
+											timeStr)));
+		}
+		return timeValue;
+	}
+
+	// /*
+	// ***********************************************************************/
+	// private AlarmInfo fillAlarmInfo(DBCommon obj, X36AlarmDetailReport ad,
+	// ACBehaviour behaviour) {
+	// LayerRate layerRate = getLayerRate(obj, ad, behaviour);
+	//
+	// if (layerRate == null)
+	// return null;
+	//
+	// AlarmInfo ai = new AlarmInfo();
+	//
+	// ObjectName name = obj.getObjectName();
+	//
+	// ai.setObjectName(name);
+	// ai.setAlarmIdentifier(sbiClient.getNaming().getEMId().getemName().getValue()
+	// + "." + ad.getalarmId().getValue());
+	//
+	// if (behaviour.isPresentobjectType())
+	// ai.setobjectType(behaviour.getobjectType());
+	// else
+	// ai.setobjectType(FC.objectType( behaviour.getobj()));
+	//
+	// ai.setemsTime( DateConverter.getTime(
+	// ad.getalDetailrcvTime().getValue()));
+	// ai.setneTime( DateConverter.getTime( ad.getalDetailTime(). getValue()));
+	//
+	// ai.setnativeEMSName(obj.getNativeEMSName());
+	//
+	// ai.setperceivedSeverity( FC.severity( ad));
+	// ai.setisClearable(!ad.getalFunction().iscleared());
+	//
+	// // LayerRate layerRate = getLayerRate(obj, ad, behaviour);
+	// ai.setlayerRate( layerRate);
+	//
+	// // if (sbiClient.isStandAlone())
+	// // ai.getacknowledgeIndication().setai_event_unacknowledged();
+	// // else
+	// // ai.getacknowledgeIndication().setai_na();
+	//
+	// if (sbiClient.isAlarmsUnacknowledged())
+	// ai.getacknowledgeIndication().setai_event_unacknowledged();
+	// else
+	// ai.getacknowledgeIndication().setai_na();
+	//
+	// return ai;
+	// }
+
+	private void fillAffectedTPList(final DBComponent<?> obj, final TPDnList tpDnList) {
+		if (!(obj instanceof DBEquipment)) {
+			return;
+		}
+
+		final DBEquipment equipment = (DBEquipment) obj;
+
+		final DBIterator<DBPortTp> itr = equipment.getPtps().iterator();
+
+		try {
+			final Map<String, TPDn> sorter = new TreeMap<String, TPDn>();
+			while (itr.hasNext()) {
+				final DBPortTp item = itr.next();
+				sorter.put(item.getName(), item.getDn());
+			}
+
+			for (final String string : sorter.keySet()) {
+				final TPDn dn = sorter.get(string);
+				tpDnList.add(dn);
+			}
+		} finally {
+			if (itr != null) {
+				itr.close();
+			}
+		}
+	}
+
+	private void fillX733AdditionalInfo(final X733Info x733Info, final X36AlarmDetailReport adr) {
+		final NVList list = new NVList();
+
+		final String fieldNames = sbiClient.getProfile().getProperty(AlarmProperty.X733_ADDITIONALINFO, "");
+		final String[] items = fieldNames.trim().split(",");
+
+		for (String item : items) {
+			if (item.length() == 0) {
+				continue;
+			}
+			item = item.trim();
+
+			String key = AlarmProperty.X733_ADDITIONALINFO + "." + item + ".name";
+
+			final String name = sbiClient.getProfile().getProperty(key, item);
+			if ((name == null) || (name.length() == 0)) {
+				continue;
+			}
+
+			key = AlarmProperty.X733_ADDITIONALINFO + "." + item + ".value";
+			final String fmt = sbiClient.getProfile().getProperty(key, "%s");
+
+			final StringType st = new StringType();
+			try {
+				final ASN1Obj field = adr.getMember(item);
+				String value = getValue(field);
+				if (value != null) {
+					value = String.format(fmt, value);
+					st.setValue(value);
+				} else {
+					if (item.equalsIgnoreCase("neModel")) {
+						final String neModel = sbiClient.getPlugIn().getNeModelMapper().getNeModelFromMap(
+										adr.getNeId().getValue());
+						if (neModel != null) {
+							value = String.format(fmt, neModel);
+							st.setValue(value);
+						}
+					}
+				}
+			} catch (final Exception e) {
+				LOG.error("Got error while processing alarm detail report! "+e.getMessage());
+			}
+
+			final NameAndAnyValue nav = Utilities.buildNameAndAnyValue(name, st);
+			if (nav != null) {
+				list.add(nav);
+			}
+		}
+
+		// fill meg details for pen alarms
+		if (adr.getPenAlarm() != null && adr.getPenAlarm().getValue()) {
+			final X36MegPointData megDetails = adr.getMegPointData();
+			if (megDetails != null) {
+				final NameAndAnyValue megTypeNav = Utilities.buildNameAndAnyValue("mp_type", megDetails.getMp_type());
+				list.add(megTypeNav);
+				final NameAndAnyValue megLevelNav = Utilities.buildNameAndAnyValue("meg_level", megDetails.getMeg_level());
+				list.add(megLevelNav);
+				final NameAndAnyValue megDirectionNav = Utilities
+								.buildNameAndAnyValue("mep_direction", megDetails.getMep_direction());
+				list.add(megDirectionNav);
+				final NameAndAnyValue srcMegNav = Utilities.buildNameAndAnyValue("source_mep_id", megDetails.getSource_mep_id());
+				list.add(srcMegNav);
+				final NameAndAnyValue remoteMegNav = Utilities.buildNameAndAnyValue("remote_mep_id", megDetails.getRemote_mep_id());
+				list.add(remoteMegNav);
+			}
+		}
+
+		if (list.size() > 0) {
+			x733Info.setAdditionalInfo(list);
+		}
+
+	}
+
+	private String getValue(final ASN1Obj obj) {
+
+		// for now we use only basic type
+		// it could be enhanced for complex ASN1 types
+		String out = null;
+		if (obj instanceof StringType) {
+			final StringType st = StringType.class.cast(obj);
+			out = st.getValue();
+		} else if (obj instanceof EnumeratedType) {
+			final EnumeratedType st = EnumeratedType.class.cast(obj);
+			out = st.getEnum();
+		} else if (obj instanceof IntegerType) {
+			final IntegerType st = IntegerType.class.cast(obj);
+			out = Integer.toString(st.getValue());
+		} else if (obj instanceof Int8Type) {
+			final Int8Type st = Int8Type.class.cast(obj);
+			out = Integer.toString(st.getValue());
+		} else if (obj instanceof Int16Type) {
+			final Int16Type st = Int16Type.class.cast(obj);
+			out = Integer.toString(st.getValue());
+		} else if (obj instanceof Int32Type) {
+			final Int32Type st = Int32Type.class.cast(obj);
+			out = Integer.toString(st.getValue());
+		} else if (obj instanceof RealType) {
+			final RealType st = RealType.class.cast(obj);
+			out = Double.toString(st.getValue());
+		}
+
+		return out;
+	}
+
+	private LayerRate getLayerRate(final DBComponent<?> dbObj, final LayerRateList lrList) {
+		if (dbObj instanceof LayerRateHolder) {
+			return ((LayerRateHolder) dbObj).getLayerRate();
+		} else if (!(dbObj instanceof LayerRateListHolder)) {
+			return LayerRateManager.getLayerRate("LR_Not_Applicable");
+		}
+
+		final LayerRateList lrl = ((LayerRateListHolder) dbObj).getLayerRateList();
+
+		final LayerRateList intersection = new LayerRateList();
+
+		TmfUtilities2.intersection(lrList, lrl, intersection);
+
+		/*
+		 * Workaround for TR HP10630 if (intersection.size() > 1) { if
+		 * (LOG.isDebugEnabled()) { LOG.warn(new DumpInfo(intersection,
+		 * String.format("Intersection too big for object <%s>",
+		 * dbObj.getName()))); } else {
+		 * LOG.warn(String.format("Intersection too big for object <%s>",
+		 * dbObj.getName())); } return null; }
+		 */
+		LayerRate lr = null;
+		if (intersection.size() >= 1) {
+			lr = intersection.get(0);
+		} else {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(new Object[] { lrl, lrList }, String
+								.format("No intersection found in lrList for <%s>",
+												dbObj.getName())));
+			}
+		}
+
+		return lr;
+	}
+
+	private ActionOnObject findObject(final ObjectType objectType, final ACClassType classType, final X36AlarmDetailReport adr,
+					final Holder<DBCommon<?, ?>> holder, final ObjectName objectName, final Holder<String> additionalInfo,
+					final LayerRateList lr) throws PlugInException {
+
+		additionalInfo.setTarget(adr.getAlDetail().getValue());
+
+		/*
+		 * Ricerca utilizzando solo le info che arrivano da X36 senza guardare
+		 * nulla del behaviour
+		 */
+		DBCommon<?, ?> dbObj = null;
+		final String indexName = IndexesHelper.makeAlarmIndexName(sbiClient.getNaming().makeMEDn(adr.getNeId()));
+
+		final X36ChannelIdentification channel = adr.getChId();
+		final AlarmKey key = new AlarmKey(channel, adr.getAlSignalType(), adr.getAlSignalDirection());
+		final Index dbIndex = getDBManager().getIndex(indexName);
+		dbObj = dbIndex.searchObject(DBCommon.class, key);
+
+		if (dbObj != null) {
+			holder.setTarget(dbObj);
+			objectName.set(dbObj.getObjectName());
+			return ActionOnObject.VALID;
+		} else {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(adr, String.format(
+								"Couldn't find the db object (AlarmResource) using the indexing mechanism (on Index [%s]) :",
+								indexName)));
+			}
+		}
+
+		final Class<DBCommon<?, ?>> clazz = evaluateClass(objectType);
+		if (clazz == null) {
+			if (LOG.isDebugEnabled()) {
+				LOG.warn(new DumpInfo(adr, "Unable to evaluate a class object for alarmDetailReport..."));
+			} else {
+				LOG.warn("Unable to evaluate a class object for alarmDetailReport...");
+			}
+
+			return ActionOnObject.NOT_VALID;
+		}
+
+		/**
+		 * Eseguiamo tre ricerche: 1) con il nome TMF se siamo in grado di
+		 * costruirlo 2) con l'indice sulle coord X36 3) con l'indice sulle
+		 * coord X36 + la tipologia di obj allarmabile
+		 */
+		@SuppressWarnings("rawtypes")
+		DnIdentifier identifier = null;
+		ActionOnObject result = ActionOnObject.SKIP;
+
+		ObjectName name = new ObjectName();
+		result = makeObjectName(adr.getNeId(), channel, classType, name);
+		if (result == ActionOnObject.SKIP) {
+			return result;
+		}
+
+		if (name.isMeDn()) {
+
+			identifier = new DnIdentifier<MEDn>(name.getMeDn());
+		} else if (name.isHolderDn()) {
+			identifier = new DnIdentifier<HolderDn>(name.getHolderDn());
+		} else if (name.isEquipmentDn()) {
+			identifier = new DnIdentifier<EquipmentDn>(name.getEquipmentDn());
+		} else if (name.isPtpDn()) {
+			identifier = new DnIdentifier<TPDn>(name.getPtpDn());
+		} else if (name.isCtpDn()) {
+			identifier = new DnIdentifier<TPDn>(name.getCtpDn());
+		} else if (name.isFtpDn()) {
+			identifier = new DnIdentifier<TPDn>(name.getFtpDn());
+		} else if (name.isAidDn()) {
+			identifier = new DnIdentifier<AIDDn>(name.getAidDn());
+		}
+		if (identifier != null) {
+			dbObj = getDBManager().getObject(clazz, identifier);
+
+			if (dbObj instanceof DBTp && (getLayerRate(dbObj, lr) == null)) {
+				dbObj = null;
+			}
+		}
+
+		if ((result == ActionOnObject.VALID) && (dbObj != null)) {
+			dbObj = getDBManager().getObject(clazz, identifier);
+
+			if (dbObj != null) {
+				holder.setTarget(dbObj);
+				objectName.set(dbObj.getObjectName());
+				return ActionOnObject.VALID;
+			}
+		}
+
+		if ((dbObj == null) && alarmProcessing.get(AlarmProperty.FORCE_PROCESSING_ALARM.ordinal())) {
+			if (LOG.isDebugEnabled()) {
+				final String neLocator = sbiClient.getNeLocator(adr.getNeId());
+				LOG.debug(new DumpInfo(new Object[] { adr }, String.format(
+								"Forced alarm processing enabled: looking for ME <%s>.", neLocator)));
+			}
+
+			name = new ObjectName();
+			result = makeObjectName(adr.getNeId(), channel, ACClassType.AID, name);
+
+			if (result == ActionOnObject.VALID) {
+				objectName.set(name);
+				return result;
+			}
+
+		}
+
+		if (dbObj == null) {
+			if (LOG.isDebugEnabled()) {
+				final String neLocator = sbiClient.getNeLocator(adr.getNeId());
+				LOG.debug(new DumpInfo(new Object[] { adr }, String.format("Unable to locate object for alarm event on ME <%s>.",
+								neLocator)));
+			}
+
+			return ActionOnObject.NOT_VALID;
+		}
+
+		holder.setTarget(dbObj);
+		objectName.set(dbObj.getObjectName());
+		return ActionOnObject.VALID;
+	}
+
+	private <T extends DBCommon<?,?>> Class<T> evaluateClass(final ObjectType classType) {
+		Class clazz = null;
+
+		switch (classType.getValue()) {
+		case ObjectType.ot_managed_element:
+			clazz = DBManagedElement.class;
+			break;
+
+		case ObjectType.ot_equipment_holder:
+			clazz = DBEquipmentHolder.class;
+			break;
+
+		case ObjectType.ot_equipment:
+			clazz = DBEquipment.class;
+			break;
+
+			/* PDH Physical connector:        */
+		case ObjectType.ot_physical_termination_point:
+			clazz = DBPtp.class;
+			break;
+
+		case ObjectType.ot_connection_termination_point:
+			clazz = DBCtp.class;
+			break;
+
+		case ObjectType.ot_floating_termination_point:
+			clazz = DBFtp.class;
+			break;
+		default: {
+		}
+		}
+
+		return clazz;
+	}
+
+	/* ***************************************************************************/
+	private ActionOnObject makeObjectName(final X36NeId neId, final X36ChannelIdentification chId, final ACClassType classType,
+					final ObjectName objectName) {
+		final X36PortIdentification  port = chId.getPort();
+		final X36SlotId slotId = new X36SlotId(port.getCardId().getValue());
+		TPDn ctpDn = null;
+		/*
+		 * se non riesco ad avere l'MEID allora non e' stato fatto il primo
+		 * riall. TODO non mandare il provisioning se non ho l'ME sul DB
+		 */
+		if (sbiClient.getNaming().makeMEId(neId) == null) {
+			return ActionOnObject.SKIP;
+		}
+
+		final TPDn ptpDn = sbiClient.getNaming().makePTPDn(neId, port.getShelfId(), slotId, port.getCardId(), port.getPortId());
+
+		ActionOnObject ret = ActionOnObject.VALID;
+		final X36TrafficType tt = new X36TrafficType();
+		switch( classType.getValue() ){
+
+		case ACClassType.managedElement:
+			objectName.setMeDn(sbiClient.getNaming().makeMEDn(neId));
+			break;
+
+		case ACClassType.shelf:
+		case ACClassType.equipmentHolder: {
+			/*
+			 * When the behaviour is present for both card and shelf, and when
+			 * an equipment alarm is raised on a card which does not exsit, the
+			 * alarm is getting raised on the shelf.In order to avoid this the
+			 * below condition is added.
+			 */
+			if (port.getCardId().getValue() > 0) {
+				break;
+			}
+			final int shelfId = port.getShelfId().getValue();
+
+			if (shelfId == -1) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setHolderDn(sbiClient.getNaming().makeShelfDn(neId, port.getShelfId()));
+			}
+			break;
+		}
+
+		case ACClassType.slot     :
+		case ACClassType.equipment:
+		case ACClassType.card: {
+			final int cardId = port.getCardId().getValue();
+			if (cardId == 255) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setEquipmentDn(sbiClient.getNaming().makeSlotDn(neId, port.getShelfId(), slotId, port.getCardId()));
+			}
+			break;
+		}
+
+		/* PDH Physical connector:        */
+		case ACClassType.pPITTP   :
+		case ACClassType.e1CTP    :
+		case ACClassType.e2CTP    :
+		case ACClassType.e3CTP    :
+		case ACClassType.e4CTP    :
+			/* SDH Physical connector:        */
+		case ACClassType.eSPITTP  :
+		case ACClassType.oSPITTP  :
+		case ACClassType.sPITTP   :
+		case ACClassType.rsTTP    :
+		case ACClassType.rsCTP    :
+		case ACClassType.msTTP    :
+		case ACClassType.msCTP    :
+			/* WDM Physical connector:        */
+		case ACClassType.otsTTP   :
+		case ACClassType.omsTTP   :
+			/* WDM Client Physical connector: */
+		case ACClassType.ogPITTP  :
+		case ACClassType.orsInTTP :
+		case ACClassType.otuTTP   :
+		case ACClassType.otuCTP   :
+			/* Ethernet phisicalConnector */
+		case ACClassType.mtPITTP  :
+		case ACClassType.mtAdpCTP: {
+			final int portId = port.getPortId().getValue();
+			if (portId == 0) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setPtpDn(ptpDn);// sbiClient.getNaming().makePTPDn(neId,
+				// port));
+			}
+			break;
+		}
+
+		/*
+		 * PDH-PC CTP:
+		 */
+		case ACClassType.vc12TTP  :
+		case ACClassType.p12CTP   :
+		case ACClassType.vc2TTP   :
+		case ACClassType.p2CTP    :
+		case ACClassType.vc3TTP   :
+		case ACClassType.p3CTP    :
+		case ACClassType.vc4TTP   :
+		case ACClassType.p4CTP    :
+			objectName.setCtpDn(makeCTPDn(ptpDn, classType));
+
+			break;
+
+			/*
+			 * SDH-PC CTP:
+			 */
+		case ACClassType.au4CTP:
+			tt.setVc4();
+			ctpDn = sbiClient.getNaming().makeCTPDn(ptpDn, chId.getTimeSlot(), tt);
+			if (ctpDn == null) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setCtpDn(ctpDn);
+			}
+			break;
+		case ACClassType.tu12CTP  :
+			tt.setVc12();
+			ctpDn = sbiClient.getNaming().makeCTPDn(ptpDn, chId.getTimeSlot(), tt);
+			if (ctpDn == null) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setCtpDn(ctpDn);
+			}
+			break;
+		case ACClassType.tu2CTP   :
+			tt.setVc2();
+			ctpDn = sbiClient.getNaming().makeCTPDn(ptpDn, chId.getTimeSlot(), tt);
+			if (ctpDn == null) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setCtpDn(ctpDn);
+			}
+			break;
+		case ACClassType.tu3CTP   :
+			tt.setVc3();
+			ctpDn = sbiClient.getNaming().makeCTPDn(ptpDn, chId.getTimeSlot(), tt);
+			if (ctpDn == null) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setCtpDn(ctpDn);
+			}
+			break;
+
+			/*
+			 * SDH au4 concatenati
+			 */
+		case ACClassType.au4_4cCTP:
+		case ACClassType.au4_16cCTP:
+		case ACClassType.au4_64cCTP:
+		case ACClassType.au4_256cCTP: {
+			final TPDn dn = makeConcatenatedCTPDn(ptpDn, chId.getTimeSlot(), classType);
+			if (dn == null) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setCtpDn(dn);
+			}
+			break;
+		}
+		/*
+		 * WDM-PC/LINE CTP:
+		 */
+		case ACClassType.ochCTP:
+			tt.setOch();
+			ctpDn = sbiClient.getNaming().makeCTPDn(ptpDn, chId.getTimeSlot(), tt);
+			if (ctpDn == null) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setCtpDn(ctpDn);
+			}
+			break;
+
+		case ACClassType.oduTTP:
+		case ACClassType.oduCTP:
+			tt.setOdu1();
+			ctpDn = sbiClient.getNaming().makeCTPDn(ptpDn, chId.getTimeSlot(), tt);
+			if (ctpDn == null) {
+				ret = ActionOnObject.SKIP;
+			} else {
+				objectName.setCtpDn(ctpDn);
+			}
+			break;
+
+		case ACClassType.aid:
+			final AIDDn dn =objectName.getAidDn();
+			dn.setPresentAlHolder();
+			//    		dn.getAlHolder().setMeId( sbiClient.getNaming().makeMEId(neId));
+			final AIHolder alHolder = new AIHolder();
+			alHolder.setMeId();
+			alHolder.getMeId().set(sbiClient.getNaming().makeMEId(neId));
+			dn.setAlHolder(alHolder);
+			final IndexIdentifier identifier = IndexesMaker.makeIndex(chId);
+
+			dn.getAid().set(identifier.toString());
+			break;
+		default:
+			ret = ActionOnObject.NOT_VALID;
+			break;
+		}
+
+		return ret;
+	}
+
+	/* ***************************************************************************/
+	private TPDn makeConcatenatedCTPDn(final TPDn ptpDn, final X36TimeSlot timeSlot, final ACClassType type) {
+
+		if (!timeSlot.isKlm()) {
+			return null;
+		}
+
+		int order = -1;
+
+		switch (type.getValue()) {
+		case ACClassType.au4_4cCTP:
+			order = 4;
+			break;
+		case ACClassType.au4_16cCTP:
+			order = 16;
+			break;
+		case ACClassType.au4_64cCTP:
+			order = 64;
+			break;
+		case ACClassType.au4_256cCTP:
+			order = 256;
+			break;
+		default:
+			break;
+		}
+		final X36KLM klm = timeSlot.getKlm();
+		final int j = klm.getAu4().getValue();
+
+		if ((order == -1) || ((j % order) != 1)) {
+			return null;
+		}
+
+		final int instance = (klm.getAu4().getValue() / order) + 1;
+
+		final TPDn dn = sbiClient.getNaming().makeCTPDn(ptpDn, instance, order);
+
+		return dn;
+
+	}
+
+	/* ***************************************************************************/
+	private TPDn makeCTPDn(final TPDn ptpDn, final ACClassType type) {// throws
+		// PlugInException
+		// {
+		/*
+		 * questi sono i CTP delle port PDH (vcxxTTP e pxxCTP) peche' becchiamo
+		 * i vcxxTTP va chiesto a GBCP (carletto per gli amici) * becchiamo
+		 * anche il caso och sul client leyer
+		 */
+		final TPDn dn = new TPDn(ptpDn);
+		dn.setPresentCtp();
+
+		final CtpName             name = dn.getCtp();
+		final CtpNameComponents   nameComponents = new CtpNameComponents();
+		final CtpNameComponent    nameComponent = new CtpNameComponent();
+
+		//PdhAdapCtpComponent pdh  = new PdhAdapCtpComponent();
+		//		OchCtp              och = new OchCtp();
+
+		switch (type.getValue()) {
+		// TODO gestire i vc11
+		//            case ACClassType.:
+		//				pdh.setvt15_tu11( 1);
+		//				break;
+		case ACClassType.vc12TTP:
+		case ACClassType.p12CTP:
+			//pdh.setVt2_tu12(1);
+			//name.getComponents().setPdhTrib( pdh);
+			nameComponent.getVt2_tu12().setVc12(1);
+			break;
+		case ACClassType.vc2TTP:
+		case ACClassType.p2CTP:
+			//pdh.setVt6_tu2( 1);
+			//name.getComponents().setPdhTrib( pdh);
+			nameComponent.getVt6_tu2().setVc2(1);
+			break;
+		case ACClassType.vc3TTP:
+		case ACClassType.p3CTP:
+			//pdh.setTu3_vc3( 1);
+			//name.getComponents().setPdhTrib( pdh);
+			nameComponent.getTu3_vc3().setVc3(1);
+			break;
+		case ACClassType.vc4TTP:
+		case ACClassType.p4CTP:
+			//pdh.setSts3c_au4( 1);
+			//name.getComponents().setPdhTrib( pdh);
+			nameComponent.getSts3c_au4().setVc4(1);
+			break;
+
+			//case ACClassType.orsOutTTP:
+			//case ACClassType.ochTTP:
+			//	och.setdigitalSignal(1);
+			//	name.getComponents().setoch(och);
+			//	break;
+		}
+		nameComponents.add(nameComponent);
+		name.setComponents(nameComponents);
+		//name.getDirectionality().setD_bidirectional();
+
+		return dn;
+	}
+
+	private void completeConnectionEvent(final Event event, final boolean cleared) throws Exception {
+		final AlarmEvent alarm = event.getAlarm();
+
+		final AlarmInfo info = alarm;
+		info.setAlarmIdentifier(sbiClient.getNaming().getEMId());
+		info.setEmsTime(DateConverter.getSystemTime());
+
+		// Updated as part of fix for TR HK54224
+		info.setNativeEMSName(getNativeEMSName());
+
+		String pcq = alarm.getProbableCauseQualifier().getValue();
+		pcq = sbiClient.getEMId() + "-" + pcq;
+		alarm.setProbableCauseQualifier(pcq);
+
+		if (cleared) {
+			info.getPerceivedSeverity().setPs_cleared();
+			//    	else GG it is done by I36Plugin.property
+			//    		info.getPerceivedSeverity().setPs_critical();
+		}
+
+		if (sbiClient.isAlarmsUnacknowledged()) {
+			info.getAcknowledgeIndication().setAi_event_unacknowledged();
+		} else {
+			info.getAcknowledgeIndication().setAi_na();
+		}
+
+		final MEDnList list = sbiClient.getMEDnList();
+
+		final NVSList nvs = new NVSList();
+		for (final MEDn dn : list) {
+			final NameAndStringValue item = new NameAndStringValue();
+			item.setName(EntityName.ME.getName());
+			item.setValue(dn.getMe().getValue());
+
+			nvs.add(item);
+		}
+
+		if (!alarm.getX733Info().isPresentAdditionalInfo()) {
+			alarm.getX733Info().setPresentAdditionalInfo();
+		}
+
+		final NVList ai = alarm.getX733Info().getAdditionalInfo();
+
+		final NameAndAnyValue item = Utilities.buildNameAndAnyValue("involvedMEs", nvs);
+		ai.add(item);
+	}
+
+	/**
+	 * This method is used to get the nativeEMSName of the 'EMS' from database.
+	 * 
+	 * @return String - native EMS name
+	 */
+	private String getNativeEMSName() throws Exception {
+		EMS ems = null;
+
+		// Set EMSDn
+		final EMSDn emsDn = new EMSDn();
+		emsDn.setEms(sbiClient.getName());
+
+		try {
+			ems = sbiClient.getDbManager().getEMSInfo(emsDn);
+		} catch (final Exception e) {
+			LOG.error(new DumpInfo("Unable to load EMS", e));
+			throw e;
+		}
+
+		if (ems != null) {
+			return ems.getNativeEMSName().toString();
+		} else {
+			LOG.error("Cannot find EMS");
+			throw new Exception("Cannot find EMS");
+		}
+	}
+
+	private void traceUnresolvedAlarm(final X36AlarmDetailReport ad, final ACBehavioursList behaviours, final String message) {
+		if (trace.isInfoEnabled()) {
+			synchronized (unresolvedAlarms) {
+				final TagKey key = new TagKey(ad);
+				if (unresolvedAlarms.contains(key.toString())){
+					//FIX FOR TR HN40181 : clear if alaram is already present.
+					discardedAlarms.clear();
+					return;
+				}
+
+				final String neLocator = sbiClient.getNeLocator(ad.getNeId());
+
+				final DBManagedElement me = getDBManager().getManagedElement(ad.getNeId());
+				if (me == null) {
+					return;
+				}
+
+				final boolean inSync = me.getInformation().getEmsInSyncState().getValue();
+				unresolvedAlarms.add(key.toString());
+				//Fix For TR HN40181
+				/*
+				 * Logging into UNRESOLVEDALARMS.log only if No Behaviour or
+				 * port doesnt contain XConnection and trace is enable with
+				 * debug.
+				 */
+				if (!discardedAlarms.isEmpty()) {
+					final X36PortIdentification port = ad.getChId().getPort();
+					final String portDetatils = "Shelf=" + port.getShelfId().getValue() + "/Card=" + port.getCardId().getValue()
+									+ "/Port=" + port.getPortId().getValue();
+					if (trace.isDebugEnabled()) {
+						final String str = String.format(
+										"Alarm event on ME <%s>: tag = <%s> : NO XCONN on Port <%s> : Alarm Discarded", neLocator, key,
+										portDetatils);
+
+						trace.debug(new DumpInfo(new Object[] { ad, behaviours }, str));
+					}
+				} else {
+					final String str = String.format("For alarm event on ME <%s> (%s in synch): tag = <%s>: %s.", neLocator,
+									inSync ? "" : "NOT", key, message);
+					trace.info(new DumpInfo(new Object[] { ad, behaviours }, str));
+				}
+			}
+		}
+		discardedAlarms.clear();
+	}
+
+	private class EventClassifier {
+		//		Map<MEDn, EventList> map = new HashMap<MEDn, EventList>();
+		protected EventList alarmEvent     = new EventList();
+		protected EventList remainingEvent = new EventList();
+
+		EventClassifier(final EventList el) {
+			for (final Event event : el) {
+				final ObjectName name = null;
+
+				switch (event.getMemberId()) {
+				case Event.alarm:
+				case Event.thresholdCrossed:
+					alarmEvent.add(event);
+					break;
+				default:
+					remainingEvent.add(event);
+					break;
+				}
+				if (name == null) {
+					continue;
+				}
+
+			}
+		}
+
+		/**
+		 * @return the remainingEvent
+		 */
+		public EventList getAlarmEvent() {
+			return alarmEvent;
+		}
+
+		/**
+		 * @return the remainingEvent
+		 */
+		public EventList getRemainingEvent() {
+			return remainingEvent;
+		}
+	}
+
+	private class DeltaEvent {
+		MEDn meDn = null;
+		EventList eventList = null;
+		Map<DBIdentifier, DBAlarmEvent<?, ?>> map = null;
+
+		DeltaEvent(final MEDn meDn, final EventList el) {
+			this.meDn = meDn;
+			this.eventList = el;
+		}
+
+		public EventList doDelta() {
+			final EventList listOn = new EventList();
+
+			Map<DBIdentifier, DBAlarmEvent<?, ?>> map = loadMap();
+			if (map == null) {
+				map = loadMap();
+			}
+			final int count = map.size();
+			for (final Event event : eventList) {
+				final DBIdentifier id = AlarmKeyMaker.makeIdentifier(event);
+				if (id == null) {
+					/*
+					 * For safe
+					 */
+					listOn.add(event);
+					continue;
+				}
+
+				DBAlarmEvent<?,?> obj = map.get(id);
+				if (obj == null) {
+					/*
+					 * New Event
+					 */
+					listOn.add(event);
+					continue;
+				}
+
+				/*
+				 * If the object is in alarm map but objectType is different
+				 */
+				AlarmInfo eventInfo = null;
+
+				ThresholdCrossedAlert tCA     = null;
+				ThresholdCrossedAlert tCAonDB = null;
+
+				if (event.isAlarm()) {
+					eventInfo = event.getAlarm();
+				} else if (event.isThresholdCrossed()) {
+					tCA = event.getThresholdCrossed();
+					eventInfo = tCA;
+					tCAonDB = DBTCAlert.class.cast(obj).getInformation();
+				} else {
+					obj = map.remove(id);
+					continue;
+				}
+
+				/*
+				 * I need to emit on OFF and emit again an ON if: 1) The
+				 * objectType is changed (for AID) 2) Provide that the alarm is
+				 * a TCA and the check of Unit is enable, the Unit is changed
+				 * (alarmId on TCA)
+				 */
+				final AlarmInfo objAlInfo = obj.getAlarmInfo();
+				if (objAlInfo.getObjectType().getValue() != eventInfo.getObjectType().getValue()) {
+					listOn.add(event);
+				} else if ((tCA != null) && isCheckingUnitForTCAEnabled() && (tCA.getUnit() != tCAonDB.getUnit())) {
+					listOn.add(event);
+				} else {
+					obj = map.remove(id);
+				}
+
+			}
+
+			/*
+			 * adesso nella mappa ho gli allarmi per cui fare l'off
+			 */
+			final EventList listOff = new EventList();
+			final NotificationId notId = new NotificationId();
+			for (final DBAlarmEvent<?, ?> dbAlarmEvent : map.values()) {
+				final Event event = makeOff(dbAlarmEvent);
+				if (event == null) {
+					continue;
+				}
+				// azzero l notifId per farlo rigenerare
+				setNotiId(event, notId);
+				listOff.add(event);
+			}
+
+			final String msg = String.format("Verified %d alarms.\n" + "Found %d alarm ON\n" + "      %d alarm OFF", count,
+							listOn.size(), listOff.size());
+
+			LOG.info(msg);
+			HISTORY_LOG.debug(msg);
+
+			/*
+			 * It needs first to remove the OFF and then to raise the ON so that
+			 * even if the key is the same there will be a double notification
+			 */
+			listOff.addAll(listOn);
+
+			return listOff;
+		}
+
+		public Event makeOff(final DBAlarmEvent<?,?> obj) {
+			final Event evt = obj.getEvent();
+			AlarmInfo ai = null;
+			switch (evt.getMemberId()) {
+			case Event.alarm:
+				ai = evt.getAlarm();
+				break;
+
+			case Event.thresholdCrossed:
+				ai = evt.getThresholdCrossed();
+				break;
+
+			default:
+				return null;
+			}
+
+			ai.getPerceivedSeverity().setPs_cleared();
+			ai.setEmsTime(DateConverter.getSystemTime());
+
+			return evt;
+		}
+
+		public void setNotiId(final Event newEvent, final NotificationId notId) {
+			switch (newEvent.getMemberId()) {
+			case Event.alarm:
+				newEvent.getAlarm().getNotificationId().set(notId);
+				break;
+
+			case Event.thresholdCrossed:
+				newEvent.getThresholdCrossed().getNotificationId().set(notId);
+				break;
+			default:
+				break;
+			}
+		}
+
+		public Map<DBIdentifier, DBAlarmEvent<?, ?>> loadMap() {
+			final Map<DBIdentifier, DBAlarmEvent<?, ?>> map = new HashMap<DBIdentifier, DBAlarmEvent<?, ?>>();
+			Session session = null;
+			DBIterator<DBAlarmEvent<?, ?>> itr = null;
+			int count = 0;
+			try {
+				session = getDBManager().beginSession(false);
+				final DBManagedElement me = getDBManager().getManagedElement(meDn);
+				if (me == null) {
+					return map;
+				}
+
+				itr = me.getActiveAlarms().iterator();
+
+				while (itr.hasNext()) {
+					final DBAlarmEvent<?, ?> item = itr.next();
+					final String str = item.getName();
+					count++;
+					if (str == null) {
+						continue;
+					}
+					// DBIdentifier id = item.getIdentifier();
+					final DBIdentifier id = AlarmKeyMaker.makeIdentifier(item.getEvent());
+					map.put(id, item);
+				}
+			} catch (final Exception e) {
+				LOG.error(new DumpInfo(e));
+			} finally {
+				if (itr != null) {
+					itr.close();
+				}
+				if (session != null) {
+					session.terminate();
+				}
+
+				LOG.info(String.format("Loaded %d/%s active alarm from DB into map", map.size(), count));
+			}
+			return map;
+		}
+
+		public EventList clearAllAlarms() {
+			final EventList listOff = new EventList();
+
+			if (!isForceClearOldAlarmsEnabled()) {
+				return listOff;
+			}
+
+			final String keyItem = getNeModelKey();
+			if (keyItem == null) {
+				return listOff;
+			}
+
+			if (map == null) {
+				map = loadMap();
+			}
+
+			int count = 0;
+
+			LOG.info(String.format("Checking for clear on %d active alarm from DB", map.size()));
+
+			try {
+				final NotificationId notId = new NotificationId();
+
+				for (final Iterator<DBIdentifier> itr = map.keySet().iterator(); itr.hasNext();) {
+					final DBAlarmEvent<?, ?> alEvent = map.get(itr.next());
+
+					try {
+						final Event evt = alEvent.getEvent();
+						if (evt.isAlarm()) {
+							NVList listOld = null;
+							listOld = evt.getAlarm().getX733Info().getAdditionalInfo();
+							for (final NameAndAnyValue itemNVL : listOld) {
+								if (itemNVL.getName().equals(keyItem)) {
+									if (itemNVL.equals(getNeModelNulVal())) {
+										AlarmInfo ai = null;
+										ai = evt.getAlarm();
+
+										ai.getPerceivedSeverity().setPs_cleared();
+										ai.setEmsTime(DateConverter.getSystemTime());
+
+										// azzero l notifId per farlo rigenerare
+										setNotiId(evt, notId);
+										listOff.add(evt);
+										itr.remove();
+										count++;
+									}
+								}
+							}
+						}else{
+							continue;
+						}
+					} catch (final Exception e) {
+						LOG.error(new DumpInfo(e));
+					}
+				}
+
+				final String msg = String.format("Verified %d alarms.\n" + "Found %d alarm to be cleared", count, listOff.size());
+
+				LOG.info(msg);
+				HISTORY_LOG.debug(msg);
+
+				final EventInfoList<Action> elClear = new EventInfoList<Action>();
+
+				elClear.getEventList().addAll(listOff);
+
+			} catch (final Exception e) {
+				LOG.error(e);
+			}
+			return listOff;
+		}
+
+	}
+
+
+	@Override
+	public void propertyChange(final PropertyChangeEvent event) {
+		if ((event.getNewValue() != X36SBI.SBI_CLOSED) && (event.getNewValue() != X36SBI.SBI_CONNECTED)) {
+			return;
+		}
+
+		LOG.info("SBI " + event.getNewValue() + " event arrived in AlarmRaiser");
+
+		/**
+		 * 31/12/08 Here due to new SBI it is not possible anymore knowing which
+		 * channel has changed its state. Luca Vassalli, Chaitanya Indukuri
+		 */
+
+		final boolean value = event.getNewValue() == X36SBI.SBI_CONNECTED;
+
+		Event evt = null;
+
+		// Updated as part of fix for TR HK54224
+		if (emAlarmEvent != null) {
+			final String str = sbiClient.getProfile().getProperty(AlarmProperty.EM_COMMUNICATION_ALARM, "");
+			if (str.length() > 0) {
+				try {
+					final Event ev = new Event();
+					ev.parse(str);
+					emAlarmEvent = ev;
+				} catch (final ASN1Exception ex) {
+					LOG.error("Unable to parse <" + str + "> for property <" + AlarmProperty.EM_COMMUNICATION_ALARM + ">");
+				}
+			}
+			evt = new Event(emAlarmEvent);
+			try {
+				completeConnectionEvent(evt, value);
+			} catch (final Exception e) {
+				LOG.error("Exception occured while filling the Alarm Information. So Event is not sent.");
+				return;
+			}
+		}
+
+		if (evt != null) {
+			getEventConsumer().pushEvent(evt);
+		}
+
+	}
+
+}

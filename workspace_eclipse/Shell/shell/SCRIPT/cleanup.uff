@@ -1,0 +1,76 @@
+#!/bin/sh
+
+SEARCH_PID="$1"
+
+######## Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then 
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+#DB="${AGENT_DIR}"/DATA/SOO_TMF_DB.boot
+#DB=$(grep "^EMS1=" "${AGENT_DIR}"/CONF/TMFFramework.properties | cut -d '=' -f 2)
+#if [ "${DB}" = "" ];
+#then
+#  echo "Cannot read EMS1 entry in file ${AGENT_DIR}/CONF/TMFFramework.properties"
+#  echo "Exiting..."
+#  exit 1
+#fi
+
+boot_list=$(find "${AGENT_DIR}/DATA" -type f -name "*.boot" -print)
+for item in ${boot_list};
+do
+  tmp_name=$(basename "${item}")
+  DBNAME=$(basename "${tmp_name}" .boot)
+  if [ "${DBNAME}" != "" ];
+  then
+    DB="${item}"
+    break
+  fi
+done
+
+if [ "${DBNAME}" = "" ];
+then
+  echo "Cannot read DBNAME from boot file in dir ${AGENT_DIR}/DATA"
+  echo "Exiting..."
+  exit 1
+fi
+
+ZFILE="${AGENT_DIR}/SCRIPT/Z${RANDOM}.$$"
+
+if [ -e ${ZFILE} ];
+then
+  /bin/rm -f ${ZFILE} > /dev/null 2>&1
+fi
+
+if [ "${SEARCH_PID}" = "" ];
+then
+  ${OBJDIR}/bin/oocleanup ${DB} | awk -vboot=${DB} -vexec=${OBJDIR} -f ${AGENT_DIR}/SCRIPT/cleanup.awk > ${ZFILE}
+  res=$?
+else
+  ${OBJDIR}/bin/oocleanup ${DB} | grep " ${SEARCH_PID} " | awk -vboot=${DB} -vexec=${OBJDIR} -f ${AGENT_DIR}/SCRIPT/cleanup.awk > ${ZFILE}
+  res=$?
+fi
+
+if [ -e ${ZFILE} ];
+then
+  chmod +x ${ZFILE}
+  ${ZFILE}
+  /bin/rm -f ${ZFILE} > /dev/null 2>&1
+fi
+
+if [ $res -ne 0 ];
+then
+  echo "..application FULLNAME NOT started!"
+  echo "Check your cleanup configuration!"
+  echo ""
+  exit 2
+fi
+
+exit 0

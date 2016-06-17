@@ -1,0 +1,3821 @@
+package com.marconi.fusion.tmf.i36PlugIn.SNCManager;
+
+import java.util.Iterator;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36CardIdentification;
+import com.marconi.fusion.X36.X36CommandType;
+import com.marconi.fusion.X36.X36CrossConnection;
+import com.marconi.fusion.X36.X36CrossConnectionCmd;
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.X36.X36PointToMultipoint;
+import com.marconi.fusion.X36.X36PointToMultipointProt;
+import com.marconi.fusion.X36.X36PointToPoint;
+import com.marconi.fusion.X36.X36PointToPointProt;
+import com.marconi.fusion.X36.X36ProtOperMode;
+import com.marconi.fusion.X36.X36ProtectedRing;
+import com.marconi.fusion.X36.X36ReqId;
+import com.marconi.fusion.X36.X36SetOfTerminationChannel;
+import com.marconi.fusion.X36.X36SetReportCrossConnections;
+import com.marconi.fusion.X36.X36SpecificCrossConnection;
+import com.marconi.fusion.X36.X36TerminationChannel;
+import com.marconi.fusion.X36.X36TerminationChannelProtection;
+import com.marconi.fusion.X36.X36TrafficType;
+import com.marconi.fusion.base.asn1.IntegerType;
+import com.marconi.fusion.base.asn1.SetType;
+import com.marconi.fusion.base.asn1.StringType;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.tmf.additionalInformation.AdditionalInfoUtils;
+import com.marconi.fusion.tmf.additionalInformation.BroadcastProtectionInfo;
+import com.marconi.fusion.tmf.additionalInformation.CrossConnectionType;
+import com.marconi.fusion.tmf.additionalInformation.LegCountInfo;
+import com.marconi.fusion.tmf.additionalInformation.PotentialFutureSetUpIndicatorInfo;
+import com.marconi.fusion.tmf.additionalInformation.ProprietaryAdditionalInfo;
+import com.marconi.fusion.tmf.additionalInformation.ProtOperModeSupported;
+import com.marconi.fusion.tmf.additionalInformation.ProtOperModeSupported.ProtOperMode;
+import com.marconi.fusion.tmf.additionalInformation.ProtectedPort;
+import com.marconi.fusion.tmf.additionalInformation.ProtectingPort;
+import com.marconi.fusion.tmf.additionalInformation.SNCTypeInfo;
+import com.marconi.fusion.tmf.db.DBAdditionalInformation;
+import com.marconi.fusion.tmf.db.DBCrossConnectableTp;
+import com.marconi.fusion.tmf.db.DBCrossConnection;
+import com.marconi.fusion.tmf.db.DBCtp;
+import com.marconi.fusion.tmf.db.DBFtp;
+import com.marconi.fusion.tmf.db.DBIterator;
+import com.marconi.fusion.tmf.db.DBList;
+import com.marconi.fusion.tmf.db.DBManyRelationship;
+import com.marconi.fusion.tmf.db.DBSnc;
+import com.marconi.fusion.tmf.db.DBSncConnectableTp;
+import com.marconi.fusion.tmf.db.DBTp;
+import com.marconi.fusion.tmf.i36PlugIn.AbstractUser;
+import com.marconi.fusion.tmf.i36PlugIn.I36DatabaseManager;
+import com.marconi.fusion.tmf.i36PlugIn.I36Utilities;
+import com.marconi.fusion.tmf.i36PlugIn.SBIClientI;
+import com.marconi.fusion.tmf.i36PlugIn.SubnetworkRates;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.ConnectionDirection;
+import com.marconi.fusion.tmf.plugIn.types.EMSFreedomLevel;
+import com.marconi.fusion.tmf.plugIn.types.LayerRate;
+import com.marconi.fusion.tmf.plugIn.types.LayeredParameterList;
+import com.marconi.fusion.tmf.plugIn.types.LayeredParameters;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEId;
+import com.marconi.fusion.tmf.plugIn.types.NVSList;
+import com.marconi.fusion.tmf.plugIn.types.NameAndAnyValue;
+import com.marconi.fusion.tmf.plugIn.types.NameAndStringValue;
+import com.marconi.fusion.tmf.plugIn.types.PointData;
+import com.marconi.fusion.tmf.plugIn.types.PointDataList;
+import com.marconi.fusion.tmf.plugIn.types.PointDn;
+import com.marconi.fusion.tmf.plugIn.types.PointDnList;
+import com.marconi.fusion.tmf.plugIn.types.SNCCreateData;
+import com.marconi.fusion.tmf.plugIn.types.SNCType;
+import com.marconi.fusion.tmf.plugIn.types.StaticProtectionLevel;
+import com.marconi.fusion.tmf.plugIn.types.SubnetworkConnection;
+import com.marconi.fusion.tmf.plugIn.types.TPDn;
+import com.marconi.fusion.tmf.plugIn.types.TPDnList;
+import com.marconi.fusion.tmf.plugIn.types.TerminationPoint;
+import com.marconi.fusion.tmf.plugIn.types.TransmissionParameters;
+import com.marconi.fusion.tmf.sbi.em.EmSBIPluginProperty;
+import com.marconi.fusion.tmf.tmfFramework.repository.AdditionalInfoManager.Standard;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayerRateManager;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayeredParameterManager.ParameterName;
+import com.marconi.fusion.tmf.utils.CrossConnectionHelper;
+import com.marconi.fusion.tmf.utils.NumberGenerator;
+
+
+
+/**
+ * @author tcssrla
+ *
+ */
+public class SNCUtilities extends AbstractUser {
+	private static final Log LOG = LogFactory.getLog(SNCUtilities.class);
+	private String errorReason = "";
+	private final static String RSU_BROADCAST = "RSU_BROADCAST";
+	private final static String RSU_ANY_CONFIG = "RSU_ANY_CONFIG";
+	private final static String RSU_POINT_TO_POINT = "RSU_POINT_TO_POINT";
+	private TPDnList aEndList = new TPDnList();
+	private TPDnList zEndList = new TPDnList();
+	private I36DatabaseManager dbManager = null;
+
+	public SNCUtilities(final SBIClientI sbi) {
+		super(sbi);
+		this.dbManager = sbi.getDbManager();
+	}
+
+	/**
+	 * @param createData
+	 *            : contains the Snc creation attributes This method validates the SNCcreateData object and throws exception if
+	 *            any of the parameters does not match.
+	 */
+
+	public void validateCreateData(final SNCCreateData createData, final EMSFreedomLevel emsFreedomLevel) {
+		// By default forceUniqueness should be false.So that User label need
+		// not be unique in TMF.
+		if (createData.getForceUniqueness().getValue()) {
+			LOG.error(format("ForceUniqueness should be false, Unable to comply with ForceUniqueness:", createData
+					.getForceUniqueness().getValue()));
+			throw PlugInExceptionHandler.unableToComply("ForceUniqueness should be false");
+		}
+
+		if (!SubnetworkRates.isSupportedRates(createData.getLayerRate())) {
+			LOG.error(format("Unmanaged LayerRate: %s", LayerRateManager.toString((short) createData.getLayerRate().getValue())));
+			throw PlugInExceptionHandler.unableToComply("Invalid Layer Rate");
+		}
+
+		// By default static protection level is UNPROTECTED.
+		if (!createData.getStaticProtectionLevel().equals(StaticProtectionLevel.UNPROTECTED)) {
+			LOG.error(format("Invalid Static Protection level: %s", createData.getStaticProtectionLevel().getValue()));
+			throw PlugInExceptionHandler.protectionEffortNotMet("Static Protection level should be Unproteted");
+		}
+
+		// Routing is not managed in TMF stand alone mode.
+		if (!createData.getRerouteAllowed().isRr_na()) {
+			LOG.error(format("Invalid Reroute allowed value specified: %s", createData.getRerouteAllowed().getValue()));
+			throw PlugInExceptionHandler.invalidInput("Reroute should be RR_NA");
+		}
+
+		// Routing is not managed in TMF stand alone mode.
+		if (!createData.getNetworkRouted().isNr_na()) {
+			LOG.error(format("Invalid Network Routed value specified: %s", createData.getNetworkRouted().getValue()));
+			throw PlugInExceptionHandler.invalidInput("NetworkRouted should be NR_NA");
+		}
+
+		if (!createData.getCcInclusions().isEmpty()) {
+			LOG.error(format("CCInclusion is not empty: %s", createData.getCcInclusions().isEmpty()));
+			throw PlugInExceptionHandler.invalidInput("ccInclusions should be empty");
+		}
+
+		if (!createData.getNeTpInclusions().isEmpty()) {
+			LOG.error(format("NeTpInclusions is not empty: %s", createData.getNeTpInclusions().isEmpty()));
+			throw PlugInExceptionHandler.invalidInput("neTpInclusions should be empty");
+		}
+
+		// Routing is not managed in TMF stand alone mode.
+		if (createData.getFullRoute().getValue()) {
+			LOG.error(format("FullRoute is true: %s", createData.getFullRoute().getValue()));
+			throw PlugInExceptionHandler.invalidInput("FullRoute should be false");
+		}
+
+		if (!createData.getNeTpSncExclusions().isEmpty()) {
+			LOG.error(format("NeTpSncExclusions is not empty: %s", createData.getFullRoute().getValue()));
+			throw PlugInExceptionHandler.invalidInput("NeTpSncExclusions should be empty");
+		}
+		// Validating the emsFreedomLevel.By default it should be
+		// EMSFL_CC_AT_SNC_LAYER.
+		if (emsFreedomLevel != null && !emsFreedomLevel.isEmsfl_cc_at_snc_layer()) {
+			LOG.error(new DumpInfo("EmsFreedomLevel should be EMSFL_CC_AT_SNC_LAYER : %s", emsFreedomLevel.getEnum()));
+			throw PlugInExceptionHandler.invalidInput("EmsFreedomLevel should be EMSFL_CC_AT_SNC_LAYER");
+		}
+		// validating the SNC_revertive field
+		validateCreateDataForRevertive(createData);
+	}
+
+	/**
+	 * This method validates Snc_Revertive information
+	 *
+	 * @param createData
+	 */
+	private void validateCreateDataForRevertive(final SNCCreateData createData) {
+		final PointDnList ptDnLst = new PointDnList();
+		ptDnLst.addAll(createData.getAEnd());
+		ptDnLst.addAll(createData.getZEnd());
+		final boolean isInvolvedInProt = isInvolvedInInterIntraCardProtection(ptDnLst);
+		if (createData.getSncType().isSt_simple() || createData.getSncType().isSt_add_drop_z()) {
+			if (createData.getDirection().isCd_uni()) {
+				for (int i = 0; i < createData.getAdditionalCreationInfo().size(); i++) {
+					final NameAndStringValue nameAndStrValue = createData.getAdditionalCreationInfo().get(i);
+					if (nameAndStrValue.getName().equals("SNC_REVERTIVE")) {
+						LOG.error("SNC_Revertive field should not be set to choosen SNC Type");
+						throw PlugInExceptionHandler.invalidInput("SNC_Revertive field should not be set to choosen SNC Type");
+					}
+				}
+			} else if (createData.getDirection().isCd_bi() && createData.getSncType().isSt_simple() && !isInvolvedInProt) {
+				// As part of CR677 an ADD_DROP_A or ADD_DROP_Z is created from
+				// TMF by creating two simple cross connections involed in
+				// inter/intra card or inter port
+				// for this reason the validation is changed as if the snc type
+				// is st_simple and not involved in protection then only throw
+				// the exception.
+				for (int i = 0; i < createData.getAdditionalCreationInfo().size(); i++) {
+					final NameAndStringValue nameAndStrValue = createData.getAdditionalCreationInfo().get(i);
+					if (nameAndStrValue.getName().equals("SNC_REVERTIVE")) {
+						LOG.error("SNC_Revertive field should not be set to bidirectional snc of type ST_SIMPLE");
+						throw PlugInExceptionHandler
+						.invalidInput("SNC_Revertive field should not be set to bidirectional snc of type ST_SIMPLE");
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * This method returns true if any of one TPDn from tpList is involved in inter / intra card protecton.
+	 *
+	 * @param tpList
+	 * @return
+	 */
+	public boolean isInvolvedInInterIntraCardProtection(final PointDnList tpList) {
+		boolean isProtecting = false;
+		boolean isProtected = false;
+		for (final PointDn endTp : tpList) {
+			isProtected = isInterIntraPresentProtectedPortInfo(endTp);
+			isProtecting = isInterIntraPresentProtectingPortInfo(endTp);
+			if (isProtected || isProtecting) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+
+	/**
+	 * This method returns true if TPDn contains intercard protected port info
+	 *
+	 * @param endTp
+	 * @return
+	 */
+	public boolean isInterIntraPresentProtectedPortInfo(final PointDn endTp) {
+		if (endTp.getTpDn().getTp().isFtp()) {
+			if(dbManager.isOpen()){
+				LOG.info("DB Session is open.....");
+			}
+			final TPDn ftpDn = endTp.getTpDn();
+			final DBFtp endFtp = dbManager.getFTP(ftpDn);
+			if (endFtp != null) {
+				final ProtectedPort protectedPort = (ProtectedPort) endFtp.getAdditionalInformation(ProtectedPort.NAME);
+				if (protectedPort != null) {
+					return true;
+				}
+			}
+			return false;
+		}
+		return false;
+	}
+
+	/**
+	 * This method returns ProtectedPort if the DBTp has DBAdditionalInformation as "ProtectedPort"
+	 *
+	 * @param endTp
+	 * @return
+	 */
+	/*
+	 * public ProtectedPort fetchProtectedPort(final PointDn endTp) { if
+	 * (endTp.getTpDn().getTp().isFtp()) { final DBFtp endFtp =
+	 * dbManager.getFTP(endTp.getTpDn()); if (endFtp != null) { return
+	 * (ProtectedPort) endFtp.getAdditionalInformation(ProtectedPort.NAME); } }
+	 * return null; }
+	 */
+	/**
+	 * This method returns true if TPDn contains intercard protecting port info
+	 *
+	 * @param endTp
+	 * @return
+	 */
+	public boolean isInterIntraPresentProtectingPortInfo(final PointDn endTp) {
+		if (endTp.getTpDn().getTp().isFtp()) {
+			final DBFtp endFtp = dbManager.getFTP(endTp.getTpDn());
+			if (endFtp != null) {
+				final ProtectingPort protectingPort = (ProtectingPort) endFtp.getAdditionalInformation(ProtectingPort.NAME);
+				if (protectingPort != null) {
+					return true;
+				}
+			}
+			return false;
+		}
+		return false;
+	}
+
+
+	/**
+	 * @param dnList
+	 * @param dnLength
+	 * @return This method is used to check the duplicate Aends or Zends
+	 */
+	public boolean areDuplicateTpsPresent(final PointDnList dnList, final int dnLength) {
+		for (int k = 0; k < dnLength; k++) {
+			final PointDnList newDnList = new PointDnList();
+			newDnList.addAll(dnList);
+			newDnList.remove(k);
+			if (newDnList.contains(dnList.get(k))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * @param sncType
+	 * @param dnlengthAend
+	 * @param dnlengthZend
+	 * @return This method validates the SNCType.
+	 */
+	public boolean validateSncType(final SNCType sncType, final int dnlengthAend, final int dnlengthZend) {
+
+		boolean validSNCType = false;
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format("SNCType is :", sncType));
+			LOG.debug(format("number of Aends :", dnlengthAend));
+			LOG.debug(format("number of Zends :", dnlengthZend));
+		}
+
+		if (((dnlengthAend == 1 && dnlengthZend == 1) && (sncType.equals(SNCType.ST_SIMPLE)))// ST_SIMPLE
+				|| ((dnlengthAend == 2 && dnlengthZend == 1) && (sncType.equals(SNCType.ST_ADD_DROP_A)))// ST_ADD_DROP_A
+				|| ((dnlengthAend == 1 && dnlengthZend == 2) && (sncType.equals(SNCType.ST_ADD_DROP_Z)))// ST_ADD_DROP_Z
+				|| ((dnlengthAend == 2 && dnlengthZend == 2) && (sncType.equals(SNCType.ST_DOUBLE_ADD_DROP)))) {// ST_DOUBLE_ADD_DROP
+			validSNCType = true;
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format(validSNCType ? "valid inputs for this SNCType" : "invalid inputs for this SNCType"));
+		}
+
+		return validSNCType;
+	}
+
+	/**
+	 * This method returns ture if it is supported sncType else false.
+	 *
+	 * @param sncType
+	 * @return
+	 */
+	public boolean validSncTypes(final SNCType sncType) {
+		boolean validSNCType = false;
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format("SNCType is :", sncType));
+		}
+		if ((sncType.equals(SNCType.ST_SIMPLE))// ST_SIMPLE
+				|| (sncType.equals(SNCType.ST_ADD_DROP_A))// ST_ADD_DROP_A
+				|| (sncType.equals(SNCType.ST_ADD_DROP_Z))// ST_ADD_DROP_Z
+				|| (sncType.equals(SNCType.ST_DOUBLE_ADD_DROP))) {// ST_DOUBLE_ADD_DROP
+			validSNCType = true;
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format(validSNCType ? "SNCType is valid" : "SNCType is invalid"));
+		}
+		return validSNCType;
+	}
+
+	/**
+	 * @param sncType
+	 * @param strPotFutSetUpInd
+	 * @param direction
+	 * @return This method is used to validate the potential set up indicator depending on the SNC type.
+	 */
+	public boolean validatePotFutSetUpInd(final SNCType sncType, final String strPotFutSetUpInd, final ConnectionDirection direction) {
+
+		LOG.info("SNC type in validatePoteFutSetupIndi() is :" + sncType);
+		LOG.info("Potential future set up indicator in validatePoteFutSetupIndi() is :" + strPotFutSetUpInd);
+
+		switch (sncType.getValue()) {
+		case SNCType.st_simple:
+			// Throwing an exception when a bidirectional snc of type ST_SIMPLE is created with " RSU_BROADCAST "
+			if (direction.isCd_bi()) {
+				if (!strPotFutSetUpInd.equalsIgnoreCase(RSU_BROADCAST)) {
+					return true;
+				}
+			} else {
+				return true;
+			}
+			break;
+		case SNCType.st_add_drop_a:
+			if (direction.isCd_uni()) {
+				if (!strPotFutSetUpInd.equalsIgnoreCase(RSU_POINT_TO_POINT)) {
+					return true;
+				}
+			} else {
+				if (strPotFutSetUpInd.equalsIgnoreCase(RSU_ANY_CONFIG)) {
+					return true;
+				}
+			}
+			break;
+		case SNCType.st_add_drop_z:
+			if (strPotFutSetUpInd.equalsIgnoreCase(RSU_ANY_CONFIG)) {
+				return true;
+			}
+			break;
+		case SNCType.st_double_add_drop:
+			if (strPotFutSetUpInd.equalsIgnoreCase(RSU_ANY_CONFIG)) {
+				return true;
+			}
+			break;
+		default:
+			return false;
+		}
+		return false;
+	}
+
+	/**
+	 * @param lstAddCreatInfo
+	 * @return This method is used to get the potentialSetUpIndicator entered by the operator or by default RSU_ANY_CONFIG is
+	 *         returned.
+	 */
+	public String getPotetialFutureSetUpIndicator(final NVSList lstAddCreatInfo) {
+		String strPotFutSetUpInd = RSU_ANY_CONFIG;
+		for (int i = 0; i < lstAddCreatInfo.size(); i++) {
+			final NameAndStringValue nameStr = lstAddCreatInfo.get(i);
+			if (nameStr.getName().getValue().equals(ParameterName.PotentialFutureSetupIndicator.name())) {
+				strPotFutSetUpInd = nameStr.getValue().getValue();
+				LOG.debug(format("potential set up indicator entered by operator is :", strPotFutSetUpInd));
+			}
+		}
+		return strPotFutSetUpInd;
+	}
+
+	/**
+	 *
+	 * @param layerRate
+	 *            The SNCCreatedata
+	 * @param dnlistend
+	 *            : The Dn which is involved in the snc creation.
+	 * @return the TDDataList for the Dn. This method validates the Layerratelist in the Tp with the layer rate of the SNC and
+	 *         returns the TPDataList for SNC.
+	 */
+	public PointDataList getPointDataList(final LayerRate layerRate, final PointDnList dnList) {
+		TPDn tpDn = null;
+		final PointDataList pointDataList = new PointDataList();
+		final int dnLength = dnList.getAll().length;
+		LOG.debug("number of TPs : " + dnLength);
+		try {
+			for (int i = 0; i < dnLength; i++) {
+				tpDn = dnList.get(i).getTpDn();
+				if (tpDn != null) {
+					final DBTp dbTp = dbManager.getTP(tpDn);
+					if (dbTp == null) {
+						errorReason = "Invalid Tp is entered";
+						LOG.error(new DumpInfo("Entered TP not found in the DB"));
+						throw PlugInExceptionHandler.entityNotFound("Entered Tp not found in the DB");
+					}
+					if (dbTp instanceof DBCtp || dbTp instanceof DBFtp) {
+						// CTPs and FTPs are valid TPs to create SNC
+						// check if the layer rate specified for creation of SNC
+						// is same as the layer at the A end.
+						if (!dbTp.getLayerRateList().contains(layerRate)) {
+							LOG.error(format("LayerRate specified does not matches the A end CTP layer rate:", layerRate));
+							throw PlugInExceptionHandler.invalidInput("createData.LayerRate");
+						}
+						// Forming tpData object and add it to tpDataList
+						final PointData tpdata = new PointData();
+						tpdata.setTpMappingMode(dbTp.getInformation().getTpMappingMode());
+						tpdata.setTransmissionParams(dbTp.getParameterList());
+						final PointDn pointDn = new PointDn();
+						pointDn.setTpDn(tpDn);
+						tpdata.setTpName(pointDn);
+						pointDataList.add(tpdata);
+
+					} else {
+						errorReason = "Entered TP is not a CTP/FTP";
+						LOG.error(new DumpInfo("Entered TP :: " + dbTp.getName() + " is not a CTP/FTP"));
+						throw PlugInExceptionHandler.invalidInput("Invalid Tp selected::");
+					}
+				}
+			}
+		} catch (final PlugInException ex) {
+			errorReason = ex.getMessage();
+			LOG.error(new DumpInfo("invalid Tp selected:", ex.getMessage()));
+			throw PlugInExceptionHandler.invalidInput("Invalid Tp selected::");
+		} catch (final Exception e) {
+			errorReason = e.getMessage();
+			LOG.error(new DumpInfo("Error occured in getting the TPDatalist ", e.getMessage()));
+			throw PlugInExceptionHandler.internalError("Invalid Tp selected::");
+		}
+		LOG.debug(format("The Termination ends::", pointDataList));
+		return pointDataList;
+	}
+
+	public PointDataList getTpDataList(final LayerRate layerRate, final TPDnList dnList) {
+		TPDn tpDn = null;
+		final PointDataList pointDataList = new PointDataList();
+		final int dnLength = dnList.getAll().length;
+		LOG.info("number of TPs : " + dnLength);
+		try {
+			for (int i = 0; i < dnLength; i++) {
+				tpDn = dnList.get(i);
+				if (tpDn != null) {
+					final DBTp dbTp = dbManager.getTP(tpDn);
+					if (dbTp == null) {
+						errorReason = "Invalid Tp is entered";
+						LOG.error(new DumpInfo("Entered TP not found in the DB"));
+						throw PlugInExceptionHandler.entityNotFound("Entered Tp not found in the DB");
+					}
+					if (dbTp instanceof DBCtp || dbTp instanceof DBFtp) {
+						// CTPs and FTPs are valid TPs to create SNC
+						// check if the layer rate specified for creation of SNC
+						// is same as the layer at the A end.
+						if (!dbTp.getLayerRateList().contains(layerRate)) {
+							LOG.error(format("LayerRate specified does not matches the A end CTP layer rate:", layerRate));
+							throw PlugInExceptionHandler.invalidInput("createData.LayerRate");
+						}
+						// Forming tpData object and add it to tpDataList
+						final PointData tpdata = new PointData();
+						tpdata.setTpMappingMode(dbTp.getInformation().getTpMappingMode());
+						tpdata.setTransmissionParams(dbTp.getParameterList());
+						final PointDn pointDn = new PointDn();
+						pointDn.setTpDn(tpDn);
+						tpdata.setTpName(pointDn);
+						pointDataList.add(tpdata);
+
+
+					} else {
+						errorReason = "Entered TP is not a CTP/FTP";
+						LOG.error(new DumpInfo("Entered TP :: " + dbTp.getName() + " is not a CTP/FTP"));
+						throw PlugInExceptionHandler.invalidInput("Invalid Tp selected::");
+					}
+				}
+			}
+		} catch (final PlugInException ex) {
+			errorReason = ex.getMessage();
+			LOG.error(new DumpInfo("invalid Tp selected:", ex.getMessage()));
+			throw PlugInExceptionHandler.invalidInput("Invalid Tp selected::");
+		} catch (final Exception e) {
+			errorReason = e.getMessage();
+			LOG.error(new DumpInfo("Error occured in getting the TPDatalist ", e.getMessage()));
+			throw PlugInExceptionHandler.internalError("Invalid Tp selected::");
+		}
+		LOG.debug(format("The Termination ends::", pointDataList));
+		return pointDataList;
+
+	}
+
+	/**
+	 *
+	 * @param dnlistAend
+	 *            The TpDnList of the A end.
+	 * @param dnlistZend
+	 *            The TpDnList of the Z end.
+	 * @param bidirectional
+	 *            is the directionality is bidirectional or not.
+	 * @return crossConnectionDn
+	 *
+	 *         This method creates the CCDn using the above parameters.
+	 */
+	public String makeCCdn(final TPDnList dnlistAend, final TPDnList dnlistZend, final boolean bidirectional) {
+		// If there is only one element then that would be the only single a
+		// end.
+		final TPDn a1entp = dnlistAend.get(0);
+		// If there is only one element then that would be the only single Z
+		// end.
+		final TPDn z1entp = dnlistZend.get(0);
+
+		TPDn z2entp = null;
+		TPDn a2entp = null;
+
+		String ccdn = null;
+
+		if (dnlistAend.size() >= 2) {
+			a2entp = dnlistAend.get(1);
+		}
+
+		if (dnlistZend.size() >= 2) {
+			z2entp = dnlistZend.get(1);
+		}
+
+		if (a2entp == null && z2entp == null) {
+			// when there are no other a and z ends.
+			ccdn = CrossConnectionHelper.makeCCName(a1entp, z1entp, bidirectional);
+
+		} else if (a2entp == null) {
+			// when the second a end is not present ADD_DROP_Z.
+			ccdn = CrossConnectionHelper.makeCCName(a1entp, z1entp, z2entp, bidirectional);
+		} else if (z2entp == null) {
+			// when the second Z end is not present.
+			ccdn = CrossConnectionHelper.makeCCName(a1entp, a2entp, z1entp, bidirectional);
+		} else if (a2entp != null && z2entp != null) {
+			// When there are 2 A ends and 2 Z ends.
+			ccdn = CrossConnectionHelper.makeCCName(a1entp, a2entp, z1entp, z2entp, bidirectional);
+		}
+		LOG.debug(format("The ccdn is ::", ccdn));
+		return ccdn;
+	}
+
+	/**
+	 * This method sendsCrossConnection command to NE for st_simple during modification. *
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 *            - should be st_simple
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @return
+	 */
+	private X36SetReportCrossConnections setCrossConnectionsForModifiedToSimple(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final boolean isBroadCast, final X36CommandType cmdType) {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(oldSnc, "getSpecificCC for the SNC"));
+			LOG.debug(isBroadCast ? "SNC is a BroadCastSNC" : "SNC is not a BroadCastSNC");
+		}
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+
+		// TP can be CTP or FTP
+		final DBTp newA1EndDbTp = dbManager.getTP(newSnc.getAEnd().get(0).getTpName().getTpDn());
+		final DBTp newZ1EndDbTp = dbManager.getTP(newSnc.getZEnd().get(0).getTpName().getTpDn());
+
+		final DBTp oldA1Endtp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+		final DBTp oldZ1Endtp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format("a1 End Tp for the SNC %s is %s", oldSnc.getName(), newA1EndDbTp));
+			LOG.debug(format("z1 End Tp for the SNC %s is %s", oldSnc.getName(), newZ1EndDbTp));
+		}
+		if (newA1EndDbTp == null) {
+			LOG.error(format("Cannot find AEnd for SNC:", oldSnc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("AEnd of SNC");
+		}
+		if (newZ1EndDbTp == null) {
+			LOG.error(format("Cannot find ZEnd for SNC:", oldSnc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("ZEnd of SNC");
+		}
+		final ConnectionDirection direction = oldSnc.getDirection();
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format("SNCType is %s and the direction is %s", oldSnc.getSncType(), direction));
+			LOG.debug(new DumpInfo(oldSnc.getSncType(), "old snc Type"));
+			LOG.debug(new DumpInfo(newSnc.getSncType(), "New Snc Type"));
+		}
+		/*
+		 * if command type is add then remove existng Snc and built new Snc.
+		 */
+		if (oldSnc.getDirection().isCd_uni()) {
+			// SNC is UNI directional
+			report = setCrossConnectionsForModifiedToUniSimpleSnc(oldSnc, newSnc, isBroadCast, cmdType, oldA1Endtp, oldZ1Endtp,
+					newA1EndDbTp, newZ1EndDbTp);
+		} else {
+			// SNC is BI directional
+			if (cmdType.isAdd()) {
+				specificXConnection = setCrossConnectionForBiSimpleSncWithCmdTypeAdd(oldSnc, newSnc, cmdType, newA1EndDbTp,
+						newZ1EndDbTp);
+			} else if (cmdType.isRemoveProtection()) {
+				specificXConnection = setCrossConnectionForBiSimpleSncWithCmdTypeRemProt(oldSnc, newSnc, cmdType, newA1EndDbTp,
+						newZ1EndDbTp);
+			} else {
+				errorReason = "Not valid CMD Type";
+				LOG.error(new DumpInfo(cmdType, errorReason));
+				throw PlugInExceptionHandler.internalError(errorReason);
+			}
+			report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), SNCType.ST_SIMPLE, true);
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(specificXConnection, "the Specific cross connection is "));
+		}
+		return report;
+	}
+
+	/**
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return
+	 */
+	private X36SetReportCrossConnections setCrossConnectionsForModifiedToUniSimpleSnc(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final boolean isBroadCast, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp,
+			final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp) throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		if (isBroadCast) {
+			// new SNc is broadcast
+			if (cmdType.isAdd()) {
+				report = setCrossConnectionForBroadcastSimpleWithCmdTypeAdd(oldSnc, newSnc, isBroadCast, cmdType, oldA1Endtp,
+						oldZ1Endtp, newA1EndDbTp, newZ1EndDbTp);
+			} else if (cmdType.isRemoveProtection()) {
+				report = setCrossConnectionForBroadcastSimpleWithCmdTypeRemoveProt(oldSnc, newSnc, isBroadCast, cmdType,
+						oldA1Endtp, oldZ1Endtp, newA1EndDbTp, newZ1EndDbTp);
+			} else if (cmdType.isRemoveLeg()) {
+				report = setCrossConnectionForBroadcastSimpleWithCmdTypeRemoveLeg(oldSnc, newSnc, cmdType, oldA1Endtp,
+						oldZ1Endtp, newA1EndDbTp, newZ1EndDbTp);
+			} else {
+				errorReason = "Not valid CMD Type";
+				LOG.error(new DumpInfo(cmdType, errorReason));
+				throw PlugInExceptionHandler.internalError(errorReason);
+			}
+		} else {
+			// ST_SIMPLE is not broadCast.
+			switch (oldSnc.getSncType().getValue()) {
+			case SNCType.st_add_drop_a:
+				report = setCrossConnectionFromSimpleToAddDropA(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp,
+						newZ1EndDbTp);
+				break;
+			case SNCType.st_add_drop_z:
+				report = setCrossConnectionFromSimpleToAddDropZ(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp,
+						newZ1EndDbTp);
+				break;
+			case SNCType.st_double_add_drop:
+				report = setCrossConnectionFromSimpleToDoubleAddDrop(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp,
+						newA1EndDbTp, newZ1EndDbTp);
+				break;
+			}
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SetReportCrossConnections setCrossConnectionForBroadcastSimpleWithCmdTypeAdd(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final boolean isBroadCast, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp,
+			final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp) throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final ConnectionDirection direction = oldSnc.getDirection();
+		if (oldSnc.getSncType().isSt_add_drop_a()) {
+			final DBTp unRelProtTp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToPointProtSpecificCC(oldA1Endtp, unRelProtTp, oldZ1Endtp, oldSnc.getDirection(),
+					newSnc);
+		} else {
+			// Only add_drop_a,st_simple can be non broadCast
+			// SNCs in uni directional.
+			// Now only st_add_drop_a left.
+			errorReason = "Not a valid SNC for this type of modification..";
+			LOG.error(new DumpInfo(oldSnc.getSncType(), errorReason));
+			throw PlugInExceptionHandler.unableToComply(errorReason);
+		}
+		// remove existing snc
+		// Fix for TR85628 - modifing from Unidir to
+		// PointtoMultiPointProt.
+		// remove Protection first
+		cmdType.setRemoveProtection();
+		report = sendMessage(specificXConnection, cmdType, oldSnc.getAEnd().get(0).getTpName().getTpDn(), SNCType.ST_SIMPLE, true);
+		if (report.getCompliance().isResOk()) {
+			// remove CrossConnectiion
+			cmdType.setRemove();
+			specificXConnection = getPointToPointSpecificCC(oldA1Endtp, oldZ1Endtp, direction);
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_SIMPLE, false);
+			if (report.getCompliance().isResOk()) {
+				// add new crossCOnnection.
+				cmdType.setAdd();
+				specificXConnection = getPointToMultiPointSpecificCC(newA1EndDbTp, newZ1EndDbTp);
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), false);
+				if (report.getCompliance().isResOk()) {
+					// update legCount information on Tp
+					final LegCountInfo legInfo = (LegCountInfo) newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME);
+					if (legInfo == null) {
+						newA1EndDbTp.addAdditionalInformation(new LegCountInfo(new IntegerType(1)));
+					} else {
+						int legCount = legInfo.getSyntax().getValue();
+						legCount++;
+						newA1EndDbTp.setAdditionalInformation(new LegCountInfo(new IntegerType(legCount)));
+					}
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else {
+			errorReason = "Unable to create SNC on NE...";
+			LOG.error(new DumpInfo(report, errorReason));
+			throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SetReportCrossConnections setCrossConnectionForBroadcastSimpleWithCmdTypeRemoveProt(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final boolean isBroadCast, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp,
+			final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp) throws PlugInException {
+		DBTp oldZ1Endtp1 = oldZ1Endtp;
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// remove protection for a End.
+		if (oldSnc.getSncType().isSt_add_drop_a()) {
+			final DBTp a2Endtp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToMultiPointProtSpecificCC(oldA1Endtp, a2Endtp, oldZ1Endtp1, newSnc);
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), newSnc.getSncType(), true);
+			// update BroadcastProtectionInfo on tp after deleting on NE.
+			updateProtectionOnBroadcastAtDeactivation(oldA1Endtp, a2Endtp);
+
+		} else if (oldSnc.getSncType().isSt_double_add_drop()) {
+			// removeProtection , removeleg
+			final DBTp a2Endtp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+			DBTp z2Endtp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToMultiPointProtSpecificCC(oldA1Endtp, a2Endtp, oldZ1Endtp1, z2Endtp, newSnc);
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_ADD_DROP_Z, true);
+			if (report.getCompliance().isResOk()) {
+				// remove leg
+				if (newZ1EndDbTp.equals(z2Endtp)) {
+					// if second first leg has to be remove.
+					z2Endtp = oldZ1Endtp1;
+					oldZ1Endtp1 = newZ1EndDbTp;
+				}
+				cmdType.setRemoveLeg();
+				specificXConnection = getPointToMultiPointSpecificCC(oldA1Endtp, z2Endtp);
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+				if (oldA1Endtp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+					oldA1Endtp.setAdditionalInformation(new LegCountInfo(new IntegerType(1)));
+				} else {
+					oldA1Endtp.addAdditionalInformation(new LegCountInfo(new IntegerType(1)));
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else {
+			errorReason = "Unable to create SNC on NE...";
+			LOG.error(new DumpInfo(report, errorReason));
+			throw PlugInExceptionHandler.internalError("not valid command.");
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SetReportCrossConnections setCrossConnectionForBroadcastSimpleWithCmdTypeRemoveLeg(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) throws PlugInException {
+		DBTp oldZ1Endtp1 = oldZ1Endtp;
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		if (oldSnc.getSncType().isSt_add_drop_z()) {
+			// new snc is st_simple and broadcast and old snc is st_add_drop_z and broadcast
+			// removeLeg
+			DBTp z2Endtp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+			if (newZ1EndDbTp.equals(z2Endtp)) {
+				// if first leg has to be removed instead of second leg.
+				z2Endtp = oldZ1Endtp1;
+				oldZ1Endtp1 = newZ1EndDbTp;
+			}
+			specificXConnection = getPointToMultiPointSpecificCC(oldA1Endtp, z2Endtp);
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), newSnc.getSncType(), true);
+			if (report.getCompliance().isResOk()) {
+				if (oldA1Endtp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+					oldA1Endtp.setAdditionalInformation(new LegCountInfo(new IntegerType(1)));
+				} else {
+					oldA1Endtp.addAdditionalInformation(new LegCountInfo(new IntegerType(1)));
+				}
+			}
+		}
+		return report;
+
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setCrossConnectionFromSimpleToAddDropA(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final DBTp oldA2Endtp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+		if (cmdType.isAdd()) {
+			/*
+			 * remove add_drop_a and built new st_simple remove and add are the commands. if st_add_drop_a is broadcast and
+			 * st_simple is not broadcast.
+			 */
+			specificXConnection = getPointToMultiPointProtSpecificCC(oldA1Endtp, oldA2Endtp, oldZ1Endtp, newSnc);
+			cmdType.setRemoveProtection();
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_SIMPLE, true);
+			if (report.getCompliance().isResOk()) {
+				updateProtectionOnBroadcastAtDeactivation(oldA1Endtp, oldA2Endtp);
+				cmdType.setRemove();
+				specificXConnection = getPointToMultiPointSpecificCC(oldA1Endtp, oldZ1Endtp);
+				report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_SIMPLE, false);
+				if (report.getCompliance().isResOk()) {
+					cmdType.setAdd();
+					specificXConnection = getPointToPointSpecificCC(newA1EndDbTp, newZ1EndDbTp, newSnc.getDirection());
+					report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), false);
+					// decreament legcount. Fix for TR-HM85628
+					final LegCountInfo legInfo = (LegCountInfo) oldA1Endtp.getAdditionalInformation(LegCountInfo.NAME);
+					if (legInfo != null) {
+						int legCount = legInfo.getSyntax().getValue();
+						legCount--;
+						oldA1Endtp.setAdditionalInformation(new LegCountInfo(new IntegerType(legCount)));
+					}
+					if (legInfo == null) {
+						oldA1Endtp.setAdditionalInformation(new LegCountInfo(new IntegerType(1)));
+					}
+				} else {
+					errorReason = "Unable to create SNC on NE...";
+					LOG.error(new DumpInfo(report, errorReason));
+					throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else if (cmdType.isRemoveProtection()) {
+			// remove protection from existing SNC
+			specificXConnection = getPointToPointProtSpecificCC(oldA1Endtp, oldA2Endtp, oldZ1Endtp, oldSnc.getDirection(), newSnc);
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), newSnc.getSncType(), true);
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setCrossConnectionFromSimpleToAddDropZ(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		if (cmdType.isAdd()) {
+			/*
+			 * remove existing snc remove,add
+			 */
+			final DBTp oldZ2Endtp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToMultiPointSpecificCC(oldA1Endtp, oldZ1Endtp, oldZ2Endtp);
+			cmdType.setRemove();
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), oldSnc.getSncType(), false);
+			if (report.getCompliance().isResOk()) {
+				specificXConnection = getPointToPointSpecificCC(newA1EndDbTp, newZ1EndDbTp, newSnc.getDirection());
+				cmdType.setAdd();
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), false);
+				if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+					newA1EndDbTp.removeAdditionalInformation(LegCountInfo.NAME);
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Converts the PointDnList to TPDnList.
+	 * @param pointDnLst PointDnList to be converted.
+	 * @param tpDnList TPDnList to be converted from PointDnList
+	 */
+	public static void convert(final PointDnList pointDnLst,final TPDnList tpDnList ){
+		for(final PointDn pointDn : pointDnLst){
+			tpDnList.add(pointDn.getTpDn());
+		}
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SetReportCrossConnections setCrossConnectionFromSimpleToDoubleAddDrop(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final DBTp oldA2End = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+		final DBTp oldZ2End = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+		if (cmdType.isAdd()) {
+			/*
+			 * remove existing snc remove protection , remove ,add
+			 */
+			specificXConnection = getPointToMultiPointProtSpecificCC(oldA1Endtp, oldA2End, oldZ1Endtp, oldZ2End, newSnc);
+			cmdType.setRemoveProtection();
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_ADD_DROP_Z, true);
+			if (report.getCompliance().isResOk()) {
+				specificXConnection = getPointToMultiPointSpecificCC(oldA1Endtp, oldZ1Endtp, oldZ2End);
+				cmdType.setRemove();
+				report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+				if (report.getCompliance().isResOk()) {
+					specificXConnection = getPointToPointSpecificCC(newA1EndDbTp, newZ1EndDbTp, newSnc.getDirection());
+					cmdType.setAdd();
+					report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), false);
+					if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+						newA1EndDbTp.removeAdditionalInformation(LegCountInfo.NAME);
+					}
+				} else {
+					errorReason = "Unable to create SNC on NE...";
+					LOG.error(new DumpInfo(report, errorReason));
+					throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SpecificCrossConnection setCrossConnectionForBiSimpleSncWithCmdTypeAdd(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp) throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = null;
+		// remove oldSNC and create NEW ST_SIMPLE BROADCAST
+		if (oldSnc.getSncType().isSt_add_drop_a() && oldSnc.getDirection().isCd_bi()) {
+
+			final DBTp unRelTp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+			final DBTp relTp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+			final DBTp unRelProtTp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToPointProtSpecificCC(unRelTp, unRelProtTp, relTp, oldSnc.getDirection(), newSnc);
+		} else if (oldSnc.getSncType().isSt_add_drop_z() && oldSnc.getDirection().isCd_bi()) {
+
+			final DBTp unRelTp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+			final DBTp relTp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+			final DBTp unRelProtTp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToPointProtSpecificCC(unRelTp, unRelProtTp, relTp, oldSnc.getDirection(), newSnc);
+		} else if (oldSnc.getSncType().isSt_double_add_drop() && oldSnc.getDirection().isCd_bi()) {
+
+			final DBTp a1Endtp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+			final DBTp a2Endtp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+			final DBTp z1Endtp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+			final DBTp z2EndTp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getProtectedRingSpecificCC(a1Endtp, a2Endtp, z1Endtp, z2EndTp, newSnc);
+		}
+		cmdType.setRemove();
+		report = sendMessage(specificXConnection, cmdType, oldSnc.getAEnd().get(0).getTpName().getTpDn(), oldSnc.getSncType(),
+				false);
+		if (report.getCompliance().isResOk()) {
+			cmdType.setAdd();
+			specificXConnection = getPointToPointSpecificCC(newA1EndDbTp, newZ1EndDbTp, newSnc.getDirection());
+		}
+		return specificXConnection;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @param specificXConnection
+	 * @throws PlugInException
+	 */
+	private X36SpecificCrossConnection setCrossConnectionForBiSimpleSncWithCmdTypeRemProt(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp) throws PlugInException {
+		X36SpecificCrossConnection specificXConnection = null;
+		if (oldSnc.getSncType().isSt_add_drop_a() && oldSnc.getDirection().isCd_bi()) {
+			final DBTp unRelTp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+			final DBTp relTp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+			final DBTp unRelProtTp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToPointProtSpecificCC(unRelTp, unRelProtTp, relTp, oldSnc.getDirection(), newSnc);
+		} else if (oldSnc.getSncType().isSt_add_drop_z() && oldSnc.getDirection().isCd_bi()) {
+			final DBTp unRelTp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+			final DBTp relTp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+			final DBTp unRelProtTp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToPointProtSpecificCC(unRelTp, unRelProtTp, relTp, oldSnc.getDirection(), newSnc);
+		} else if (oldSnc.getSncType().isSt_double_add_drop() && oldSnc.getDirection().isCd_bi()) {
+			final DBTp a1Endtp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+			final DBTp a2Endtp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+			final DBTp z1Endtp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+			final DBTp z2EndTp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getProtectedRingSpecificCC(a1Endtp, a2Endtp, z1Endtp, z2EndTp, newSnc);
+		}
+		return specificXConnection;
+	}
+
+	/**
+	 * This method sends setCrossConnection command to Ne for creating ST_ADD_DROP_A on NE for modification.
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 *            - should be st_add_drop_a
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setCrossConnectionsForModifiedToAddDropA(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final boolean isBroadCast, final X36CommandType cmdType) {
+		LOG.debug(new DumpInfo(oldSnc, "getSpecificCC for the SNC"));
+		LOG.debug(isBroadCast ? "SNC is a BroadCastSNC" : "SNC is not a BroadCastSNC");
+		X36SetReportCrossConnections report = null;
+		// TP can be CTP or FTP
+		final DBTp newA1EndDbTp = dbManager.getTP(newSnc.getAEnd().get(0).getTpName().getTpDn());
+		final DBTp newZ1EndDbTp = dbManager.getTP(newSnc.getZEnd().get(0).getTpName().getTpDn());
+
+		final DBTp oldA1Endtp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+		final DBTp oldZ1Endtp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+
+		LOG.debug(format("a1 End Tp for the SNC %s is %s", oldSnc.getName(), newA1EndDbTp));
+		LOG.debug(format("z1 End Tp for the SNC %s is %s", oldSnc.getName(), newZ1EndDbTp));
+		if (newA1EndDbTp == null) {
+			LOG.error(format("Cannot find AEnd for SNC:", oldSnc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("AEnd of SNC");
+		}
+		if (newZ1EndDbTp == null) {
+			LOG.error(format("Cannot find ZEnd for SNC:", oldSnc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("ZEnd of SNC");
+		}
+		final ConnectionDirection direction = oldSnc.getDirection();
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format("SNCType is %s and the direction is %s", oldSnc.getSncType(), direction));
+			LOG.debug(new DumpInfo(oldSnc.getSncType(), "old snc Type"));
+			LOG.debug(new DumpInfo(newSnc.getSncType(), "New Snc Type"));
+		}
+
+		if (newSnc.getDirection().isCd_uni()) {
+			report = setXConnForModifiedUniAddDropA(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp, newZ1EndDbTp,
+					isBroadCast);
+		} else {
+			report = setXConnForModifiedBiAddDropA(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp, newZ1EndDbTp,
+					isBroadCast);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @param isBroadCast
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SetReportCrossConnections setXConnForModifiedUniAddDropA(final SubnetworkConnection oldSnc, final SubnetworkConnection newSnc,
+			final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp, final boolean isBroadCast)
+					throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		// UNI directional
+		switch (oldSnc.getSncType().getValue()) {
+		case SNCType.st_simple:
+			if (isBroadCast) {
+				report = setXConnFromBroadcastSimpleToAddDropA(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp,
+						newZ1EndDbTp);
+			} else {
+				report = setXConnFromSimpleToAddDropA(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp, newZ1EndDbTp);
+			}
+			break;
+		case SNCType.st_double_add_drop:
+			if (isBroadCast) {
+				report = setXConnFromBroadcastDoubleAddDropToAddDropA(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp,
+						newA1EndDbTp, newZ1EndDbTp);
+			} else {
+				report = setXConnFromUniDoubleAddDropToAddDropA(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp,
+						newZ1EndDbTp);
+			}
+			break;
+		default:
+			LOG.error(format("Invalid SNC Type :: " + oldSnc.getSncType()));
+			errorReason = "Invalid SNCType";
+			throw PlugInExceptionHandler.invalidInput("Invalid SNC type is found:: " + oldSnc.getSncType());
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @param isBroadCast
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SetReportCrossConnections setXConnForModifiedBiAddDropA(final SubnetworkConnection oldSnc, final SubnetworkConnection newSnc,
+			final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp, final boolean isBroadCast)
+					throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// IF ADD_DROP_A BI directional
+		switch (oldSnc.getSncType().getValue()) {
+		case SNCType.st_simple:
+			if (cmdType.isAddProtection()) {
+				// addProtection as commandType
+				// add protection to existing ST_SIMPLE.
+				final DBTp newA2EndDbTp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+				specificXConnection = getPointToPointProtSpecificCC(newA1EndDbTp, newA2EndDbTp, newZ1EndDbTp,
+						newSnc.getDirection(), newSnc);
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			} else {
+				errorReason = "Not valid CMD Type";
+				LOG.error(new DumpInfo(cmdType, errorReason));
+				throw PlugInExceptionHandler.internalError(errorReason);
+			}
+			break;
+		case SNCType.st_double_add_drop:
+			if (cmdType.isRemoveProtRingTo()) {
+				// removeprotRingFrom.
+				final DBTp oldA2EndDbTp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+				final DBTp oldZ2EndDbTp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+				specificXConnection = getProtectedRingSpecificCC(oldA1Endtp, oldA2EndDbTp, oldZ1Endtp, oldZ2EndDbTp, newSnc);
+				report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), oldSnc.getSncType(), true);
+				if (!report.getCompliance().isResOk()) {
+					errorReason = "Unable to create SNC on NE...";
+					LOG.error(new DumpInfo(report, errorReason));
+					throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+				}
+			} else {
+				errorReason = "Not valid CMD Type";
+				LOG.error(new DumpInfo(cmdType, errorReason));
+				throw PlugInExceptionHandler.internalError(errorReason);
+			}
+			break;
+		default:
+			LOG.error(format("Invalid SNC Type :: " + oldSnc.getSncType()));
+			errorReason = "Invalid SNCType";
+			throw PlugInExceptionHandler.invalidInput("Invalid SNC type is found:: " + oldSnc.getSncType());
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SetReportCrossConnections setXConnFromBroadcastSimpleToAddDropA(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		if (cmdType.isAdd()) {
+			// remove existing ST_SIMPLE which is not broadcast
+			// remove , add ,addProtection.
+			final DBTp newA2Endtp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+			checkProtectionOnBroadcastAtActivation(newA1EndDbTp, newA2Endtp);
+			specificXConnection = getPointToPointSpecificCC(oldA1Endtp, oldZ1Endtp, oldSnc.getDirection());
+			cmdType.setRemove();
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), oldSnc.getSncType(), false);
+			if (report.getCompliance().isResOk()) {
+				specificXConnection = getPointToMultiPointSpecificCC(newA1EndDbTp, newZ1EndDbTp);
+				cmdType.setAdd();
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), SNCType.ST_SIMPLE, false);
+				if (report.getCompliance().isResOk()) {
+					cmdType.setAddProtection();
+					specificXConnection = getPointToMultiPointProtSpecificCC(newA1EndDbTp, newA2Endtp, newZ1EndDbTp, newSnc);
+					report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+					final LegCountInfo legInfo = (LegCountInfo) oldA1Endtp.getAdditionalInformation(LegCountInfo.NAME);
+					if (legInfo == null) {
+						oldA1Endtp.setAdditionalInformation(new LegCountInfo(new IntegerType(1)));
+					} else {
+						int legcount = legInfo.getSyntax().getValue();
+						if (legcount > 0) {
+							legcount++;
+							oldA1Endtp.addAdditionalInformation(new LegCountInfo(new IntegerType(legcount)));
+						}
+					}
+					updateProtectionOnBroadcastAtActivation(newA1EndDbTp, newA2Endtp);
+				} else {
+					errorReason = "Unable to create SNC on NE...";
+					LOG.error(new DumpInfo(report, errorReason));
+					throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else if (cmdType.isAddProtection()) {
+			// if st_simple is broadcast
+			// addProtection.
+			final DBTp newA2Endtp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+			checkProtectionOnBroadcastAtActivation(newA1EndDbTp, newA2Endtp);
+			specificXConnection = getPointToMultiPointProtSpecificCC(newA1EndDbTp, newA2Endtp, newZ1EndDbTp, newSnc);
+			report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			// update broadcast protection details after activation.
+			updateProtectionOnBroadcastAtActivation(newA1EndDbTp, newA2Endtp);
+
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SetReportCrossConnections setXConnFromSimpleToAddDropA(final SubnetworkConnection oldSnc, final SubnetworkConnection newSnc,
+			final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp)
+					throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// Not a Broad Cast.
+		if (cmdType.isAdd()) {
+			// remove Existing BroadCast ST_SIMPLE and build new
+			// add_drop_a with command types as remove, add , addProtection.
+			specificXConnection = getPointToMultiPointSpecificCC(oldA1Endtp, oldZ1Endtp);
+			cmdType.setRemove();
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), oldSnc.getSncType(), false);
+			if (report.getCompliance().isResOk()) {
+				cmdType.setAdd();
+				specificXConnection = getPointToPointSpecificCC(newA1EndDbTp, newZ1EndDbTp, newSnc.getDirection());
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), SNCType.ST_SIMPLE, false);
+				if (report.getCompliance().isResOk()) {
+					cmdType.setAddProtection();
+					final DBTp newA2Endtp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+					specificXConnection = getPointToPointProtSpecificCC(newA1EndDbTp, newA2Endtp, newZ1EndDbTp,
+							newSnc.getDirection(), newSnc);
+					report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+					if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+						newA1EndDbTp.removeAdditionalInformation(LegCountInfo.NAME);
+					}
+				} else {
+					errorReason = "Unable to create SNC on NE...";
+					LOG.error(new DumpInfo(report, errorReason));
+					throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else if (cmdType.isAddProtection()) {
+			// if st_simple is not broadcast and st_add_drop_a is not boradcast.
+			// use commandtype addProtection.
+			final DBTp newA2Endtp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToPointProtSpecificCC(newA1EndDbTp, newA2Endtp, newZ1EndDbTp, newSnc.getDirection(),
+					newSnc);
+			report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 * @throws Exception
+	 */
+	private X36SetReportCrossConnections setXConnFromBroadcastDoubleAddDropToAddDropA(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) throws PlugInException {
+		DBTp oldZ1Endtp1 = oldZ1Endtp;
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// New snc is broadcast , use removeleg command.
+		DBTp oldZ2Endtp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+		// if BroadCast
+		if (cmdType.isRemoveLeg()) {
+			// remove LEG
+			if (newZ1EndDbTp.equals(oldZ2Endtp)) {
+				oldZ2Endtp = oldZ1Endtp1;
+				oldZ1Endtp1 = newZ1EndDbTp;
+			}
+			/**
+			 * TR HN 12166 : As Ne automatically removing protection for all legs if we remove protection for any leg , we have
+			 * remove only leg.
+			 */
+			specificXConnection = getPointToMultiPointSpecificCC(oldA1Endtp, oldZ2Endtp);
+			report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			if (report.getCompliance().isResOk()) {
+				if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+					newA1EndDbTp.setAdditionalInformation(new LegCountInfo(new IntegerType(1)));
+				} else {
+					newA1EndDbTp.addAdditionalInformation(new LegCountInfo(new IntegerType(1)));
+				}
+			}
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 * @throws PlugInException
+	 */
+	private X36SetReportCrossConnections setXConnFromUniDoubleAddDropToAddDropA(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) throws PlugInException {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// new snc st_add_drop_a is not Broadcast
+		final DBTp oldA2Endtp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+		final DBTp oldZ2Endtp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+		if (cmdType.isAdd()) {
+			// remove existing Double_add_drop and build new
+			// Add_drop_a with commands as
+			// removeProtection , remove , add ,addProtection.
+			cmdType.setRemoveProtection();
+			specificXConnection = getPointToMultiPointProtSpecificCC(oldA1Endtp, oldA2Endtp, oldZ1Endtp, oldZ2Endtp, newSnc);
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_ADD_DROP_Z, true);
+			if (report.getCompliance().isResOk()) {
+				cmdType.setRemove();
+				specificXConnection = getPointToMultiPointSpecificCC(oldA1Endtp, oldZ1Endtp, oldZ2Endtp);
+				report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+				if (report.getCompliance().isResOk()) {
+					// now build new Add_DROP_A
+					cmdType.setAdd();
+					specificXConnection = getPointToPointSpecificCC(newA1EndDbTp, newZ1EndDbTp, newSnc.getDirection());
+					report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), SNCType.ST_SIMPLE, false);
+					if (report.getCompliance().isResOk()) {
+						cmdType.setAddProtection();
+						final DBTp newA2Endtp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+						specificXConnection = getPointToPointProtSpecificCC(newA1EndDbTp, newA2Endtp, newZ1EndDbTp,
+								newSnc.getDirection(), newSnc);
+						report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+						if (report.getCompliance().isResOk()) {
+							if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+								newA1EndDbTp.removeAdditionalInformation(LegCountInfo.NAME);
+							}
+						} else {
+							errorReason = "Unable to create SNC on NE...";
+							LOG.error(new DumpInfo(report, errorReason));
+							throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+						}
+					} else {
+						errorReason = "Unable to create SNC on NE...";
+						LOG.error(new DumpInfo(report, errorReason));
+						throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+					}
+				} else {
+					errorReason = "Unable to create SNC on NE...";
+					LOG.error(new DumpInfo(report, errorReason));
+					throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * This method sends setCrossConnection command to create ST_ADD_DROP_Z on Ne for modification.
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 *            - should be st_add_drop_z
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setCrossConnectionsForModifiedToAddDropZ(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final boolean isBroadCast, final X36CommandType cmdType) {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(oldSnc, "getSpecificCC for the SNC"));
+			LOG.debug(isBroadCast ? "SNC is a BroadCastSNC" : "SNC is not a BroadCastSNC");
+		}
+		X36SetReportCrossConnections report = null;
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+
+		// TP can be CTP or FTP
+		final DBTp newA1EndDbTp = dbManager.getTP(newSnc.getAEnd().get(0).getTpName().getTpDn());
+		final DBTp newZ1EndDbTp = dbManager.getTP(newSnc.getZEnd().get(0).getTpName().getTpDn());
+
+		final DBTp oldA1Endtp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+		final DBTp oldZ1Endtp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+
+		LOG.debug(format("a1 End Tp for the SNC %s is %s", oldSnc.getName(), newA1EndDbTp));
+		LOG.debug(format("z1 End Tp for the SNC %s is %s", oldSnc.getName(), newZ1EndDbTp));
+		if (newA1EndDbTp == null) {
+			LOG.error(format("Cannot find AEnd for SNC:", oldSnc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("AEnd of SNC");
+		}
+		if (newZ1EndDbTp == null) {
+			LOG.error(format("Cannot find ZEnd for SNC:", oldSnc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("ZEnd of SNC");
+		}
+		final ConnectionDirection direction = oldSnc.getDirection();
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format("SNCType is %s and the direction is %s", oldSnc.getSncType(), direction));
+			LOG.debug(new DumpInfo(oldSnc.getSncType(), "old snc Type"));
+			LOG.debug(new DumpInfo(newSnc.getSncType(), "New Snc Type"));
+		}
+
+		if (oldSnc.getDirection().isCd_uni()) {
+			// UNI directional
+			switch (oldSnc.getSncType().getValue()) {
+			case SNCType.st_simple:
+				report = setXConnFromUniSimpleToAddDropZ(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp,
+						newZ1EndDbTp);
+				break;
+			case SNCType.st_double_add_drop:
+				report = setXConnFromUniAddDropAToAddDropZ(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp);
+				break;
+			default:
+				LOG.error(format("Invalid SNC Type :: " + oldSnc.getSncType()));
+				errorReason = "Invalid SNCType";
+				throw PlugInExceptionHandler.invalidInput("Invalid SNC type is found:: " + oldSnc.getSncType());
+			}
+		} else {
+			report = setXConnBiSncAddDropZ(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp, newZ1EndDbTp);
+		}
+		LOG.debug(new DumpInfo(specificXConnection, "the Specific cross connection is "));
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setXConnFromUniSimpleToAddDropZ(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		if (cmdType.isAdd()) {
+			// ST_simple is not a broadCast leg
+			// remove st_simple.
+			// use remove , add commandTypes
+			specificXConnection = getPointToPointSpecificCC(oldA1Endtp, oldZ1Endtp, oldSnc.getDirection());
+			cmdType.setRemove();
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), oldSnc.getSncType(), false);
+			if (report.getCompliance().isResOk()) {
+				// Now build broadCast LEG and add leg to it.
+				final DBTp newZ2EndDbTp = dbManager.getTP(newSnc.getZEnd().get(1).getTpName().getTpDn());
+				specificXConnection = getPointToMultiPointSpecificCC(newA1EndDbTp, newZ1EndDbTp, newZ2EndDbTp);
+				cmdType.setAdd();
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+				if (report.getCompliance().isResOk()) {
+					if ((newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME)) != null) {
+						newA1EndDbTp.setAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+					} else {
+						newA1EndDbTp.addAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+					}
+				} else {
+					errorReason = "Unable to create SNC on NE...";
+					LOG.error(new DumpInfo(report, errorReason));
+					throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else if (cmdType.isAddLeg()) {
+			// ST_SIMPLE is BROADCAST
+			// use command as addLeg.
+			final DBTp newZ2EndDbTp = dbManager.getTP(newSnc.getZEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToMultiPointSpecificCC(newA1EndDbTp, newZ2EndDbTp);
+			cmdType.setAddLeg();
+			report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			if (report.getCompliance().isResOk()) {
+				if ((newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME)) != null) {
+					newA1EndDbTp.setAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+				} else {
+					newA1EndDbTp.addAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setXConnFromUniAddDropAToAddDropZ(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		if (cmdType.isRemoveProtection()) {
+			// use removeProtection
+			final DBTp oldA2EndDbTp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+			final DBTp oldZ2EndDbTp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+			specificXConnection = getPointToMultiPointProtSpecificCC(oldA1Endtp, oldA2EndDbTp, oldZ1Endtp, oldZ2EndDbTp, newSnc);
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), newSnc.getSncType(), true);
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setXConnBiSncAddDropZ(final SubnetworkConnection oldSnc, final SubnetworkConnection newSnc,
+			final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// Bi directional
+		switch (oldSnc.getSncType().getValue()) {
+		case SNCType.st_simple:
+			if (cmdType.isAddProtection()) {
+				// add protection to existing ST_SIMPLE.
+				final DBTp newZ2EndDbTp = dbManager.getTP(newSnc.getZEnd().get(1).getTpName().getTpDn());
+				specificXConnection = getPointToPointProtSpecificCC(newZ1EndDbTp, newZ2EndDbTp, newA1EndDbTp,
+						newSnc.getDirection(), newSnc);
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			} else {
+				errorReason = "Not valid CMD Type";
+				LOG.error(new DumpInfo(cmdType, errorReason));
+				throw PlugInExceptionHandler.internalError(errorReason);
+			}
+			break;
+		case SNCType.st_double_add_drop:
+			if (cmdType.isRemoveProtRingFrom()) {
+				// use removeProteRingTo
+				final DBTp oldA2EndDbTp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+				final DBTp oldZ2EndDbTp = dbManager.getTP(oldSnc.getZEnd().get(1).getTpName().getTpDn());
+				specificXConnection = getProtectedRingSpecificCC(oldA1Endtp, oldA2EndDbTp, oldZ1Endtp, oldZ2EndDbTp, newSnc);
+				report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), oldSnc.getSncType(), true);
+				if (!report.getCompliance().isResOk()) {
+					errorReason = "Unable to create SNC on NE...";
+					LOG.error(new DumpInfo(report, errorReason));
+					throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+				}
+			} else {
+				errorReason = "Not valid CMD Type";
+				LOG.error(new DumpInfo(cmdType, errorReason));
+				throw PlugInExceptionHandler.internalError(errorReason);
+			}
+			break;
+		default:
+			LOG.error(format("Invalid SNC Type :: " + oldSnc.getSncType()));
+			errorReason = "Invalid SNCType";
+			throw PlugInExceptionHandler.invalidInput("Invalid SNC type is found:: " + oldSnc.getSncType());
+		}
+		return report;
+	}
+
+	/**
+	 * This method sends setCrossConnection command for Creating st_double_add_drop on NE for modification.
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 *            - should be st_double_add_drop.
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setCrossConnectionsForModifiedToDoubleAddDrop(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final boolean isBroadCast, final X36CommandType cmdType) {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(oldSnc, "getSpecificCC for the SNC"));
+			LOG.debug(isBroadCast ? "SNC is a BroadCastSNC" : "SNC is not a BroadCastSNC");
+		}
+		X36SetReportCrossConnections report = null;
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+
+		// TP can be CTP or FTP
+		final DBTp newA1EndDbTp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+		final DBTp newZ1EndDbTp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+
+		final DBTp oldA1Endtp = dbManager.getTP(oldSnc.getAEnd().get(0).getTpName().getTpDn());
+		final DBTp oldZ1Endtp = dbManager.getTP(oldSnc.getZEnd().get(0).getTpName().getTpDn());
+
+		if (newA1EndDbTp == null) {
+			LOG.error(format("Cannot find AEnd for SNC:", oldSnc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("AEnd of SNC");
+		}
+		if (newZ1EndDbTp == null) {
+			LOG.error(format("Cannot find ZEnd for SNC:", oldSnc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("ZEnd of SNC");
+		}
+		final ConnectionDirection direction = oldSnc.getDirection();
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format("SNCType is %s and the direction is %s", oldSnc.getSncType(), direction));
+			LOG.debug(new DumpInfo(oldSnc.getSncType(), "old snc Type"));
+			LOG.debug(new DumpInfo(newSnc.getSncType(), "New Snc Type"));
+		}
+
+		if (newSnc.getDirection().isCd_uni()) {
+			// UNI directional
+			switch (oldSnc.getSncType().getValue()) {
+			case SNCType.st_simple:
+				report = setXConnFromUniSimpleToDoubleAddDrop(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp,
+						newZ1EndDbTp, isBroadCast);
+				break;
+			case SNCType.st_add_drop_a:
+				report = setXConnFromUniAddDropAToDoubleAddDrop(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp,
+						newZ1EndDbTp);
+				break;
+			case SNCType.st_add_drop_z:
+				report = setXConnFromUniAddDropZToDoubleAddDrop(newSnc, cmdType, newA1EndDbTp, newZ1EndDbTp);
+				break;
+			default:
+				LOG.error(format("Invalid SNC Type :: " + oldSnc.getSncType()));
+				errorReason = "Invalid SNCType";
+				throw PlugInExceptionHandler.invalidInput("Invalid SNC type is found:: " + oldSnc.getSncType());
+			}
+		} else {
+			report = setXConnForBiSncModifiedDoubleAddDrop(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp, newA1EndDbTp,
+					newZ1EndDbTp, isBroadCast);
+		}
+		LOG.debug(new DumpInfo(specificXConnection, "the Specific cross connection is "));
+		return report;
+	}
+
+	/**
+	 * Creates Bidirectional Snc on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @param isBroadCast
+	 */
+	private X36SetReportCrossConnections setXConnForBiSncModifiedDoubleAddDrop(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp, final boolean isBroadCast) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// Bi directional
+		final DBTp newA2EndDbTp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+		final DBTp newZ2EndDbTp = dbManager.getTP(newSnc.getZEnd().get(1).getTpName().getTpDn());
+		switch (oldSnc.getSncType().getValue()) {
+		case SNCType.st_simple:
+			// addProtection.
+			if (cmdType.isAddProtection()) {
+				// addProtecion to Bi ST_SIMPLE
+				specificXConnection = getProtectedRingSpecificCC(newA1EndDbTp, newA2EndDbTp, newZ1EndDbTp, newZ2EndDbTp, newSnc);
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			} else {
+				errorReason = "Not valid CMD Type";
+				LOG.error(new DumpInfo(cmdType, errorReason));
+				throw PlugInExceptionHandler.internalError(errorReason);
+			}
+			break;
+		case SNCType.st_add_drop_a:
+			if (cmdType.isAddProtection()) {
+				// addProtecion to st_add_drop_a to make Double_add_drop
+				// add protection.
+				specificXConnection = getProtectedRingSpecificCC(newA1EndDbTp, newA2EndDbTp, newZ1EndDbTp, newZ2EndDbTp, newSnc);
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			} else {
+				errorReason = "Not valid CMD Type";
+				LOG.error(new DumpInfo(cmdType, errorReason));
+				throw PlugInExceptionHandler.internalError(errorReason);
+			}
+			break;
+		case SNCType.st_add_drop_z:
+			if (cmdType.isAddProtection()) {
+				// addProtecion to Bi ADD_DROP_Z
+				// addProtecion
+				// sending aEnds as Zends and zEnds as aEns. to make protectionRing on NE.
+				// for modifying st_add_drop_z.
+				specificXConnection = getProtectedRingSpecificCC(newZ1EndDbTp, newZ2EndDbTp, newA1EndDbTp, newA2EndDbTp, newSnc);
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			} else {
+				errorReason = "Not valid CMD Type";
+				LOG.error(new DumpInfo(cmdType, errorReason));
+				throw PlugInExceptionHandler.internalError(errorReason);
+			}
+			break;
+		default:
+			LOG.error(format("Invalid SNC Type :: " + oldSnc.getSncType()));
+			errorReason = "Invalid SNCType";
+			throw PlugInExceptionHandler.invalidInput("Invalid SNC type is found:: " + oldSnc.getSncType());
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setXConnFromUniSimpleToDoubleAddDrop(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp, final boolean isBroadCast) {
+		X36SetReportCrossConnections report = null;
+		if (cmdType.isAdd()) {
+			report = setXConnFromSimpleToDoubleAddDropWithCmdTypeAdd(oldSnc, newSnc, isBroadCast, cmdType, oldA1Endtp,
+					oldZ1Endtp, newA1EndDbTp, newZ1EndDbTp);
+		} else if (cmdType.isAddLeg()) {
+			report = setXConnFromSimpleToDoubleAddDropWithCmdTypeAddLeg(oldSnc, newSnc, cmdType, newA1EndDbTp, newZ1EndDbTp);
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setXConnFromUniAddDropAToDoubleAddDrop(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		if (cmdType.isAdd()) {
+			report = setXConnFromAddDropAToDoubleAddDropWithCmdTypeAdd(oldSnc, newSnc, cmdType, oldA1Endtp, oldZ1Endtp,
+					newA1EndDbTp, newZ1EndDbTp);
+		} else if (cmdType.isAddLeg()) {
+			// addleg as command..
+			final DBTp newZ2EndDbTp = dbManager.getTP(newSnc.getZEnd().get(1).getTpName().getTpDn());
+			/**
+			 * TR HN12166 : No need to add Protection for new Leg. Protection automatically applied for the new leg on NE.
+			 */
+			specificXConnection = getPointToMultiPointSpecificCC(newA1EndDbTp, newZ2EndDbTp);
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), newSnc.getSncType(), true);
+			if (report.getCompliance().isResOk()) {
+				if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+					newA1EndDbTp.setAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+				} else {
+					newA1EndDbTp.addAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+				}
+			}
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param newSnc
+	 * @param cmdType
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setXConnFromUniAddDropZToDoubleAddDrop(final SubnetworkConnection newSnc,
+			final X36CommandType cmdType, final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		if (cmdType.isAddProtection()) {
+			// addProtecion to uni ADD_DROP_Z
+			final DBTp newA2EndDbTp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+			final DBTp newZ2EndDbTp = dbManager.getTP(newSnc.getZEnd().get(1).getTpName().getTpDn());
+			cmdType.setAddProtection();
+			specificXConnection = getPointToMultiPointProtSpecificCC(newA1EndDbTp, newA2EndDbTp, newZ1EndDbTp, newZ2EndDbTp,
+					newSnc);
+			report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+				newA1EndDbTp.setAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+			} else {
+				newA1EndDbTp.addAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+			}
+		} else {
+			errorReason = "Not valid CMD Type";
+			LOG.error(new DumpInfo(cmdType, errorReason));
+			throw PlugInExceptionHandler.internalError(errorReason);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setXConnFromSimpleToDoubleAddDropWithCmdTypeAdd(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final boolean isBroadCast, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp,
+			final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// remove Existing SNC
+		// use remove , add , addProtection
+		cmdType.setRemove();
+		specificXConnection = getPointToPointSpecificCC(oldA1Endtp, oldZ1Endtp, oldSnc.getDirection());
+		report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), oldSnc.getSncType(), false);
+		if (report.getCompliance().isResOk()) {
+			final DBTp newA2EndDbTp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+			final DBTp newZ2EndDbTp = dbManager.getTP(newSnc.getZEnd().get(1).getTpName().getTpDn());
+			cmdType.setAdd();
+			specificXConnection = getPointToMultiPointSpecificCC(newA1EndDbTp, newZ1EndDbTp, newZ2EndDbTp);
+			report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+			if (report.getCompliance().isResOk()) {
+				cmdType.setAddProtection();
+				specificXConnection = getPointToMultiPointProtSpecificCC(newA1EndDbTp, newA2EndDbTp, newZ1EndDbTp, newZ2EndDbTp,
+						newSnc);
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+				if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+					newA1EndDbTp.setAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+				} else {
+					newA1EndDbTp.addAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else {
+			errorReason = "Unable to create SNC on NE...";
+			LOG.error(new DumpInfo(report, errorReason));
+			throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param cmdType
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setXConnFromSimpleToDoubleAddDropWithCmdTypeAddLeg(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp newA1EndDbTp, final DBTp newZ1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// Add leg,protecion to Existnsting SNC.
+		final DBTp newA2EndDbTp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+		final DBTp newZ2EndDbTp = dbManager.getTP(newSnc.getZEnd().get(1).getTpName().getTpDn());
+		cmdType.setAddLeg();
+		specificXConnection = getPointToMultiPointSpecificCC(newA1EndDbTp, newZ2EndDbTp);
+		report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z, true);
+		if (report.getCompliance().isResOk()) {
+			cmdType.setAddProtection();
+			specificXConnection = getPointToMultiPointProtSpecificCC(newA1EndDbTp, newA2EndDbTp, newZ1EndDbTp, newZ2EndDbTp,
+					newSnc);
+			report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+			if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+				newA1EndDbTp.setAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+			} else {
+				newA1EndDbTp.addAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+			}
+		} else {
+			errorReason = "Unable to create SNC on NE...";
+			LOG.error(new DumpInfo(report, errorReason));
+			throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param oldA1Endtp
+	 * @param oldZ1Endtp
+	 * @param newA1EndDbTp
+	 * @param newZ1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setXConnFromAddDropAToDoubleAddDropWithCmdTypeAdd(final SubnetworkConnection oldSnc,
+			final SubnetworkConnection newSnc, final X36CommandType cmdType, final DBTp oldA1Endtp, final DBTp oldZ1Endtp, final DBTp newA1EndDbTp,
+			final DBTp newZ1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		// remove Existing and build new
+		// remove protection from pointToPointProt
+		// remove PointToPoint.
+		// add BroadCast with 2 legs
+		// finally add protection.
+		cmdType.setRemoveProtection();
+		final DBTp oldA2EndDbTp = dbManager.getTP(oldSnc.getAEnd().get(1).getTpName().getTpDn());
+		final DBTp newA2EndDbTp = dbManager.getTP(newSnc.getAEnd().get(1).getTpName().getTpDn());
+		final DBTp newZ2EndDbTp = dbManager.getTP(newSnc.getZEnd().get(1).getTpName().getTpDn());
+		specificXConnection = getPointToPointProtSpecificCC(oldA1Endtp, oldA2EndDbTp, oldZ1Endtp, oldSnc.getDirection(), newSnc);
+		report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_SIMPLE, true);
+		if (report.getCompliance().isResOk()) {
+			cmdType.setRemove();
+			specificXConnection = getPointToPointSpecificCC(oldA1Endtp, oldZ1Endtp, oldSnc.getDirection());
+			report = sendMessage(specificXConnection, cmdType, oldA1Endtp.getDn(), SNCType.ST_SIMPLE, false);
+			if (report.getCompliance().isResOk()) {
+				// build Broadcast SNC with 2 legs
+				cmdType.setAdd();
+				specificXConnection = getPointToMultiPointSpecificCC(newA1EndDbTp, newZ1EndDbTp, newZ2EndDbTp);
+				report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+				if (report.getCompliance().isResOk()) {
+					// add protection to broadcast legs.
+					cmdType.setAddProtection();
+					specificXConnection = getPointToMultiPointProtSpecificCC(newA1EndDbTp, newA2EndDbTp, newZ1EndDbTp,
+							newZ2EndDbTp, newSnc);
+					report = sendMessage(specificXConnection, cmdType, newA1EndDbTp.getDn(), newSnc.getSncType(), true);
+					if (newA1EndDbTp.getAdditionalInformation(LegCountInfo.NAME) != null) {
+						newA1EndDbTp.setAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+					} else {
+						newA1EndDbTp.addAdditionalInformation(new LegCountInfo(new IntegerType(2)));
+					}
+				} else {
+					errorReason = "Unable to create SNC on NE...";
+					LOG.error(new DumpInfo(report, errorReason));
+					throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+				}
+			} else {
+				errorReason = "Unable to create SNC on NE...";
+				LOG.error(new DumpInfo(report, errorReason));
+				throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+			}
+		} else {
+			errorReason = "Unable to create SNC on NE...";
+			LOG.error(new DumpInfo(report, errorReason));
+			throw PlugInExceptionHandler.internalError(report.getCause().getValue());
+		}
+		return report;
+	}
+
+	/**
+	 * This method sets or Modifies SNC based on given input.
+	 *
+	 * @param oldSnc
+	 * @param newSnc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @return
+	 */
+	public X36SetReportCrossConnections setCrossConnectionsForModifySnc(final SubnetworkConnection oldSnc, final SubnetworkConnection newSnc,
+			final boolean isBroadCast, final X36CommandType cmdType) {
+		X36SetReportCrossConnections report = null;
+		switch (newSnc.getSncType().getValue()) {
+		case SNCType.st_simple:
+			report = setCrossConnectionsForModifiedToSimple(oldSnc, newSnc, isBroadCast, cmdType);
+			break;
+		case SNCType.st_add_drop_a:
+			// if new SNC is ADD_DROP_A
+			report = setCrossConnectionsForModifiedToAddDropA(oldSnc, newSnc, isBroadCast, cmdType);
+			break;
+		case SNCType.st_add_drop_z:
+			// if new SNC is ADD_DROP_Z
+			report = setCrossConnectionsForModifiedToAddDropZ(oldSnc, newSnc, isBroadCast, cmdType);
+			break;
+		case SNCType.st_double_add_drop:
+			// if new SNC is DOUBLE_ADD_DROP
+			report = setCrossConnectionsForModifiedToDoubleAddDrop(oldSnc, newSnc, isBroadCast, cmdType);
+			break;
+		default:
+			LOG.error(format("Invalid SNC Type :: " + newSnc.getSncType()));
+			errorReason = "Invalid SNCType";
+			throw PlugInExceptionHandler.invalidInput("Invalid SNC type is found:: " + newSnc.getSncType());
+		}
+		return report;
+	}
+
+	/**
+	 * @param snc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @return This method creates the Specific cross connection depending upon the SNC Type and whether the SNC is broadcast or
+	 *         not.
+	 */
+	public X36SetReportCrossConnections setCrossConnections(final SubnetworkConnection snc, final boolean isBroadCast, final X36CommandType cmdType) {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(snc, "getSpecificCC for the SNC"));
+			LOG.debug(isBroadCast ? "SNC is a BroadCastSNC" : "SNC is not a BroadCastSNC");
+		}
+		X36SetReportCrossConnections report = null;
+		try {
+			// TP can be CTP or FTP
+			final DBTp a1EndDbTp = dbManager.getTP(snc.getAEnd().get(0).getTpName().getTpDn());
+			final DBTp z1EndDbTp = dbManager.getTP(snc.getZEnd().get(0).getTpName().getTpDn());
+
+			LOG.debug(format("a1 End Tp for the SNC %s is %s", snc.getName(), a1EndDbTp));
+			LOG.debug(format("z1 End Tp for the SNC %s is %s", snc.getName(), z1EndDbTp));
+			if (a1EndDbTp == null) {
+				LOG.error(format("Cannot find AEnd for SNC:", snc.getName()));
+				throw PlugInExceptionHandler.entityNotFound("AEnd of SNC");
+			}
+			if (z1EndDbTp == null) {
+				LOG.error(format("Cannot find ZEnd for SNC:", snc.getName()));
+				throw PlugInExceptionHandler.entityNotFound("ZEnd of SNC");
+			}
+			final ConnectionDirection direction = snc.getDirection();
+			LOG.debug(format("SNCType is %s and the direction is %s", snc.getSncType(), direction));
+			switch (snc.getSncType().getValue()) {
+			case SNCType.st_simple:
+				report = setCrossConnectionForSimpleSnc(snc, isBroadCast, cmdType, a1EndDbTp, z1EndDbTp);
+				break;
+			case SNCType.st_add_drop_a:
+				// Fix for TR-HM54326 added support for st_add_drop_a in broadCast
+				if (isBroadCast) {
+					report = setCrossConnectionForBroadcastAddDropASnc(snc, isBroadCast, cmdType, a1EndDbTp, z1EndDbTp);
+				} else {
+					report = setCrossConnectionForAddDropASnc(snc, isBroadCast, cmdType, a1EndDbTp, z1EndDbTp);
+				}
+				break;
+			case SNCType.st_add_drop_z:
+				report = setCrossConnectionForAddDropZSnc(snc, isBroadCast, cmdType, a1EndDbTp, z1EndDbTp);
+				break;
+			case SNCType.st_double_add_drop:
+				report = setCrossConnectionForDoubleAddDropSnc(snc, isBroadCast, cmdType, a1EndDbTp, z1EndDbTp);
+				break;
+			default:
+				LOG.error(format("Invalid SNC Type :: " + snc.getSncType()));
+				errorReason = "Invalid SNCType";
+				throw PlugInExceptionHandler.invalidInput("Invalid SNC type is found:: " + snc.getSncType());
+			}
+		} catch (final Exception e) {
+			errorReason = "Unable to create the Specific Cross Connection for :: " + snc.getSncType();
+			LOG.error(format(errorReason) + e.getMessage());
+			throw PlugInExceptionHandler.internalError(errorReason + e.getMessage());
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param snc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param a1EndDbTp
+	 * @param z1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setCrossConnectionForSimpleSnc(final SubnetworkConnection snc, final boolean isBroadCast,
+			final X36CommandType cmdType, final DBTp a1EndDbTp, final DBTp z1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final ConnectionDirection direction = snc.getDirection();
+		if (isBroadCast) {
+			/*
+			 * when the potentialSetUpIndicator is 'RSU_BROADCAST' and SNCType is ST_SIMPLE then specificCrossConnection type
+			 * would be pointToMultiPoint.
+			 */
+			specificXConnection = getPointToMultiPointSpecificCC(a1EndDbTp, z1EndDbTp);
+			report = sendMessage(specificXConnection, cmdType, a1EndDbTp.getDn(), SNCType.ST_SIMPLE, false);
+
+		} else if (cmdType.isAddProtection() && !isBroadCast) {
+			// This is in case of Activation of Inter/Intra card Protection
+			if (snc.getAEnd().getAll().length == 2) {
+				// TP can be CTP or FTP
+				final DBTp a2EndDbTp = dbManager.getTP(snc.getAEnd().get(1).getTpName().getTpDn());
+				if (a2EndDbTp == null) {
+					LOG.error(format("Cannot find AEnd for SNC:", snc.getName()));
+					throw PlugInExceptionHandler.entityNotFound("A2End of SNC");
+				}
+				specificXConnection = getPointToPointProtSpecificCC(a1EndDbTp, a2EndDbTp, z1EndDbTp, direction, snc);
+				// Fix for TR HM37328 adding revertive value to unreliable channel.
+				specificXConnection.getBidirectionalProt().getUnreliableTermination().setRevertive(false);
+				;
+				report = sendMessage(specificXConnection, X36CommandType.ADDPROTECTION, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_A,
+						false);
+			} else if (snc.getZEnd().getAll().length == 2) {
+				// TP can be CTP or FTP if FTP
+				final DBTp z2EndDbTp = dbManager.getTP(snc.getZEnd().get(1).getTpName().getTpDn());
+				if (z2EndDbTp == null) {
+					LOG.error(format("Cannot find AEnd for SNC:", snc.getName()));
+					throw PlugInExceptionHandler.entityNotFound("Z2End of SNC");
+				}
+				specificXConnection = getPointToPointProtSpecificCC(z1EndDbTp, z2EndDbTp, a1EndDbTp, direction, snc);
+				report = sendMessage(specificXConnection, X36CommandType.ADDPROTECTION, z1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z,
+						false);
+			}
+		} else {
+			/*
+			 * when the potentialSetUpIndicator is RSU_POINT_TO_POINT/RSU_ANYCONFIG and SNCType is ST_SIMPLE then
+			 * specificCrossConnection type would be pointToPoint.
+			 */
+			specificXConnection = getPointToPointSpecificCC(a1EndDbTp, z1EndDbTp, direction);
+			report = sendMessage(specificXConnection, cmdType, a1EndDbTp.getDn(), SNCType.ST_SIMPLE, false);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates Snc on NE
+	 *
+	 * @param snc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param a1EndDbTp
+	 * @param z1EndDbTp
+	 */
+	private X36SetReportCrossConnections setCrossConnectionForBroadcastAddDropASnc(final SubnetworkConnection snc, final boolean isBroadCast,
+			final X36CommandType cmdType, final DBTp a1EndDbTp, final DBTp z1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+
+		if (cmdType.isAdd()) {
+			specificXConnection = getPointToMultiPointSpecificCC(a1EndDbTp, z1EndDbTp);
+			report = sendMessage(specificXConnection, X36CommandType.ADD, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_A, false);
+			if (report.getCompliance().isResOk()) {
+				cmdType.setAddProtection();
+			}
+		} else if (cmdType.isAddLeg()) {
+			specificXConnection = getPointToMultiPointSpecificCC(a1EndDbTp, z1EndDbTp);
+			report = sendMessage(specificXConnection, X36CommandType.ADDLEG, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_A, false);
+			if (report.getCompliance().isResOk()) {
+				cmdType.setAddProtection();
+			}
+		}
+		if (cmdType.isAddProtection()) {
+			// TP can be CTP or FTP if FTP
+			final DBTp a2EndDbTp = dbManager.getTP(snc.getAEnd().get(1).getTpName().getTpDn());
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(format("a2 End Tp for the SNC %s is %s", snc.getName(), a2EndDbTp));
+			}
+			if (a2EndDbTp == null) {
+				LOG.error(format("Cannot find Second AEnd for SNC:", snc.getName()));
+				throw PlugInExceptionHandler.entityNotFound("Second AEnd of SNC");
+			}
+			specificXConnection = getPointToMultiPointProtSpecificCC(a1EndDbTp, a2EndDbTp, z1EndDbTp, snc);
+			report = sendMessage(specificXConnection, X36CommandType.ADDPROTECTION, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_A,
+					false);
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param snc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param a1EndDbTp
+	 * @param z1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setCrossConnectionForAddDropASnc(final SubnetworkConnection snc, final boolean isBroadCast,
+			final X36CommandType cmdType, final DBTp a1EndDbTp, final DBTp z1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final ConnectionDirection direction = snc.getDirection();
+		/*
+		 * For SNCType ST_ADD_DROP_A the specific cross connection type would be pointToPointProt.
+		 */
+		if (cmdType.isAdd()) {
+			/*
+			 * 1st Msg has cmdType as Add, 2nd Msg has cmdType as AddProtection
+			 */
+			specificXConnection = getPointToPointSpecificCC(a1EndDbTp, z1EndDbTp, direction);
+			report = sendMessage(specificXConnection, X36CommandType.ADD, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_A, false);
+			if (report.getCompliance().isResOk()) {
+				// TP can be CTP or FTP if FTP
+				final DBTp a2EndDbTp = dbManager.getTP(snc.getAEnd().get(1).getTpName().getTpDn());
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(format("a2 End Tp for the SNC %s is %s", snc.getName(), a2EndDbTp));
+				}
+				if (a2EndDbTp == null) {
+					LOG.error(format("Cannot find Second AEnd for SNC:", snc.getName()));
+					throw PlugInExceptionHandler.entityNotFound("Second AEnd of SNC");
+				}
+				specificXConnection = getPointToPointProtSpecificCC(a1EndDbTp, a2EndDbTp, z1EndDbTp, direction, snc);
+				report = sendMessage(specificXConnection, X36CommandType.ADDPROTECTION, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_A,
+						false);
+				// Defining Protection Role for Tp's
+				defineProtectionRole(a1EndDbTp, a2EndDbTp);
+			}
+		} else if (cmdType.isRemove()) {
+			/*
+			 * 1st Msg has cmdType as RemoveProtection, 2nd Msg has cmdType as Remove TP can be CTP or FTP if FTP
+			 */
+			final DBTp a2EndDbTp = dbManager.getTP(snc.getAEnd().get(1).getTpName().getTpDn());
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(format("a2 End Tp for the SNC %s is %s", snc.getName(), a2EndDbTp));
+			}
+			if (a2EndDbTp == null) {
+				LOG.error(format("Cannot find Second AEnd for SNC:", snc.getName()));
+				throw PlugInExceptionHandler.entityNotFound("Second AEnd of SNC");
+			}
+			specificXConnection = getPointToPointProtSpecificCC(a1EndDbTp, a2EndDbTp, z1EndDbTp, direction, snc);
+			report = sendMessage(specificXConnection, X36CommandType.REMOVEPROTECTION, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_A,
+					false);
+			if (report.getCompliance().isResOk()) {
+				specificXConnection = getPointToPointSpecificCC(a1EndDbTp, z1EndDbTp, direction);
+				report = sendMessage(specificXConnection, X36CommandType.REMOVE, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_A, false);
+			}
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param snc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param a1EndDbTp
+	 * @param z1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setCrossConnectionForAddDropZSnc(final SubnetworkConnection snc, final boolean isBroadCast,
+			final X36CommandType cmdType, final DBTp a1EndDbTp, final DBTp z1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final ConnectionDirection direction = snc.getDirection();
+		// TP can be CTP or FTP if FTP .
+		final DBTp z2EndDbTp = dbManager.getTP(snc.getZEnd().get(1).getTpName().getTpDn());
+		if (z2EndDbTp == null) {
+			LOG.error(format("Cannot find Second ZEnd for SNC:", snc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("Second ZEnd of SNC");
+		}
+		if (isBroadCast) {
+			/*
+			 * When the potentailFutureSetUpIndicator is 'RSU_ANY_CONFIG' and the SNCType is ST_ADD_DROP_Z with UNI direction then
+			 * the SpecifiCrossConnectionType would be pointToMultiPoint.
+			 */
+			if (cmdType.isAdd()) {
+				/*
+				 * Fix for creating broadcast ST_ADD_DROP_Z in single shot with command Type as add.
+				 */
+				specificXConnection = getPointToMultiPointSpecificCC(a1EndDbTp, z1EndDbTp, z2EndDbTp);
+				report = sendMessage(specificXConnection, cmdType, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+			} else if (cmdType.isAddLeg()) {
+				/*
+				 * 1st Msg has cmdType as AddLeg, 2nd Msg has cmdType as AddLeg
+				 */
+				specificXConnection = getPointToMultiPointSpecificCC(a1EndDbTp, z1EndDbTp);
+				report = sendMessage(specificXConnection, X36CommandType.ADDLEG, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+				specificXConnection = getPointToMultiPointSpecificCC(a1EndDbTp, z2EndDbTp);
+				report = sendMessage(specificXConnection, X36CommandType.ADDLEG, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+			}
+		} else {
+			/*
+			 * When the SNCType ST_ADD_DROP_Z with BI direction then the SpecifiCrossConnectionType would be pointToPointProt.
+			 */
+			if (cmdType.isAdd()) {// 1st Msg has cmdType as Add, 2nd Msg
+				// has cmdType as AddProtection
+				specificXConnection = getPointToPointSpecificCC(a1EndDbTp, z1EndDbTp, direction);
+				report = sendMessage(specificXConnection, X36CommandType.ADD, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+				if (report.getCompliance().isResOk()) {
+					LOG.debug(format("Z2 End Tp for the SNC %s is %s", snc.getName(), z2EndDbTp));
+					specificXConnection = getPointToPointProtSpecificCC(z1EndDbTp, z2EndDbTp, a1EndDbTp, direction, snc);
+					report = sendMessage(specificXConnection, X36CommandType.ADDPROTECTION, a1EndDbTp.getDn(),
+							SNCType.ST_ADD_DROP_Z, false);
+					// Defining Protection Role for Tp's
+					defineProtectionRole(z1EndDbTp, z2EndDbTp);
+				}
+			}
+			if (cmdType.isRemove()) {// 1st Msg has cmdType as
+				// RemoveProtection, 2nd Msg has
+				// cmdType as Remove
+
+				LOG.debug(format("z2 End Tp for the SNC %s is %s", snc.getName(), z2EndDbTp));
+				specificXConnection = getPointToPointProtSpecificCC(z1EndDbTp, z2EndDbTp, a1EndDbTp, direction, snc);
+				report = sendMessage(specificXConnection, X36CommandType.REMOVEPROTECTION, a1EndDbTp.getDn(),
+						SNCType.ST_ADD_DROP_Z, false);
+				if (report.getCompliance().isResOk()) {
+					specificXConnection = getPointToPointSpecificCC(a1EndDbTp, z1EndDbTp, direction);
+					report = sendMessage(specificXConnection, X36CommandType.REMOVE, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z,
+							false);
+				}
+			}
+		}
+		return report;
+	}
+
+	/**
+	 * Creates SNC on NE
+	 *
+	 * @param snc
+	 * @param isBroadCast
+	 * @param cmdType
+	 * @param a1EndDbTp
+	 * @param z1EndDbTp
+	 * @return X36SetReportCrossConnections
+	 */
+	private X36SetReportCrossConnections setCrossConnectionForDoubleAddDropSnc(final SubnetworkConnection snc, final boolean isBroadCast,
+			final X36CommandType cmdType, final DBTp a1EndDbTp, final DBTp z1EndDbTp) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final ConnectionDirection direction = snc.getDirection();
+		// TP can be CTP or FTP .
+		final DBTp dblA2EndDbTp = dbManager.getTP(snc.getAEnd().get(1).getTpName().getTpDn());
+		if (dblA2EndDbTp == null) {
+			LOG.error(format("Cannot find Second AEnd for SNC:", snc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("Second AEnd of SNC");
+		}
+		// TP can be CTP or FTP if FTP
+		final DBTp dblZ2EndDbTp = dbManager.getTP(snc.getZEnd().get(1).getTpName().getTpDn());
+		if (dblZ2EndDbTp == null) {
+			LOG.error(format("Cannot find Second ZEnd for SNC:", snc.getName()));
+			throw PlugInExceptionHandler.entityNotFound("Second ZEnd of SNC");
+		}
+		if (isBroadCast) {
+			/*
+			 * When the potentailFutureSetUpIndicator is 'RSU_BROADCAST' and the SNCType is ST_DOUBLE_ADD_DROP with UNI direction
+			 * then the SpecifiCrossConnectionType would be pointToMultiPointProt.
+			 */
+			if (cmdType.isAdd()) {
+				/*
+				 * For ST_DOUBLE_ADD_DROP (broadcast) First we create st_add_drop_Z and add protection for st_add_drop_z with 2
+				 * messages. First Message with commandType as add (ST_ADD_DROP_Z) For second commandType is addProtection.
+				 */
+				specificXConnection = getPointToMultiPointSpecificCC(a1EndDbTp, z1EndDbTp, dblZ2EndDbTp);
+				report = sendMessage(specificXConnection, X36CommandType.ADD, a1EndDbTp.getDn(), SNCType.ST_ADD_DROP_Z, false);
+				specificXConnection = getPointToMultiPointProtSpecificCC(a1EndDbTp, dblA2EndDbTp, z1EndDbTp, dblZ2EndDbTp, snc);
+				report = sendMessage(specificXConnection, X36CommandType.ADDPROTECTION, a1EndDbTp.getDn(),
+						SNCType.ST_DOUBLE_ADD_DROP, true);
+				defineProtectionRole(z1EndDbTp, dblZ2EndDbTp);
+			} else if (cmdType.isAddLeg()) {
+				/*
+				 * 1st Msg has cmdType as AddLeg, 2nd Msg has cmdType as AddLeg and 3rd message as addProtection
+				 */
+				specificXConnection = getPointToMultiPointSpecificCC(a1EndDbTp, z1EndDbTp);
+				report = sendMessage(specificXConnection, X36CommandType.ADDLEG, a1EndDbTp.getDn(), SNCType.ST_DOUBLE_ADD_DROP,
+						false);
+				specificXConnection = getPointToMultiPointSpecificCC(a1EndDbTp, dblZ2EndDbTp);
+				report = sendMessage(specificXConnection, X36CommandType.ADDLEG, a1EndDbTp.getDn(), SNCType.ST_DOUBLE_ADD_DROP,
+						false);
+				specificXConnection = getPointToMultiPointProtSpecificCC(a1EndDbTp, dblA2EndDbTp, z1EndDbTp, dblZ2EndDbTp, snc);
+				report = sendMessage(specificXConnection, X36CommandType.ADDPROTECTION, a1EndDbTp.getDn(),
+						SNCType.ST_DOUBLE_ADD_DROP, false);
+			}
+		} else {
+			/*
+			 * When the potentailFutureSetUpIndicator is 'RSU_ANY_CONFIG' and the SNCType is ST_DOUBLE_ADD_DROP with UNI direction
+			 * then the SpecifiCrossConnectionType would be protectedRing.
+			 */
+			if (cmdType.isAdd()) {// 1st Msg has cmdType as Add, 2nd Msg
+				// has cmdType as AddProtection
+				specificXConnection = getPointToPointSpecificCC(a1EndDbTp, z1EndDbTp, direction);
+				report = sendMessage(specificXConnection, X36CommandType.ADD, a1EndDbTp.getDn(), SNCType.ST_DOUBLE_ADD_DROP,
+						false);
+				if (report.getCompliance().isResOk()) {
+					// TP can be CTP or FTP if FTP .
+					final DBTp a2EndDbTp = dbManager.getTP(snc.getAEnd().get(1).getTpName().getTpDn());
+					LOG.debug(format("a2 End Tp for the SNC %s is %s", snc.getName(), a2EndDbTp));
+					if (a2EndDbTp == null) {
+						LOG.error(format("Cannot find Second AEnd for SNC:", snc.getName()));
+						throw PlugInExceptionHandler.entityNotFound("Second AEnd of SNC");
+					}
+					specificXConnection = getProtectedRingSpecificCC(a1EndDbTp, dblA2EndDbTp, z1EndDbTp, dblZ2EndDbTp, snc);
+					report = sendMessage(specificXConnection, X36CommandType.ADDPROTECTION, a1EndDbTp.getDn(),
+							SNCType.ST_DOUBLE_ADD_DROP, false);
+					defineProtectionRole(a1EndDbTp, dblA2EndDbTp);
+					defineProtectionRole(z1EndDbTp, dblZ2EndDbTp);
+				}
+			}
+			if (cmdType.isRemove()) {
+				/*
+				 * 1st Msg has cmdType as RemoveProtection, 2nd Msg has cmdType as Remove TP can be CTP or FTP if FTP
+				 */
+				final DBTp a2EndDbTp = dbManager.getTP(snc.getAEnd().get(1).getTpName().getTpDn());
+				LOG.debug(format("a2 End Tp for the SNC %s is %s", snc.getName(), a2EndDbTp));
+				if (a2EndDbTp == null) {
+					LOG.error(format("Cannot find Second AEnd for SNC:", snc.getName()));
+					throw PlugInExceptionHandler.entityNotFound("Second AEnd of SNC");
+				}
+				specificXConnection = getProtectedRingSpecificCC(a1EndDbTp, dblA2EndDbTp, z1EndDbTp, dblZ2EndDbTp, snc);
+				report = sendMessage(specificXConnection, X36CommandType.REMOVEPROTECTION, a1EndDbTp.getDn(),
+						SNCType.ST_DOUBLE_ADD_DROP, false);
+				if (report.getCompliance().isResOk()) {
+					specificXConnection = getPointToPointSpecificCC(a1EndDbTp, z1EndDbTp, direction);
+					report = sendMessage(specificXConnection, X36CommandType.REMOVE, a1EndDbTp.getDn(),
+							SNCType.ST_DOUBLE_ADD_DROP, false);
+				}
+			}
+		}
+		return report;
+	}
+
+	/**
+	 * @param aEndtp
+	 * @param zEndtp
+	 * @param direction
+	 * @return This method returns the specificCrossConnection pointToPoint with the given aEnds and zEnds
+	 */
+	private X36SpecificCrossConnection getPointToPointSpecificCC(final DBTp aEndtp, final DBTp zEndtp, final ConnectionDirection direction) {
+
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36PointToPoint p2p = new X36PointToPoint();
+
+		p2p.setFromTermination(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) aEndtp));
+
+		p2p.setToTermination(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) zEndtp));
+
+		if (direction.isCd_uni()) {
+			LOG.debug(new DumpInfo(p2p, "pointToPoint attribute in UniDirectional is"));
+			specificXConnection.setUnidirectional(p2p);
+		} else if (direction.isCd_bi()) {
+			LOG.debug(new DumpInfo(p2p, "pointToPoint attribute in BiDirectional is"));
+			specificXConnection.setBidirectional(p2p);
+		}
+
+		return specificXConnection;
+	}
+
+	/**
+	 * @param unRelTp
+	 * @param unRelProtTp
+	 * @param relTp
+	 * @param direction
+	 * @return This method returns the specificCrossConnection pointToPointProt with the given aEnds and zEnds
+	 */
+	private X36SpecificCrossConnection getPointToPointProtSpecificCC(final DBTp unRelTp, final DBTp unRelProtTp, final DBTp relTp,
+			final ConnectionDirection direction, final SubnetworkConnection snc) {
+		final DBSnc dbSnc = sbi.getPlugIn().getDatabaseManager().getObject(DBSnc.class, snc.getName());
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36PointToPointProt p2pProt = new X36PointToPointProt();
+		final X36TerminationChannelProtection unReliaTermChProt = I36Utilities.getTerminationChannelProtection(
+				(DBCrossConnectableTp<?, ?>) unRelTp, (DBCrossConnectableTp<?, ?>) unRelProtTp);
+
+		unReliaTermChProt.setChannel(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) unRelTp));
+		unReliaTermChProt.setProtectionChannel(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) unRelProtTp));
+		// Setting Revertive value on unReliableTermination channel
+		final Boolean value = validateSNCType(dbSnc);
+		if (value) {
+			final AdditionalInfo additionalInfo = dbSnc.getAdditionalInfo();
+			unReliaTermChProt.setRevertive(retreiveRevertiveValue(additionalInfo));
+			if(relTp.getDn().getTp().isFtp()){
+				final DBFtp dbFtp = dbManager.getFTP(relTp.getDn());
+				if (dbFtp != null && dbFtp.getSncConnections().size() > 0) {
+					final DBManyRelationship<DBSnc> dbSncLst = dbFtp.getSncConnections();
+					final DBSnc dbWorkerSnc = dbSncLst.get(0);
+					final DBAdditionalInformation dbPrtOperMode = dbWorkerSnc.getAdditionalInformation(ProtOperModeSupported.NAME);
+					String switchMode = dbPrtOperMode.getValue().toString();
+					//If SwitchMode is not provided by the user then set the default property defined in I36Plugin.properties
+					//PlugIn.SNC.SwitchMode
+					if(switchMode == null){
+						switchMode = sbi.getPlugIn().getProfile().getProperty("PlugIn.SNC.SwitchMode","singleEnded");
+					}
+					setProtectionOperationMode(switchMode, unReliaTermChProt);
+				}
+			}
+		}
+		final X36TerminationChannel relTerCh = I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) relTp);
+		p2pProt.setReliableTermination(relTerCh);
+		p2pProt.setUnreliableTermination(unReliaTermChProt);
+
+		if (direction.isCd_uni()) {
+			LOG.debug(new DumpInfo(p2pProt, "pointToPoint attribute in UniDirectional Prot is"));
+			specificXConnection.setUnidirectionalProt(p2pProt);
+		} else if (direction.isCd_bi()) {
+			LOG.debug(new DumpInfo(p2pProt, "pointToPoint attribute in BiDirectional Prot is"));
+			specificXConnection.setBidirectionalProt(p2pProt);
+		}
+		return specificXConnection;
+	}
+
+	/**
+	 * @param aEndtp
+	 * @param zEndtp
+	 * @param direction
+	 * @return This method returns the specificCrossConnection broadCast with the given aEnds and zEnds
+	 */
+	private X36SpecificCrossConnection getPointToMultiPointSpecificCC(final DBTp aEndtp, final DBTp zEndtp) {
+
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36PointToMultipoint p2m = new X36PointToMultipoint();
+		p2m.setFromTermination(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) aEndtp));
+		final X36SetOfTerminationChannel setOfTc = new X36SetOfTerminationChannel();
+		setOfTc.add(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) zEndtp));
+		p2m.setTerminationLegs(setOfTc);
+
+		LOG.debug(new DumpInfo(p2m, " PointToMultiPoint attribute in BroadCast is "));
+
+		specificXConnection.setBroadcast(p2m);
+		return specificXConnection;
+	}
+
+	/**
+	 * @param aEndtp
+	 * @param zEndtp
+	 * @param direction
+	 * @return This method returns the specificCrossConnection broadCast with the given aEnds and zEnds
+	 */
+	private X36SpecificCrossConnection getPointToMultiPointSpecificCC(final DBTp aEndtp, final DBTp z1Endtp, final DBTp z2Endtp) {
+
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36PointToMultipoint p2m = new X36PointToMultipoint();
+		p2m.setFromTermination(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) aEndtp));
+		final X36SetOfTerminationChannel setOfTc = new X36SetOfTerminationChannel();
+		setOfTc.add(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) z1Endtp));
+		setOfTc.add(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) z2Endtp));
+		p2m.setTerminationLegs(setOfTc);
+
+		LOG.debug(new DumpInfo(p2m, " PointToMultiPoint attribute in BroadCast is "));
+
+		specificXConnection.setBroadcast(p2m);
+		return specificXConnection;
+	}
+
+	/**
+	 * @param a1Endtp
+	 * @param a2Endtp
+	 * @param z1Endtp
+	 * @param z2Endtp
+	 * @return This method returns the specificCrossConnection broadCastProt with the given aEnds and zEnds
+	 */
+	private X36SpecificCrossConnection getPointToMultiPointProtSpecificCC(final DBTp a1Endtp, final DBTp a2Endtp, final DBTp z1Endtp, final DBTp z2Endtp,
+			final SubnetworkConnection snc) {
+		final DBSnc dbSnc = sbi.getPlugIn().getDatabaseManager().getObject(DBSnc.class, snc.getName());
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36PointToMultipointProt p2MultiProte = new X36PointToMultipointProt();
+
+		final X36TerminationChannelProtection unReliaTer = I36Utilities.getTerminationChannelProtection(
+				(DBCrossConnectableTp<?, ?>) a1Endtp, (DBCrossConnectableTp<?, ?>) a2Endtp);
+		// Setting Revertive value on unReliableTermination channel before setting it SpecificCrossconnection
+		final Boolean value = validateSNCType(dbSnc);
+		if (value) {
+			final AdditionalInfo additionalInfo = dbSnc.getAdditionalInfo();
+			unReliaTer.setRevertive(retreiveRevertiveValue(additionalInfo));
+		}
+		final String protOperMode = fetchProtOperMode(dbSnc);
+		setProtectionOperationMode(protOperMode, unReliaTer);
+		p2MultiProte.setUnreliableTermination(unReliaTer);
+
+		final X36SetOfTerminationChannel reliableTer = new X36SetOfTerminationChannel();
+		reliableTer.add(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) z1Endtp));
+		reliableTer.add(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) z2Endtp));
+		p2MultiProte.setReliableTerminations(reliableTer);
+
+		LOG.debug(new DumpInfo(p2MultiProte, " PointToMultiPointProt attribute in BroadCastProt is "));
+
+		specificXConnection.setBroadcastProt(p2MultiProte);
+
+		return specificXConnection;
+	}
+
+	/**
+	 * @param a1Endtp
+	 * @param a2Endtp
+	 * @param z1Endtp
+	 * @param z2EndTp
+	 * @return This method returns the specificCrossConnection tandemSNCP with the given aEnds and zEnds
+	 */
+	private X36SpecificCrossConnection getProtectedRingSpecificCC(final DBTp a1Endtp, final DBTp a2Endtp, final DBTp z1Endtp, final DBTp z2EndTp,
+			final SubnetworkConnection snc) {
+		final DBSnc dbSnc = sbi.getPlugIn().getDatabaseManager().getObject(DBSnc.class, snc.getName());
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36ProtectedRing protRing = new X36ProtectedRing();
+		final X36TerminationChannelProtection fromChProt = I36Utilities.getTerminationChannelProtection(
+				(DBCrossConnectableTp<?, ?>) a1Endtp, (DBCrossConnectableTp<?, ?>) a2Endtp);
+		final X36TerminationChannelProtection toChProt = I36Utilities.getTerminationChannelProtection(
+				(DBCrossConnectableTp<?, ?>) z1Endtp, (DBCrossConnectableTp<?, ?>) z2EndTp);
+		// Setting Revertive field to FromTermination channel and ToTermination channel before setting it to
+		// SpecificCrossConnection
+		final Boolean value = validateSNCType(dbSnc);
+		if (value) {
+			final AdditionalInfo additionalInfo = dbSnc.getAdditionalInfo();
+			fromChProt.setRevertive(retreiveRevertiveValue(additionalInfo));
+			toChProt.setRevertive(retreiveRevertiveValue(additionalInfo));
+		}
+		protRing.setFromTermination(fromChProt);
+		protRing.setToTermination(toChProt);
+
+		LOG.debug(new DumpInfo(protRing, "ProtectedRing attribute in TandemSNCP is "));
+		specificXConnection.setTandemSNCP(protRing);
+		return specificXConnection;
+	}
+
+	/**
+	 * This method is used to send the message setCrossConnections to MV36(i.e SO- EM)
+	 *
+	 * @param specificXConnection
+	 * @param cmdType
+	 * @param aEndDn
+	 * @param sncType
+	 * @return X36SetReportCrossConnections
+	 */
+	public X36SetReportCrossConnections sendMessage(final X36SpecificCrossConnection specificXConnection, final X36CommandType cmdType,
+			final TPDn aEndDn, final SNCType sncType, final boolean isModify) {
+		X36SetReportCrossConnections report = new X36SetReportCrossConnections();
+		TPDnList tpList = new TPDnList();
+		try {
+			final X36CrossConnection xConn = new X36CrossConnection();
+			final X36CrossConnectionCmd cmd = new X36CrossConnectionCmd();
+			final X36ReqId reqId = new X36ReqId(NumberGenerator.getReqId());
+			// reqId for each message sent to MV36
+			final X36NeId neId = sbi.getNaming().getNeId(aEndDn);
+			// neId is obtained from aEnd
+			final X36TrafficType trafficType = I36Utilities.getTrafficType((DBCrossConnectableTp<?, ?>) dbManager.getTP(aEndDn));
+			xConn.setTrafficType(trafficType);
+			xConn.setSpecificCrossConnection(specificXConnection);
+			/*
+			 * If the traffic type is odu1/odu2/odu3, then matrixId is set to xconn
+			 */
+			if ((trafficType.isOdu1()) || (trafficType.isOdu2()) || (trafficType.isOdu3())) {
+				tpList = getAllTpInfos(aEndList, zEndList);
+				setMatrixIdToXConnIfTTIsODU(xConn, tpList);
+			}
+			/*
+			 * when SNCType is ST_ADD_DROP_Z/ST_DOUBLE_ADD_DROP setCrossConnectionLabel with the corresponding SNCType.This
+			 * crossConnectionLabel could be used in processing the crossconnection in NE realignment phase.
+			 */
+			if (sncType != null) {
+				xConn.setCrossConnectionLabel(sncType.getEnum().toString());
+			}
+			cmd.setCrossConnection(xConn);
+			cmd.setCommandType(cmdType);
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(cmd, "Sending Message to EM:"));
+			}
+			final long timeout = sbi.getProfile().getTimeProperty(EmSBIPluginProperty.sbiTimeout, 180000);
+			sbi.getMessageHandler().setTimeout(timeout);
+			final MEId meId = aEndDn.getMe();
+			final MEDn meDn = new MEDn();
+			meDn.setMe(meId);
+			final String hostName = sbi.getHostName(meDn, false);
+
+			report = sbi.getMessageHandler().setCrossConnections(neId, reqId, cmd, hostName);
+			if (isModify && report.getCompliance().isResOk()) {
+				sendCrossConnectionLabelMessage(cmd, neId, sncType, hostName);
+			}
+		} catch (final Exception ex) {
+			LOG.error("Exception ocurred in sending a request to MV36" + ex);
+			throw PlugInExceptionHandler.internalError(ex.getMessage());
+		}
+		return report;
+	}
+
+	/**
+	 * If the traffic type is odu1/odu2/odu3, then matrixId is set to xconn
+	 *
+	 * @param xConn
+	 * @param tpList
+	 */
+	public void setMatrixIdToXConnIfTTIsODU(final X36CrossConnection xConn, final TPDnList tpList) {
+		final int size = tpList.size();
+		final Object matrixId[][] = new Object[size][2];
+		String[] matrix = null;
+		String shelfID = "";
+		String cardID = "";
+		for (int j = 0; j < size; j++) {
+			final DBTp dbtp = dbManager.getTP(tpList.get(j));
+			if (dbtp == null) {
+				LOG.error(new DumpInfo(tpList.get(j), "Cannot find TP for this port"));
+			}
+			if (dbtp != null) {
+				final String value = AdditionalInfoUtils.find(dbtp.getAdditionalInfo(), ProprietaryAdditionalInfo.MatrixId);
+				if (value != null) {
+					matrix = value.split(",");
+					matrixId[j][0] = matrix[0];
+					matrixId[j][1] = matrix[1];
+				}
+			}
+		}
+		/*
+		 * If the matrixId's of the Tp's involved in xconn are not same, an exception should be thrown. Otherwise the matrixId is
+		 * set to the xconn
+		 */
+		for (int r = 0; r < (size - 1); r++) {
+			if (matrixId[r][0] != null && matrixId[r + 1][0] != null) {
+				final boolean isShelfSame = (matrixId[r][0].equals(matrixId[r + 1][0]));
+				final boolean isCardSame = (matrixId[r][1].equals(matrixId[r + 1][1]));
+				if (!((isShelfSame) && (isCardSame))) {
+					LOG.error("Matrix Id's of the Tp's involved in xconn should be same...");
+					throw PlugInExceptionHandler.unableToComply("Matrix Id's of the Tp's involved in xconn should be same...");
+				} else if ((isShelfSame) && (isCardSame)) {
+					shelfID = matrix[0].toString();
+					cardID = matrix[1].toString();
+				}
+			}
+		}
+
+		/*
+		 * Setting the matrixId to the xconn
+		 */
+		if (!shelfID.equals("") && !cardID.equals("")) {
+			final X36CardIdentification cardIden = new X36CardIdentification();
+			cardIden.setShelfId(Integer.parseInt(shelfID));
+			cardIden.setCardId(Integer.parseInt(cardID));
+			xConn.setMatrixId(cardIden);
+		}
+	}
+
+	public void setTpInfo(final TPDnList dnListAend, final TPDnList dnListZend) {
+		aEndList = dnListAend;
+		zEndList = dnListAend;
+	}
+
+	/**
+	 * To add all the aEnds and zEnds of the snc to a list
+	 *
+	 * @param aEndList
+	 * @param zEndList
+	 * @return tpDnList
+	 */
+	public TPDnList getAllTpInfos(final TPDnList aEndList, final TPDnList zEndList) {
+
+		final TPDnList tpDnList = new TPDnList();
+		final Iterator<TPDn> tpDnItrAEnd = aEndList.iterator();
+		while (tpDnItrAEnd.hasNext()) {
+			tpDnList.add(tpDnItrAEnd.next());
+		}
+
+		final Iterator<TPDn> tpDnItrZEnd = zEndList.iterator();
+		while (tpDnItrZEnd.hasNext()) {
+			tpDnList.add(tpDnItrZEnd.next());
+		}
+
+		return tpDnList;
+	}
+
+	/**
+	 * To add all the aEnds and zEnds of the snc to a list
+	 *
+	 * @param aEndList
+	 * @param zEndList
+	 * @return tpDnList
+	 */
+	public TPDnList getAllTpInfos(final PointDnList aEndList, final PointDnList zEndList) {
+
+		final TPDnList tpDnList = new TPDnList();
+		final Iterator<PointDn> tpDnItrAEnd = aEndList.iterator();
+		while (tpDnItrAEnd.hasNext()) {
+			tpDnList.add(tpDnItrAEnd.next().getTpDn());
+		}
+
+		final Iterator<PointDn> tpDnItrZEnd = zEndList.iterator();
+		while (tpDnItrZEnd.hasNext()) {
+			tpDnList.add(tpDnItrZEnd.next().getTpDn());
+		}
+
+		return tpDnList;
+	}
+
+	/**
+	 * This method sends request for setting crossConnection lable for specific crossConnection.
+	 *
+	 * @param command
+	 * @param neId
+	 * @param sncType
+	 * @return
+	 */
+	private X36SetReportCrossConnections sendCrossConnectionLabelMessage(final X36CrossConnectionCmd command, final X36NeId neId,
+			final SNCType sncType, final String hostName) {
+		X36SetReportCrossConnections report = new X36SetReportCrossConnections();
+		final X36CommandType cmdType = new X36CommandType();
+		cmdType.setSetCrossConnectionLabel();
+		command.setCommandType(cmdType);
+		final X36ReqId reqId = new X36ReqId(NumberGenerator.getReqId());
+		try {
+			final long timeout = sbi.getProfile().getTimeProperty(EmSBIPluginProperty.sbiTimeout, 180000);
+			sbi.getMessageHandler().setTimeout(timeout);
+			report = sbi.getMessageHandler().setCrossConnections(neId, reqId,
+					command, hostName);
+		} catch (final PlugInException pe) {
+			LOG.warn(String.format("Can not set crossconnection label as %s on modified cross connection of type", sncType
+					.getEnum().toUpperCase()));
+		}
+		return report;
+
+	}
+
+	/**
+	 * @param dbTp
+	 * @return This method returns the PotentialFutureSetUpIndicator of TP which was set in SNC creation. Note:By default
+	 *         PotentialFutureSetUpIndicator would be 'RSU_ANY_CONFIG'.
+	 *
+	 */
+	public String getTpPotFutSetUpInd(final DBTp dbTp) {
+		LOG.debug("get the PotentialFutureSetUpIndicator of " + dbTp.getName());
+		String strpotFutSetUpInd = null;
+		final TerminationPoint tp = dbTp.getInformation();
+		final LayeredParameterList lpList = tp.getTransmissionParams();
+		for (final LayeredParameters lp : lpList) {
+			final Iterator<NameAndStringValue> transParItr = lp.getTransmissionParams().iterator();
+			while (transParItr.hasNext()) {
+				final NameAndStringValue nsv = transParItr.next();
+				if (nsv.getName().getValue().equalsIgnoreCase(ParameterName.PotentialFutureSetupIndicator.name())) {
+					// retreiving PotentialFutureSetupIndicator
+					strpotFutSetUpInd = nsv.getValue().getValue();
+				}
+				if (strpotFutSetUpInd != null) {
+					break;
+				}
+			}
+			if (strpotFutSetUpInd != null) {
+				break;
+			}
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format("PotentialFutureSetUpIndicator of %s is %s", dbTp.getName(), strpotFutSetUpInd));
+		}
+		return strpotFutSetUpInd;
+	}
+
+	/**
+	 * This method returns true if given dbSnc is broadcast .
+	 *
+	 * @param dbSnc
+	 * @param direction
+	 * @param aEndTp
+	 * @param sncType
+	 * @return
+	 */
+	public boolean isBroadCast(final DBSnc dbSnc, final ConnectionDirection direction, final DBTp aEndTp, final SNCType sncType) {
+		boolean blnBroadCast = false;
+		PotentialFutureSetUpIndicatorInfo pfsiInfo = null;
+		if (dbSnc != null) {
+			pfsiInfo = (PotentialFutureSetUpIndicatorInfo) dbSnc.getAdditionalInformation(PotentialFutureSetUpIndicatorInfo.NAME);
+		}
+		switch (sncType.getValue()) {
+		case SNCType.st_simple:
+			final String strAEndPotFutSetUpInd = getTpPotFutSetUpInd(aEndTp);
+			blnBroadCast = checkIfSimpleSncIsBroadCast(strAEndPotFutSetUpInd, pfsiInfo, direction, aEndTp);
+			break;
+		case SNCType.st_add_drop_a:
+			// fix for TR-HM54326 to support add_drop_a for broadcast protection
+			blnBroadCast = checkIfAddDropASncIsBroadcast(pfsiInfo, direction, aEndTp);
+			break;
+		case SNCType.st_add_drop_z:
+			// when SNCType ST_ADD_DROP_Z is UNI directional then the SNC should
+			// be a broadcast.
+			if (direction.isCd_uni()) {
+				blnBroadCast = true;
+			}
+			break;
+		case SNCType.st_double_add_drop:
+			// when SNCType ST_DOUBLE_ADD_DROP is UNI directional then the SNC
+			// should be a broadcast.
+			if (direction.isCd_uni()) {
+				blnBroadCast = true;
+			}
+			break;
+		}
+		return blnBroadCast;
+	}
+
+	/**
+	 * Checks whether Simple Snc is Broadcast
+	 *
+	 * @param strAEndPotFutSetUpInd
+	 * @param pfsiInfo
+	 * @param direction
+	 * @param aEndTp
+	 * @return boolean
+	 */
+	private boolean checkIfSimpleSncIsBroadCast(final String strAEndPotFutSetUpInd, final PotentialFutureSetUpIndicatorInfo pfsiInfo,
+			final ConnectionDirection direction, final DBTp aEndTp) {
+		boolean blnBroadCast = false;
+		/*
+		 * Note: To create broad cast connection, the PotentialFutureSetUpIndicator in both the TPs of SNC should have
+		 * RSU_BROADCAST value. And other than PotentialFutureSetUpIndicator, there is no other parameter to define ST_SIMPLE SNC
+		 * as a broadcast leg.
+		 */
+		if (direction.isCd_uni()) {
+			if (strAEndPotFutSetUpInd != null && strAEndPotFutSetUpInd.equalsIgnoreCase(RSU_BROADCAST)) {
+				blnBroadCast = true;
+			} else if (pfsiInfo != null) {
+				if (pfsiInfo.getSyntax().getValue().equalsIgnoreCase(RSU_BROADCAST)) {
+					blnBroadCast = true;
+				} else if (aEndTp.getInformation().getConnectionState().isTpcs_source_connected()) {
+					final LegCountInfo legInfo = (LegCountInfo) aEndTp.getAdditionalInformation(LegCountInfo.NAME);
+					if (legInfo != null) {
+						if (legInfo.getSyntax().getValue() > 0) {
+							blnBroadCast = true;
+						}
+					}
+				}
+			}
+		}
+		return blnBroadCast;
+	}
+
+	/**
+	 * Checks whether AddDropA Snc is Broadcast
+	 *
+	 * @param pfsiInfo
+	 * @param direction
+	 * @param aEndTp
+	 * @return boolean
+	 */
+	private boolean checkIfAddDropASncIsBroadcast(final PotentialFutureSetUpIndicatorInfo pfsiInfo, final ConnectionDirection direction,
+			final DBTp aEndTp) {
+		boolean blnBroadCast = false;
+		if (direction.isCd_uni()) {
+			final String pfsi = getTpPotFutSetUpInd(aEndTp);
+			if (pfsi != null && pfsi.equalsIgnoreCase(RSU_BROADCAST)) {
+				blnBroadCast = true;
+			} else if (pfsiInfo != null) {
+				if (pfsiInfo.getSyntax().getValue().equalsIgnoreCase(RSU_BROADCAST)) {
+					blnBroadCast = true;
+				}
+			} else if (aEndTp.getInformation().getConnectionState().isTpcs_source_connected()) {
+				final LegCountInfo legInfo = (LegCountInfo) aEndTp.getAdditionalInformation(LegCountInfo.NAME);
+				if (legInfo != null) {
+					if (legInfo.getSyntax().getValue() > 0) {
+						blnBroadCast = true;
+					}
+				}
+			}
+		}
+		return blnBroadCast;
+	}
+
+	/**
+	 * this mehtod defines protection role by setting 'primary' and 'backup' .
+	 *
+	 * @param a1EndFromTp
+	 * @param a2EndProtTp
+	 */
+	public void defineProtectionRole(final DBTp a1EndFromTp, final DBTp a2EndProtTp) {
+		// update or add protectionRole.
+		updateTransParams((DBCrossConnectableTp<?, ?>) a1EndFromTp, ParameterName.ProtectionRole.name(), "Primary");
+		updateTransParams((DBCrossConnectableTp<?, ?>) a2EndProtTp, ParameterName.ProtectionRole.name(), "Backup");
+	}
+
+	/**
+	 * This method is used to add TransmissionParameters to the TPs involved in the SNC
+	 *
+	 * @param dbConnTp
+	 *            - TP for which this TransmissionParameter has to be updated
+	 * @param name
+	 *            - Name of the TransmisssionParameter
+	 * @param value
+	 *            - Value to be set for the TransmissionParameter
+	 */
+	public void updateTransParams(final DBCrossConnectableTp<?, ?> dbConnTp, final String name, final String value) {
+		LOG.debug(new DumpInfo("Updating TrnsParams for the Parameter:", name));
+		final DBTp dbTp = (DBTp) dbConnTp;
+		final TerminationPoint tp = dbTp.getInformation();
+		if (tp != null) {
+			final NameAndStringValue nameAndStr = new NameAndStringValue();
+			nameAndStr.setName(name);
+			nameAndStr.setValue(value);
+			for (int lp = 0; lp < tp.getTransmissionParams().size(); lp++) {
+				final LayeredParameters layeredParameters = tp.getTransmissionParams().get(lp);
+				boolean present = false;
+				for (int tr = 0; tr < layeredParameters.getTransmissionParams().size(); tr++) {
+					if (tp.getTransmissionParams().get(lp).getTransmissionParams().get(tr).getName().equals(name)) {
+						tp.getTransmissionParams().get(lp).getTransmissionParams().get(tr).set(nameAndStr);
+						present = true;
+						break;
+					}
+				}
+				if (!present) {// when trnsParam is not there in the parameter
+					// list of TP then add it.
+					tp.getTransmissionParams().get(lp).getTransmissionParams().add(nameAndStr);
+				}
+				dbTp.setInformation(tp);
+				dbManager.update(dbTp, tp, false);
+			}
+		}
+	}
+
+	/**
+	 * This method returns specific crossConnection of "pointtoMultiPointProtection" with given aEnds and zEnds
+	 *
+	 * @param a1Endtp
+	 * @param a2Endtp
+	 * @param z1Endtp
+	 * @return
+	 */
+	private X36SpecificCrossConnection getPointToMultiPointProtSpecificCC(final DBTp a1Endtp, final DBTp a2Endtp, final DBTp z1Endtp,
+			final SubnetworkConnection snc) {
+		LOG.info("setting specific cross connection cmd for broadcast add_drop_a");
+		final DBSnc dbSnc = sbi.getPlugIn().getDatabaseManager().getObject(DBSnc.class, snc.getName());
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36PointToMultipointProt p2MultiProte = new X36PointToMultipointProt();
+		final X36TerminationChannelProtection unReliaTer = I36Utilities.getTerminationChannelProtection(
+				(DBCrossConnectableTp<?, ?>) a1Endtp, (DBCrossConnectableTp<?, ?>) a2Endtp);
+		// Setting SNC_REVERTIVE value on UnreliableTermination Channel
+		final Boolean flag = validateSNCType(dbSnc);
+		if (flag) {
+			final AdditionalInfo additionalInfo = dbSnc.getAdditionalInfo();
+			unReliaTer.setRevertive(retreiveRevertiveValue(additionalInfo));
+		}
+		final String switchMode = fetchProtOperMode(dbSnc);
+		setProtectionOperationMode(switchMode, unReliaTer);
+		p2MultiProte.setUnreliableTermination(unReliaTer);
+		final X36SetOfTerminationChannel reliableTer = new X36SetOfTerminationChannel();
+		reliableTer.add(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) z1Endtp));
+		p2MultiProte.setReliableTerminations(reliableTer);
+		LOG.debug(new DumpInfo(p2MultiProte, " PointToMultiPointProt attribute in BroadCastProt is "));
+		specificXConnection.setBroadcastProt(p2MultiProte);
+		return specificXConnection;
+	}
+
+	/**
+	 * This method checks a1End for protection if exists is it a2End or not. if not throws UNABLE_TO_COMPLY exception.
+	 *
+	 * @param a1End
+	 * @param a2End
+	 */
+	public void checkProtectionOnBroadcastAtActivation(final DBTp a1End, final DBTp a2End) {
+		LOG.debug("checking protectioninformation");
+		if ((a1End != null) && (a2End != null)) {
+			final BroadcastProtectionInfo protectionInf = (BroadcastProtectionInfo) a1End
+					.getAdditionalInformation(BroadcastProtectionInfo.NAME);
+			if (protectionInf != null) {
+				if (protectionInf.getProtectedLegCount() > 0) {
+					if (!(protectionInf.getProtectingTp().equals(a2End.getDn()))) {
+						errorReason = "Protection is alredy set. Previous protection and current Protection are not same.";
+						LOG.error(new DumpInfo(protectionInf.getProtectingTp(), "Tp acting as  Protection"));
+						LOG.error(new DumpInfo(a2End.getDn(), "Tp , Tring to Set as protection"));
+						throw PlugInExceptionHandler.unableToComply(errorReason);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * This method updates a1EndTp with protection as a2End. call checkProtectionOnBroadcastAtActivation() before calling this
+	 * method to avoid overriding of data.
+	 *
+	 * @param a1End
+	 * @param a2End
+	 */
+	public void updateProtectionOnBroadcastAtActivation(final DBTp a1End, final DBTp a2End) {
+		LOG.debug("Updating protection information on TP or adding.");
+		if ((a1End != null) && (a2End != null)) {
+
+			final BroadcastProtectionInfo protectionInf = (BroadcastProtectionInfo) a1End
+					.getAdditionalInformation(BroadcastProtectionInfo.NAME);
+
+			if (protectionInf != null) {
+				if (protectionInf.getProtectedLegCount() == 0) {
+					final BroadcastProtectionInfo protInfo = new BroadcastProtectionInfo(1, a2End.getDn());
+					a1End.setAdditionalInformation(protInfo);
+
+				} else if (protectionInf.getProtectedLegCount() > 0) {
+					if (protectionInf.getProtectingTp().equals(a2End.getDn())) {
+						int protCount = protectionInf.getProtectedLegCount();
+						protCount++;
+						final BroadcastProtectionInfo protInfo = new BroadcastProtectionInfo(protCount, a2End.getDn());
+						a1End.setAdditionalInformation(protInfo);
+					}
+				}
+			} else {
+				final BroadcastProtectionInfo protInfo = new BroadcastProtectionInfo(1, a2End.getDn());
+				a1End.addAdditionalInformation(protInfo);
+			}
+		}
+	}
+
+	/**
+	 * this method updates protection information while deactivation of protected broadcast SNC.
+	 *
+	 * @param a1End
+	 * @param a2End
+	 */
+	public void updateProtectionOnBroadcastAtDeactivation(final DBTp a1End, final DBTp a2End) {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("Updating protection information or removing.");
+		}
+		if ((a1End != null) && (a2End != null)) {
+			final BroadcastProtectionInfo protectionInf = (BroadcastProtectionInfo) a1End
+					.getAdditionalInformation(BroadcastProtectionInfo.NAME);
+			if (protectionInf != null) {
+				if (protectionInf.getProtectedLegCount() > 0) {
+					int protCount = protectionInf.getProtectedLegCount();
+					protCount--;
+					if (protCount == 0) {
+						a1End.removeAdditionalInformation(BroadcastProtectionInfo.NAME);
+					} else {
+						final BroadcastProtectionInfo protInfo = new BroadcastProtectionInfo(protCount, a2End.getDn());
+						a1End.setAdditionalInformation(protInfo);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * This method updates PotentialFutureSetupIndicator on dbSnc if dbCC contains any
+	 *
+	 * @param dbCC
+	 * @param dbSnc
+	 */
+	public void updatePFSIonSNC(final DBCrossConnection dbCC, final DBSnc dbSnc) {
+		PotentialFutureSetUpIndicatorInfo pfsiInfo = new PotentialFutureSetUpIndicatorInfo(new StringType("RSU_ANY_CONFIG"));
+		if ((dbCC != null) && (dbSnc != null)) {
+			final CrossConnectionType ccType = (CrossConnectionType) dbCC.getAdditionalInformation(CrossConnectionType.NAME);
+			if (ccType != null) {
+				if (ccType.getSyntax().isBroadcast() || ccType.getSyntax().isBroadcastProt()) {
+					pfsiInfo = new PotentialFutureSetUpIndicatorInfo(new StringType("RSU_BROADCAST"));
+				}
+			}
+			if (dbSnc.getAdditionalInformation(PotentialFutureSetUpIndicatorInfo.NAME) != null) {
+				dbSnc.setAdditionalInformation(pfsiInfo);
+			} else {
+				dbSnc.addAdditionalInformation(pfsiInfo);
+			}
+		}
+	}
+
+	/**
+	 * This method updates {@link BroadcastProtectionInfo} on tpFrom based on given input
+	 *
+	 * @param snctype
+	 * @param tpFrom
+	 * @param isBroadcast
+	 * @param isProtected
+	 */
+	public void updateBroadcastInfoOnTp(final String snctype, final DBTp tpFrom, final boolean isBroadcast, final boolean isProtected) {
+		if (isBroadcast) {
+			SNCTypeInfo sncInfo = null;
+			if (isProtected) {
+				// Protected -st_double_add_drop or st_add_drop_a
+				if (snctype.equalsIgnoreCase(SNCType.ST_DOUBLE_ADD_DROP.getEnum())) {
+					// SNC is st_Double_add_drop
+					sncInfo = new SNCTypeInfo(new StringType(SNCType.ST_DOUBLE_ADD_DROP.getEnum()));
+				} else {
+					sncInfo = new SNCTypeInfo(new StringType(SNCType.ST_ADD_DROP_A.getEnum()));
+				}
+			} else {
+				if (snctype.equalsIgnoreCase(SNCType.ST_ADD_DROP_Z.getEnum())) {
+					sncInfo = new SNCTypeInfo(new StringType(SNCType.ST_ADD_DROP_Z.getEnum()));
+				} else {
+					sncInfo = new SNCTypeInfo(new StringType(SNCType.ST_SIMPLE.getEnum()));
+				}
+			}
+			if (tpFrom.getAdditionalInformation(SNCTypeInfo.NAME) != null) {
+				tpFrom.setAdditionalInformation(sncInfo);
+			} else {
+				tpFrom.addAdditionalInformation(sncInfo);
+			}
+		}
+	}
+
+	/**
+	 * This method is used to send request to SO EM after updating the snc object with new SNC_Revertive value
+	 *
+	 * @param subnetworkconnection
+	 * @param cmdType
+	 * @param nameAndAnyValue
+	 * @param connectionDirection
+	 * @return X36SetReportCrossConnections
+	 */
+	public X36SetReportCrossConnections setCrossConnections(final SubnetworkConnection subnetworkconnection, final X36CommandType cmdType,
+			final NameAndAnyValue nameAndAnyValue, final ConnectionDirection connectionDirection) {
+		X36SetReportCrossConnections report = null;
+		X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36ReqId reqId = new X36ReqId(NumberGenerator.getReqId());
+		final X36CrossConnection xConn = new X36CrossConnection();
+		final X36CrossConnectionCmd cmd = new X36CrossConnectionCmd();
+		cmd.setCommandType(cmdType);
+		final SubnetworkConnection snc = modifyRevertiveFieldInSncSyntax(subnetworkconnection, nameAndAnyValue);
+		try {
+			final X36NeId neId = sbi.getNaming().getNeId(snc.getAEnd().get(0).getTpName().getTpDn());
+			final DBCrossConnectableTp<?, ?> dbTp = (DBCrossConnectableTp<?, ?>) dbManager.getTP(snc.getAEnd().get(0).getTpName()
+					.getTpDn());
+			xConn.setTrafficType(I36Utilities.getTrafficType(dbTp));
+			final DBTp a1EndTp = dbManager.getTP(snc.getAEnd().get(0).getTpName().getTpDn());
+			final DBTp z1EndTp = dbManager.getTP(snc.getZEnd().get(0).getTpName().getTpDn());
+			MEId meId = null;
+			MEDn meDn = null;
+			String hostName = null;
+			switch (snc.getSncType().getValue()) {
+			case SNCType.st_add_drop_a:
+				final DBTp a2_Add_Drop_ATp = dbManager.getTP(snc.getAEnd().get(1).getTpName().getTpDn());
+				meId = a2_Add_Drop_ATp.getDn().getMe();
+				meDn = new MEDn();
+				meDn.setMe(meId);
+				hostName = sbi.getHostName(meDn, false);
+				specificXConnection = getPointToPointProtSpecificCC(a1EndTp, a2_Add_Drop_ATp, z1EndTp, connectionDirection,
+						nameAndAnyValue);
+				break;
+			case SNCType.st_add_drop_z:
+				final DBTp z2_Add_Drop_ZTp = dbManager.getTP(snc.getZEnd().get(1).getTpName().getTpDn());
+				if (connectionDirection.isCd_bi()) {
+					meId = z2_Add_Drop_ZTp.getDn().getMe();
+					meDn = new MEDn();
+					meDn.setMe(meId);
+					hostName = sbi.getHostName(meDn, false);
+					specificXConnection = getPointToPointProtSpecificCC(z1EndTp, z2_Add_Drop_ZTp, a1EndTp, connectionDirection,
+							nameAndAnyValue);
+				} else {
+					LOG.error("Not a valid case");
+					throw PlugInExceptionHandler.invalidInput("Invalid case ");
+				}
+				break;
+			case SNCType.st_double_add_drop:
+				final DBTp a2EndTp = dbManager.getTP(snc.getAEnd().get(1).getTpName().getTpDn());
+				final DBTp z2EndTp = dbManager.getTP(snc.getZEnd().get(1).getTpName().getTpDn());
+				meId = a2EndTp.getDn().getMe();
+				meDn = new MEDn();
+				meDn.setMe(meId);
+				hostName = sbi.getHostName(meDn, false);
+				if (connectionDirection.isCd_uni()) {
+					// unidirectional means broadcast
+					specificXConnection = getPointToMultiPointProtSpecificCC(a1EndTp, a2EndTp, z1EndTp, z2EndTp, nameAndAnyValue);
+				} else {
+					specificXConnection = getProtectedRingSpecificCC(a1EndTp, a2EndTp, z1EndTp, z2EndTp, nameAndAnyValue);
+				}
+				break;
+			default:
+				LOG.error(format("Invalid SNC Type :: " + snc.getSncType()));
+				errorReason = "Invalid SNCType";
+				throw PlugInExceptionHandler.invalidInput("Invalid SNC type is found:: " + snc.getSncType());
+			}
+			xConn.setSpecificCrossConnection(specificXConnection);
+			cmd.setCrossConnection(xConn);
+			final long timeout = sbi.getProfile().getTimeProperty(EmSBIPluginProperty.sbiTimeout, 180000);
+			sbi.getMessageHandler().setTimeout(timeout);
+			report = sbi.getMessageHandler().setCrossConnections(neId, reqId, cmd, hostName);
+		} catch (final Exception ex) {
+			LOG.error("Exception ocurred in sending a request to MV36" + ex);
+			throw PlugInExceptionHandler.internalError(ex.getMessage());
+		}
+
+		return report;
+	}
+
+	/**
+	 * This method is used to modify revertive value in snc object syntax
+	 *
+	 * @param snc
+	 * @param nameandAnyValue
+	 * @return subnetworkconnection
+	 */
+	private SubnetworkConnection modifyRevertiveFieldInSncSyntax(final SubnetworkConnection snc, final NameAndAnyValue nameAndAnyValue) {
+		final AdditionalInfo addInfo = snc.getAdditionalInfo();
+		if (addInfo != null) {
+			for (int i = 0; i < addInfo.size(); i++) {
+				if (addInfo.get(i).getName().equals(Standard.SNC_REVERTIVE.name())) {
+					// addInfo.get(i).setValue(nameAndAnyValue.getValue().toString());
+					snc.setAdditionalInfo(addInfo);
+				}
+			}
+		}
+		return snc;
+	}
+
+	private X36SpecificCrossConnection getPointToPointProtSpecificCC(final DBTp unRelTp, final DBTp unRelProtTp, final DBTp relTp,
+			final ConnectionDirection direction, final NameAndAnyValue nameandAnyValue) {
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36PointToPointProt p2pProt = new X36PointToPointProt();
+		final X36TerminationChannelProtection unReliaTermChProt = I36Utilities.getTerminationChannelProtection(
+				(DBCrossConnectableTp<?, ?>) unRelTp, (DBCrossConnectableTp<?, ?>) unRelProtTp);
+
+		unReliaTermChProt.setChannel(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) unRelTp));
+		unReliaTermChProt.setProtectionChannel(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) unRelProtTp));
+		unReliaTermChProt.setRevertive(retreiveValue(nameandAnyValue));
+
+		final X36TerminationChannel relTerCh = I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) relTp);
+		p2pProt.setReliableTermination(relTerCh);
+		p2pProt.setUnreliableTermination(unReliaTermChProt);
+
+		if (direction.isCd_uni()) {
+			LOG.debug(new DumpInfo(p2pProt, "pointToPoint attribute in UniDirectional Prot is"));
+			specificXConnection.setUnidirectionalProt(p2pProt);
+		} else if (direction.isCd_bi()) {
+			LOG.debug(new DumpInfo(p2pProt, "pointToPoint attribute in BiDirectional Prot is"));
+			specificXConnection.setBidirectionalProt(p2pProt);
+		}
+		return specificXConnection;
+	}
+
+	private X36SpecificCrossConnection getProtectedRingSpecificCC(final DBTp a1Endtp, final DBTp a2Endtp, final DBTp z1Endtp, final DBTp z2EndTp,
+			final NameAndAnyValue nameAndAnyValue) {
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36ProtectedRing protRing = new X36ProtectedRing();
+		final X36TerminationChannelProtection fromChProt = I36Utilities.getTerminationChannelProtection(
+				(DBCrossConnectableTp<?, ?>) a1Endtp, (DBCrossConnectableTp<?, ?>) a2Endtp);
+		fromChProt.setRevertive(retreiveValue(nameAndAnyValue));
+		protRing.setFromTermination(fromChProt);
+
+		final X36TerminationChannelProtection toChProt = I36Utilities.getTerminationChannelProtection(
+				(DBCrossConnectableTp<?, ?>) z1Endtp, (DBCrossConnectableTp<?, ?>) z2EndTp);
+		toChProt.setRevertive(retreiveValue(nameAndAnyValue));
+		protRing.setToTermination(toChProt);
+
+		LOG.debug(new DumpInfo(protRing, "ProtectedRing attribute in TandemSNCP is "));
+		specificXConnection.setTandemSNCP(protRing);
+		return specificXConnection;
+	}
+
+	private X36SpecificCrossConnection getPointToMultiPointProtSpecificCC(final DBTp a1Endtp, final DBTp a2Endtp, final DBTp z1Endtp, final DBTp z2Endtp,
+			final NameAndAnyValue nameandAnyValue) {
+
+		final X36SpecificCrossConnection specificXConnection = new X36SpecificCrossConnection();
+		final X36PointToMultipointProt p2MultiProte = new X36PointToMultipointProt();
+
+		final X36TerminationChannelProtection unReliaTer = I36Utilities.getTerminationChannelProtection(
+				(DBCrossConnectableTp<?, ?>) a1Endtp, (DBCrossConnectableTp<?, ?>) a2Endtp);
+		unReliaTer.setRevertive(retreiveValue(nameandAnyValue));
+		p2MultiProte.setUnreliableTermination(unReliaTer);
+
+		final X36SetOfTerminationChannel reliableTer = new X36SetOfTerminationChannel();
+		reliableTer.add(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) z1Endtp));
+		reliableTer.add(I36Utilities.getTerminationChannel((DBCrossConnectableTp<?, ?>) z2Endtp));
+		p2MultiProte.setReliableTerminations(reliableTer);
+
+		LOG.debug(new DumpInfo(p2MultiProte, " PointToMultiPointProt attribute in BroadCastProt is "));
+
+		specificXConnection.setBroadcastProt(p2MultiProte);
+
+		return specificXConnection;
+	}
+
+	/**
+	 * Returns the value of the DBAdditionalInfo which was set to the DBSnc
+	 *
+	 * @param dbSnc
+	 *            DBSnc
+	 * @return String
+	 */
+	public static String fetchProtOperMode(final DBSnc dbSnc){
+		final AdditionalInfo ai = dbSnc.getAdditionalInfo();
+		final java.util.Iterator<NameAndStringValue> additionalInfoItr = ai.iterator();
+		while (additionalInfoItr.hasNext()) {
+			final NameAndStringValue additionalInfoStr = additionalInfoItr.next();
+			if (additionalInfoStr.getName().equals(ProprietaryAdditionalInfo.SwitchMode.name())) {
+				final String switchModeValue = additionalInfoStr.getValue().getValue();
+				return switchModeValue;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Sets the respective value of the X36ProtOperMode to the unReliaTer based on the protOperMode.
+	 *
+	 * @param protOperMode
+	 *            String
+	 * @param unReliaTer
+	 *            X36TerminationChannelProtection
+	 */
+	private void setProtectionOperationMode(final String protOperMode, final X36TerminationChannelProtection unReliaTer){
+		if(protOperMode != null){
+			if(protOperMode.equalsIgnoreCase(ProtOperMode.singleEnded.name())){
+				unReliaTer.setProtOperationMode(X36ProtOperMode.singleEnded);
+			}else if(protOperMode.equalsIgnoreCase(ProtOperMode.dualEnded.name())){
+				unReliaTer.setProtOperationMode(X36ProtOperMode.dualEnded);
+			}else if(protOperMode.equalsIgnoreCase(ProtOperMode.undefined.name())){
+				unReliaTer.setProtOperationMode(X36ProtOperMode.undefined);
+			}
+		}
+	}
+
+	/**
+	 * @param nameAndAnyValue
+	 * @returns Boolean value
+	 */
+	public static Boolean retreiveValue(final NameAndAnyValue nameAndAnyValue) {
+		final Boolean sncRevertive = false;
+		if (nameAndAnyValue.getName().equals(Standard.SNC_REVERTIVE.name())) {
+			// final String revertiveValue = nameAndAnyValue.getValue().toString();
+			// sncRevertive = Boolean.valueOf(revertiveValue);
+		}
+		return sncRevertive;
+	}
+
+	/**
+	 * This method validates for SNCType to set SNC_REVERTIVE field onto protected crossConnection
+	 *
+	 * @param dbSnc
+	 * @return boolean value
+	 */
+	private Boolean validateSNCType(final DBSnc dbSnc) {
+		Boolean value = false;
+		final SNCType sncType = dbSnc.getInformation().getSncType();
+		final ConnectionDirection connDir = dbSnc.getInformation().getDirection();
+		if ((sncType.isSt_add_drop_a() || sncType.isSt_double_add_drop()) || (sncType.isSt_add_drop_z() && connDir.isCd_bi())) {
+			value = true;
+		}else if(sncType.isSt_simple()){
+			final DBList<DBSncConnectableTp<? extends SetType, ? extends SetType>> dbAEnds = dbSnc.getAEnds();
+			final DBList<DBSncConnectableTp<? extends SetType, ? extends SetType>> dbZEnds = dbSnc.getZEnds();
+			final PointDnList pointDnLst = new PointDnList();
+			convertToPointDnList(dbAEnds.iterator(),pointDnLst);
+			convertToPointDnList(dbZEnds.iterator(),pointDnLst);
+			value = isInvolvedInInterIntraCardProtection(pointDnLst);
+		}else {
+			value = false;
+		}
+		return value;
+	}
+
+	/**
+	 * Converts DBSncConnectableTp to PointDnList
+	 * @param dbTpIter DBIterator<DBSncConnectableTp<? extends SetType, ? extends SetType>>
+	 * @param pointDnLst PointDnList
+	 */
+	public void convertToPointDnList(final DBIterator<DBSncConnectableTp<? extends SetType, ? extends SetType>> dbTpIter ,final PointDnList pointDnLst){
+		if(dbTpIter != null){
+			while(dbTpIter.hasNext()){
+				final DBSncConnectableTp<? extends SetType, ? extends SetType> dbSncTp = dbTpIter.next();
+				final DBTp dbTp = (DBTp) dbSncTp;
+				final PointDn ptDn = new PointDn();
+				ptDn.setTpDn(dbTp.getDn());
+				pointDnLst.add(ptDn);
+			}
+			dbTpIter.close();
+		}
+	}
+
+	/**
+	 * @param additionalInfo
+	 * @return true or false depending upon the value which is stored in additionalInfo while creating DBSnc
+	 */
+	private static Boolean retreiveRevertiveValue(final AdditionalInfo additionalInfo) {
+		Boolean sncRevertive = false;
+		final java.util.Iterator<NameAndStringValue> additionalInfoItr = additionalInfo.iterator();
+		while (additionalInfoItr.hasNext()) {
+			final NameAndStringValue additionalInfoStr = additionalInfoItr.next();
+			if (additionalInfoStr.getName().equals(Standard.SNC_REVERTIVE.name())) {
+				final String revertiveValue = additionalInfoStr.getValue().getValue();
+				sncRevertive = Boolean.valueOf(revertiveValue);
+			}
+		}
+		return sncRevertive;
+	}
+
+	/**
+	 * This method checks DBSNC for potentialFutureSetupIndicator and if it is a broadcast then it updates Tps.
+	 *
+	 * @param dbSnc
+	 * @return
+	 */
+	public void checkAndUpdatePFSIInfo(final DBSnc dbSnc) {
+		final PotentialFutureSetUpIndicatorInfo potentialFutureSetUpIndicator = (PotentialFutureSetUpIndicatorInfo) dbSnc
+				.getAdditionalInformation(PotentialFutureSetUpIndicatorInfo.NAME);
+		if ((potentialFutureSetUpIndicator) != null) {
+			final String potentialFutureSetUpIndicatorInfo = potentialFutureSetUpIndicator.getSyntax().getValue();
+			updateTp(dbSnc, potentialFutureSetUpIndicatorInfo);
+		}
+	}
+
+	/**
+	 * This method updates TransmissionParams of A1End Tp with potentialFuturesetupindicator as strTpPotFutSeUpInd.
+	 *
+	 * @param dbSnc
+	 * @param strTpPotFutSetUpInd
+	 *
+	 */
+	void updateTp(final DBSnc dbSnc, final String strTpPotFutSetUpInd) {
+		final SubnetworkConnection snc = dbSnc.getInformation();
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(format("Updating TPs involved in SNC:", dbSnc.getDn()));
+		}
+		for (final PointData pointData : snc.getAEnd().getAll()) {
+			// Aend can be CTP/FTP
+			final DBTp aEndtp = dbManager.getTP(pointData.getTpName().getTpDn());
+			if (aEndtp == null) {
+				final String errMsg = "TP is not found in DB";
+				LOG.error(errMsg);
+				continue;
+			}
+			if (aEndtp != null) {
+				updtPotFutSetIndToTheTp((DBCrossConnectableTp<?, ?>) aEndtp, strTpPotFutSetUpInd, false);
+			}
+
+		}
+	}
+
+	/**
+	 * This method updates or sets potentialFutureSetupIndcator on TP
+	 *
+	 * @param dbConnTp
+	 * @param sstrTpPotFutSetUpInd
+	 *            This method updates the TP with potential future setup indicator
+	 * @param isDelete
+	 *            - true to delete potentialFutureSetupIndcator on TP - false to update or set.
+	 */
+	public void updtPotFutSetIndToTheTp(final DBCrossConnectableTp<?, ?> dbConnTp, final String strTpPotFutSetUpInd, final boolean isDelete) {
+		final DBTp dbTp = (DBTp) dbConnTp;
+		final TerminationPoint tp = dbTp.getInformation();
+		if (tp != null) {
+			final NameAndStringValue nameAndStr = new NameAndStringValue();
+			nameAndStr.setName(ParameterName.PotentialFutureSetupIndicator.name());
+			nameAndStr.setValue(strTpPotFutSetUpInd);
+			for (int lp = 0; lp < tp.getTransmissionParams().size(); lp++) {
+				final LayeredParameters layeredParameters = tp.getTransmissionParams().get(lp);
+				boolean present = false;
+				TransmissionParameters transParams = null;
+				for (int tr = 0; tr < layeredParameters.getTransmissionParams().size(); tr++) {
+					transParams = tp.getTransmissionParams().get(lp).getTransmissionParams();
+					if (transParams.get(tr).getName().equals(ParameterName.PotentialFutureSetupIndicator.name())) {
+						transParams.get(tr).set(nameAndStr);
+						/*
+						 * removed if to fix duplication of potentialFutureSetupIndcator
+						 */
+						present = true;
+						break;
+					}
+				}
+				if ((!present) && (!isDelete)) {
+					/*
+					 * when PotentialFutureSetupIndicator is not there in the parameter list of TP then add it.
+					 */
+					transParams.add(nameAndStr);
+				} else if (isDelete && present) {
+					transParams.remove(nameAndStr);
+				}
+				dbTp.setInformation(tp);
+				dbManager.update(dbTp, tp, false);
+			}
+		}
+	}
+
+	public static boolean isODULayer(final LayerRate layerRate) {
+		if (layerRate != null) {
+			final String layerRateName = LayerRateManager.toString(layerRate);
+			if (layerRateName.equals("LR_OCH_Data_Unit_1") || layerRateName.equals("LR_OCH_Data_Unit_2")
+					|| layerRateName.equals("LR_OCH_Data_Unit_3")) {
+				return true;
+			}
+		}
+		return false;
+
+	}
+
+	/*
+	 * public static ProtOperMode convertToProtOperMode(final String
+	 * strProtOperMode){
+	 * if(strProtOperMode.equalsIgnoreCase(ProtOperMode.dualEnded.name())){
+	 * return ProtOperMode.dualEnded; }else
+	 * if(strProtOperMode.equalsIgnoreCase(ProtOperMode.singleEnded.name())){
+	 * return ProtOperMode.singleEnded; }else{ return ProtOperMode.undefined; }
+	 * }
+	 */
+
+	/**
+	 * Converts the X36ProtOperMode to ProtOperMode
+	 * @param protOperMode int
+	 * @return ProtOperMode
+	 */
+	public static ProtOperMode convertToProtOperMode(final int protOperMode){
+		switch (protOperMode) {
+		case X36ProtOperMode.dualEnded:
+			return ProtOperMode.dualEnded;
+		case X36ProtOperMode.singleEnded:
+			return ProtOperMode.singleEnded;
+		case X36ProtOperMode.undefined:
+			return ProtOperMode.undefined;
+		default:
+			return null;
+		}
+	}
+
+	/**
+	 * This method returns ProtectedPort if the DBTp has DBAdditionalInformation as "ProtectedPort"
+	 * 
+	 * @param endTp
+	 * @return
+	 */
+	public ProtectedPort fetchProtectedPort(final PointDn endTp) {
+		if (endTp.getTpDn().getTp().isFtp()) {
+			final DBFtp endFtp = dbManager.getFTP(endTp.getTpDn());
+			if (endFtp != null) {
+				return (ProtectedPort) endFtp
+						.getAdditionalInformation(ProtectedPort.NAME);
+			}
+		}
+		return null;
+	}
+
+	public static ProtOperMode convertToProtOperMode(
+			final String strProtOperMode) {
+		if (strProtOperMode.equalsIgnoreCase(ProtOperMode.dualEnded.name())) {
+			return ProtOperMode.dualEnded;
+		} else if (strProtOperMode.equalsIgnoreCase(ProtOperMode.singleEnded
+				.name())) {
+			return ProtOperMode.singleEnded;
+		} else {
+			return ProtOperMode.undefined;
+		}
+	}
+
+}

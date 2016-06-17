@@ -1,0 +1,14 @@
+#!/bin/sh
+
+echo ""
+echo "Starting the processes, Waiting ..."
+echo ""
+$HOME/MONITORAPP/SOURCE/monitorapp -p $HOME/MONITORAPP/SOURCE/app.ini
+if test $? != 0 ; then
+        echo 'Processes NOT started!'
+else
+        echo 'Processes started with success!'
+fi
+echo ""
+
+exit 0

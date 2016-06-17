@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<launchConfiguration type="net.sf.basheclipse.core.launchConfigurationType.sh">
+<stringAttribute key="net.sf.basheclipse.sh.ATTR_BASH_PROGRAM" value="/Shell/DISTRIB/AgentPatchInst.sh"/>
+<stringAttribute key="net.sf.basheclipse.sh.ATTR_SOCKET_PORT" value="33333"/>
+<booleanAttribute key="net.sf.basheclipse.sh.ATTR_STOP_ON_STARTUP" value="true"/>
+</launchConfiguration>

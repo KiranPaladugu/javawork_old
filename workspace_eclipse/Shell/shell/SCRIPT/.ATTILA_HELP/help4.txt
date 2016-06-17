@@ -1,0 +1,3 @@
+This command allows to shutdown the TMFAgent processes. 
+Please note that this action will disconnect all the TMFAgent's 
+users and it will discontinue the communications with the upper layer software.

@@ -1,0 +1,90 @@
+#!/bin/sh
+
+######## Retrieves AGENT environmental variables
+curr_os=$(uname -s)
+
+if [ "${curr_os}" = "HP-UX" ];
+then
+  my_o="echo"
+elif [ "${curr_os}" = "Linux" ];
+then
+  my_o="echo -e"
+else
+  tmp_os=$(echo ${curr_os} |grep -i cygwin)
+  if [ "${tmp_os}" != "" ];
+  then
+    my_o="echo -e"
+  else
+    echo "Unknown OS: ${curr_os}"
+    echo "Exiting..."
+    exit 1
+  fi
+fi
+
+if [ -e ENV_FILE ];
+then
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+nmsdb_path="${OBJDIR}/bin"
+curr_host=$(hostname)
+Exiting="Exiting..."
+
+${my_o} ""
+${my_o} "Checking NMSDB... \c"
+
+######## Checks if NMSDB processes are running
+if [ -x "${nmsdb_path}/oolockserver" ];
+then
+  ps -el | fgrep -v fgrep | fgrep ools > /dev/null 2>&1
+  if [ $? != 0 ];
+  then
+    ${my_o} "..WARNING \n"
+    ${my_o} "\n NMSDB lock server is not running..."
+    ${my_o} "Starting NMSDB server..."
+    if [ -x /sbin/init.d/nmsdb ];
+    then
+      /sbin/init.d/nmsdb start > /dev/null 2>&1
+    else
+      if [ -x /etc/init.d/nmsdb ];
+      then
+        /etc/init.d/nmsdb start > /dev/null 2>&1
+      else
+        ${nmsdb_path}/oolockserver -notitle
+      fi
+    fi
+  fi
+  ${nmsdb_path}/oocheckls ${curr_host} -notitle | fgrep -v fgrep | fgrep -e "Server version: ${OBJ_VER}" -e "Server version: 10.1" -e "Server version: 9.4" -e "Server version: 9.3" -e "Server version: 9.2" -e "Server version: 8.0.7" -e "Server version: 7.1" -e "Server version: 5.2" > /dev/null 2>&1
+  if [ $? = 0 ];
+  then
+    ${nmsdb_path}/oocheckls ${curr_host} -notitle | fgrep -v fgrep | fgrep "The Lock Server is running" > /dev/null 2>&1
+    if [ $? != 0 ];
+    then
+      ${my_o} "..ERROR \n"
+      ${my_o} "\n NMSDB lock Server is NOT running..."
+      ${my_o} "$Exiting"
+      exit 1
+    fi
+  else
+    ${my_o} "..ERROR \n"
+    ${my_o} "\n NMSDB Version is NOT correct, need Ver. ${NMSDB_VER}"
+    ${my_o} "$Exiting"
+    exit 1
+  fi
+else
+  ${my_o} "..ERROR \n"
+  ${my_o} "\n NMSDB server process ${nmsdb_path}/oolockserver isn't present"
+  ${my_o} "$Exiting"
+  exit 1
+fi
+
+${my_o} "..OK"
+${my_o} ""
+
+exit 0

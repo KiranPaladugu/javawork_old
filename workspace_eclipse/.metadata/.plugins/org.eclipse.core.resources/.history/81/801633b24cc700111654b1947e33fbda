@@ -1,0 +1,102 @@
+package com.marconi.tmp.tools;
+
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import com.marconi.fusion.base.application.Profile;
+
+public class BERConvManager implements PropertyChangeListener {
+	static public final int DEFAULT_LIVING_THREAD = 10;
+	static public final int DEFAULT_MAX_NUMBER_OF_REALIGNMENT = 12;
+	static public final long DEFAULT_REALIGNMENT_DELAY = 10000;
+	static private ThreadPoolExecutor executor = null;
+	private final Profile profile;
+	static private List<BerConJob> queuedTask = new ArrayList<BerConJob>();
+	private volatile transient int scheduled = 0;
+	private volatile transient int completed = 0;
+	private volatile transient int inprogress = 0;
+	private final String berHome;
+
+	public BERConvManager(final Profile profile, final String berHome, final int size) {
+		this.profile = profile;
+		this.berHome = berHome;
+		executor = new ThreadPoolExecutor(DEFAULT_LIVING_THREAD, DEFAULT_MAX_NUMBER_OF_REALIGNMENT, 10000, TimeUnit.MILLISECONDS,
+				new ArrayBlockingQueue<Runnable>(size));
+		final ThreadFactory factory = new ConversionThreadFactory("ConversionManager");
+		executor.setThreadFactory(factory);
+		executor.setRejectedExecutionHandler(new RejectedExecutionHandler() {
+			@Override
+			public void rejectedExecution(final Runnable runnable, final ThreadPoolExecutor threadPoolExecutor) {
+				System.out.println("Execution rejected. Please try restarting the application.");
+			}
+		});
+	}
+
+	static private class ConversionThreadFactory implements ThreadFactory {
+		static AtomicInteger thId = new AtomicInteger(0);
+
+		private String name = "";
+
+		public ConversionThreadFactory(final String name) {
+			this.name = name;
+		}
+
+		@Override
+		public Thread newThread(final Runnable r) {
+			final int id = thId.getAndIncrement();
+			final String thName = name + "-Thread(" + id + ")";
+			return new Thread(r, thName);
+		}
+	}
+
+	public void enQueue(final File filename) {
+		final BerConJob job = new BerConJob(filename, berHome, profile, this);
+		queuedTask.add(job);
+		schedule();
+	}
+
+	private void schedule() {
+		if (queuedTask.size() > 0) {
+			final BerConJob job = queuedTask.remove(0);
+			executor.execute(job);
+			scheduled++;
+		}
+
+	}
+
+	private final Object object = new Object();
+
+	@Override
+	public void propertyChange(final PropertyChangeEvent evt) {
+		synchronized (object) {
+			// dump();
+			if (evt.getPropertyName().equals("START")) {
+				this.inprogress++;
+				System.out.println("> Starting for " + evt.getSource());
+			} else if (evt.getPropertyName().equals("END")) {
+				this.completed++;
+				System.out.println("> Ending for " + evt.getSource());
+			}
+
+			if (completed == scheduled) {
+				System.err.println(">>> DONE !!");
+				dump();
+				System.exit(0);
+			}
+		}
+	}
+
+	private void dump() {
+		System.out.println(">> Conversiion Started for :" + inprogress + " BER files");
+		System.out.println(">> Conversiion Ened for :" + completed + " BER files");
+	}
+}

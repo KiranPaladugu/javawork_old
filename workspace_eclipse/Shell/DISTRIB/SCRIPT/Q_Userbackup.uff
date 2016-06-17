@@ -1,0 +1,206 @@
+#!/bin/sh
+
+curr_os=$(uname -s)
+
+if [ "${curr_os}" = "HP-UX" ];
+then
+  my_o="echo"
+elif [ "${curr_os}" = "Linux" ];
+then
+  my_o="echo -e"
+else
+  tmp_os=$(echo ${curr_os} |grep -i cygwin)
+  if [ "${tmp_os}" != "" ];
+  then
+    my_o="echo -e"
+  else
+    echo "Unknown OS: ${curr_os}"
+    echo "Exiting..."
+    exit 1
+  fi
+fi
+
+ErrExit()
+{
+  rval=$1
+  /bin/rm -rf ${agent_path}/USERSBACKUP > /dev/null 2>&1
+  if [ ${rval} -ne 0 ];
+  then
+    ${my_o} "\n ${application_name} USERS backup NOT performed!\n"
+  else
+    ${my_o} "\n ${application_name} USERS backup successfully completed!"
+    ${my_o} "\n ${application_name} USERS backup file is:"
+    ${my_o} "${DEV}"
+    ${my_o} ""
+  fi
+
+  exit ${rval}
+}
+
+######################
+#Check Parameter     #
+######################
+
+if [ $# -lt 1 -o $# -gt 2 ];
+then
+   ${my_o} ""
+   ${my_o} "Usage $0 <manual> or <backupdirpath>"
+   ${my_o} ""
+   ${my_o} "OR"
+   ${my_o} "$0 <backupfrom_dirpath> $1 <backupto_dirpath>"
+   exit 1
+fi
+
+##################################
+
+mode="auto"
+
+#Path of the Agent_Home from where backup has to be performed
+backupfrom_dir=""
+
+#Destination directory where the backup file(s) are to be kept
+remdir=""
+
+if [ $# -lt 2 ];
+then
+ if [ $1 = "manual" ];
+  then
+  mode="manual"
+  else
+  remdir=$1
+ fi
+else
+  backupfrom_dir=$1
+  remdir=$2
+fi
+
+
+######## AGENT_USER only may run the script...
+if [ "${mode}" = "manual" ];
+then
+  if [ -x /usr/bin/whoami ];
+  then
+    if [ $(/usr/bin/whoami) != "AGENT_USER" ];
+    then
+      ${my_o} "\nSorry, you must be AGENT_USER to run this script!"
+      ${my_o} ""
+      exit 1
+    fi
+  fi
+fi
+
+######## Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then
+  . ENV_FILE
+else
+  ${my_o} ""
+  ${my_o} "Cannot find environment file ENV_FILE"
+  ${my_o} "Exiting management procedure..."
+  ${my_o} ""
+  exit 1
+fi
+
+
+######## Set env for AGENT
+agent_path=${AGENT_DIR}
+DATE=$(/bin/date '+%Y_%m_%d_%H_%M_%S')
+agent_exe="AGENT_EXEC"
+USERS_DIR="${AGENT_DIR}/USERS"
+
+########## fix for TR HN78382
+
+application_name=""
+
+if [ "${backupfrom_dir}" != "" ];
+then
+        application_name=${backupfrom_dir##*/}
+else
+        application_name=${agent_path##*/}
+fi
+
+########## fix for TR HN78382
+
+######## Welcome
+${my_o} ""
+${my_o} "========================================================="
+${my_o} "   ${application_name} - USERS BACKUP UTILITY"
+${my_o} "========================================================="
+
+
+######## BEGIN MANUAL VERSION
+if [ "${mode}" = "manual" ];
+then
+  answer=""
+  while [ "${answer}" = "" ];
+  do
+    ${my_o} ""
+    ${my_o} "Insert target (name of a device or full path\nto a backup file):"
+    read answer
+    if [ "${answer}" != "" ];
+    then
+      if [ -d ${answer} ];
+      then
+        ${my_o} "You have inserted a not valid device or file name"
+        answer=""
+      fi
+    fi
+  done
+  DEV=${answer}
+######## END MANUAL VERSION
+
+else
+######## BEGIN AUTO VERSION
+  DEV=${remdir}/USERS_Backup_${DATE}.tar
+######## END AUTO VERSION
+fi
+
+######## Runs backup
+${my_o} "\nRunning ${application_name} USER backup, please wait..."
+
+if [ "${backupfrom_dir}" != "" ];
+then
+        agent_path=${backupfrom_dir}
+        USERS_DIR="${agent_path}/USERS"
+fi
+
+tmp_agent_dir=$(grep "EMS.version=" ${agent_path}/CONF/TMFFramework.properties | cut -d"=" -f2 )
+
+tmp_agent_mode=$(grep "EMS.type =" ${agent_path}/CONF/TMFFramework.properties | cut -d"=" -f2)
+
+${my_o} ${tmp_agent_dir}"="${tmp_agent_mode} > ${USERS_DIR}/sampleEMdata.txt
+
+if [ -d ${agent_path}/USERSBACKUP ];
+then
+  /bin/rm -f ${agent_path}/USERSBACKUP/* > /dev/null 2>&1
+else
+  mkdir ${agent_path}/USERSBACKUP
+fi
+
+if [ -d "${agent_path}"/USERS ];
+then
+  /bin/cp -p -R "${USERS_DIR}" "${agent_path}/USERSBACKUP" > /dev/null 2>&1
+fi
+
+if [ -x /usr/contrib/bin/gzip ];
+then
+    /usr/contrib/bin/gzip -r "${agent_path}"/USERSBACKUP/* 2> /dev/null
+elif [ -x /bin/gzip ];
+then
+    /bin/gzip -r "${agent_path}"/USERSBACKUP/* 2> /dev/null
+fi
+
+########## start of UserBacup_file_issue fix
+if [ -e ${USERS_DIR}/sampleEMdata.txt ];
+then
+  /bin/rm ${USERS_DIR}/sampleEMdata.txt > /dev/null 2>&1
+fi
+########## End of UserBacup_file_issue fix
+
+tar cf ${DEV} -C "${agent_path}" USERSBACKUP
+error=$?
+ErrExit ${error}
+
+
+
+exit 0

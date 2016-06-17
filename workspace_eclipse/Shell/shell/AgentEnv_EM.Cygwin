@@ -1,0 +1,45 @@
+#!/bin/sh -f
+VENDOR="Ericsson AB, Ericsson Limited"
+AGENT_TITLE="ServiceOn Fusion"
+AGENT_TYPE="TMF NBI"
+PREFIX="TMF"
+AGENT_INST_PREFIX="TMF_NBI"
+AGENT_TAR="Tmf.tar"
+PATCH_AGENT_TAR="TmfPatch.tar"
+TOOL_AGENT_TAR="TmfTool.tar"
+RESTART_DB_SIZE="50000"
+SUPPORTED_OS="Cygwin"
+SUPPORTED_OSVER="XP"
+SUPPORTED_OSSUBVER="5"
+Contact="\ncontact your system administrator.\n"
+Exiting="\nExiting installation procedure...\n\n"
+#section for Database
+NMSDB_VER="12.1.1"
+OBJ_VER="9.4"
+OBJ_DIR_DEF="C:/Program Files/Objectivity 9.4"
+#section for Java
+JAVA_DIR="C:/Program Files/Java/"
+JAVA_DEF="/machine/SOFTWARE/JavaSoft/Java Runtime Environment"
+JAVA_VER_SUPP="1.5.0_01"
+MAJOR_JVER_SUPP=1
+MINOR_JVER_SUPP=5
+REVIS_JVER_SUPP=0
+PATCH_JVER_SUPP=01
+#section for Port
+NUM_PORT="15"
+#section for Service Guard
+SGDIR="/etc/cmcluster"
+SGPACK_PREFIX="pkg_tmf"
+SGPACK=""
+SGFS=""
+#section for tmfman users
+AGENT_USER="nbiman"
+AGENT_UID="42424"
+AGENT_GROUP="nbiadmin"
+AGENT_GID="46464"
+USER_ENV_DIR=".ag_inst"
+USER_CONF_DIR=".ag_conf"
+USER_CONF_PORT_FILE="port.cfg"
+EXTRA_USER1=" tmfman nmc /bin/csh "
+#section for Fusion users
+PROC_LIST_STOP=""

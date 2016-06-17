@@ -1,0 +1,729 @@
+/**
+ * File: I38PlugIn.java
+ */
+
+package com.marconi.fusion.tmf.i38PlugIn;
+
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+
+import org.apache.commons.configuration.Configuration;
+import org.apache.commons.configuration.ConfigurationException;
+import org.apache.commons.configuration.PropertiesConfiguration;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X38.X38;
+import com.marconi.fusion.X38.X38EMName;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.application.WrongInitializationException;
+import com.marconi.fusion.base.context.Context;
+import com.marconi.fusion.base.context.IContext;
+import com.marconi.fusion.base.licensing.LicenseEvent;
+import com.marconi.fusion.base.licensing.LicenseManagerFactory;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.util.FileChangeListener;
+import com.marconi.fusion.base.util.FileMonitor;
+import com.marconi.fusion.base.util.Utility;
+import com.marconi.fusion.tmf.i36PlugIn.keys.IndexesHelper;
+import com.marconi.fusion.tmf.i38PlugIn.I38Profile.Key;
+import com.marconi.fusion.tmf.i38PlugIn.converter.Converter;
+import com.marconi.fusion.tmf.i38PlugIn.converter.Utils;
+import com.marconi.fusion.tmf.i38PlugIn.converter2.I38Naming;
+import com.marconi.fusion.tmf.i38PlugIn.sbi.EmInfo;
+import com.marconi.fusion.tmf.i38PlugIn.sbi.X38SBIClient;
+import com.marconi.fusion.tmf.i38PlugIn.sbi.realigner.Realigner;
+import com.marconi.fusion.tmf.keys.KeysHelper;
+import com.marconi.fusion.tmf.plugIn.ISession;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEDnList;
+import com.marconi.fusion.tmf.realignmentHandler.rh.ConnectionInfo;
+import com.marconi.fusion.tmf.realignmentHandler.rh.IRealignmentHandler;
+import com.marconi.fusion.tmf.realignmentHandler.rh.RealignmentHandler;
+import com.marconi.fusion.tmf.sbi.nm.NmSBIPluginProperty;
+import com.marconi.fusion.tmf.tmfFramework.TmfFramework;
+import com.marconi.fusion.tmf.tmfFramework.delegates.AbstractPlugIn;
+import com.marconi.fusion.tmf.utils.LicenseUtils;
+
+public class I38PlugIn extends AbstractPlugIn implements FileChangeListener, PropertyChangeListener {
+
+	private static final Log LOG = LogFactory.getLog(I38PlugIn.class);
+
+	/*************************** CFG keys *******************************/
+	// @Deprecated
+	// public static final String KEY_SIGNAL_TYPE_PROPS =
+	// "PlugIn.SignalTypeProps";
+	@Deprecated
+	public static final String KEY_PTP_HADLER_PROPS = "PlugIn.PtpHandlerProps";
+
+	/*************************** GuiCutThrough *******************************/
+	public static final String GCT_MODE_REXEC = "rexec";
+	public static final String GCT_USERINFO_USERNAME = "UserName";
+	public static final String GCT_USERINFO_PASSWORD = "Password";
+	public static final String UNRESOLVED_ALARMS_LOGGER = "alarms.unresolved";
+	private X38SBIClient sbiClient = null;
+	private I38Profile i38Profile = null;
+	private NmSBIPluginProperty nmProfile = null;
+	private LicenseUtils licUtil = null;
+	private final Profile baseProfile = null;
+	private boolean licCheckEnabled = false;
+	List<ConnectionInfo> nmList = new ArrayList<ConnectionInfo>();
+	private List<MEDn> neList = new ArrayList<MEDn>();
+	public static final String EMList_Property = "EMList_Property";
+	public static final String MEDNLIST_PROPERTY = "MEDnList";
+	Realigner realigner = null;
+	private Map<EmInfo, List<MEDn>> map_emInfo_meDN = new HashMap<EmInfo, List<MEDn>>();
+	private static int threadCount = 0;
+
+	public I38PlugIn() {
+		super();
+	}
+
+	@Override
+	public I38Profile getProfile() {
+		if (i38Profile == null) {
+			i38Profile = new I38Profile(super.profile);
+
+			final Configuration configuration = loadConfiguration(
+					I38Profile.PROPERTIES_FILE, getClass());
+			i38Profile.update(configuration);
+		}
+		return i38Profile;
+	}
+
+	public Profile getBaseProfile() {
+		return baseProfile;
+	}
+
+	public NmSBIPluginProperty getNMProfile() {
+		return nmProfile;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.tmfFramework.delegates.PlugIn#getSBI()
+	 */
+
+	public X38SBIClient getSBIClient() {
+		return sbiClient;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.tmfFramework.delegates.PlugIn#initPlugIn()
+	 */
+
+	@Override
+	public void initPlugIn() throws WrongInitializationException {
+		LOG.info(">>> I38PlugIn::initPlugIn");
+
+		IndexesHelper.init(getDatabaseManager().getDatabase());
+		KeysHelper.init(getDatabaseManager().getDatabase());
+
+		if (super.profile == null) {
+			LOG.error("Undefined configuration");
+			throw new WrongInitializationException("Undefined configuration");
+		}
+		if (i38Profile == null) {
+			i38Profile = new I38Profile(super.profile);
+		}
+		nmProfile = new NmSBIPluginProperty(super.profile);
+
+		final Configuration configuration = loadConfiguration(I38Profile.PROPERTIES_FILE, getClass());
+		nmProfile.update(configuration);
+		i38Profile.update(configuration);
+
+		final String fileName = Utils.makeFileName(i38Profile.getString(Key.FRAMEWORK_CONF), I38Profile.PROPERTIES_FILE);
+		try {
+			FileMonitor.getInstance().addFileChangeListener(this, fileName, 120000);
+		} catch (final Exception ex) {
+			LOG.error(new DumpInfo("Cannot add listener on file: " + fileName, ex));
+		}
+
+		checkLIC();
+		// final String tmpType =
+		// profile.getProperty("com.marconi.fusion.tmf.plugIn.IPlugIn",
+		// "UNDEFINED");
+		// licCheckEnabled = tmpType.equals(getClass().getName());
+		// LOG.info(String.format("License for %s is: %s", getClass().getName(),
+		// licCheckEnabled ? "Enabled" : "Disabled"));
+		//
+		// if (licCheckEnabled) {
+		// try {
+		// licUtil = new LicenseUtils(super.profile);
+		// } catch (final Exception e) {
+		// final String msg = e.getMessage().toString();
+		// throw new WrongInitializationException(msg);
+		// }
+		//
+		// super.initLicenseManager();
+		// checkCXC();
+		// }
+
+		try {
+			Converter.getInstance().init(getProfile());
+			I38Naming.init(i38Profile);
+
+			com.marconi.fusion.tmf.i38PlugIn.Initializer.getDefault().init(this);
+
+			com.marconi.fusion.tmf.i38PlugIn.converter2.Converter.getDefault().init(this);
+			com.marconi.fusion.tmf.i38PlugIn.SNCManager.Initializer.init(this);
+			com.marconi.fusion.tmf.i38PlugIn.sbi.realigner.Initializer.getDefault().init(this);
+
+			sbiClient = new X38SBIClient(this);
+			sbiClient.init(getEventConsumer());
+
+			final IContext iContext = Context.getApplicationContext();
+
+			new com.marconi.fusion.tmf.i38PlugIn.manager.DelegationManager(sbiClient);
+
+			final IRealignmentHandler rh = (IRealignmentHandler) iContext.get(TmfFramework.RealignmentHandler);
+			rh.addPropertyChangeListener(this);
+
+		} catch (final WrongInitializationException ex) {
+			throw ex;
+		} catch (final Exception ex) {
+			LOG.error(new DumpInfo("Unexpected Error:", ex));
+			throw new WrongInitializationException("PlugIn initialization error.");
+		}
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.tmfFramework.delegates.PlugIn#startPlugIn()
+	 */
+
+	@Override
+	public void startPlugIn() throws PlugInException {
+		LOG.info(">>> I38PlugIn::startPlugIn");
+
+		sbiClient.start();
+		realigner = new Realigner(sbiClient, getNmList());
+		try {
+			map_emInfo_meDN = realigner.preRealign();
+
+			notifyRH(getEmList(), null, "EMList");
+
+			final MEDnList mednLst = getMeDnList();
+
+			notify(mednLst, null, "NEList");
+
+		} catch (final Exception e) {
+			throw PlugInExceptionHandler
+			.internalError("Pre - Realigment failed.");
+		}
+	}
+
+	/**
+	 * Method to notify MEDnList to Realignment Handler
+	 *
+	 * @param newDnLst
+	 * @param oldDnLst
+	 * @param eventType
+	 */
+	public void notify(final MEDnList newDnLst, final MEDnList oldDnLst, final String eventType) {
+		I38PlugIn.LOG.debug(" Notify : ->  EventType : " + eventType + "OldList : " + oldDnLst + "newList :" + newDnLst);
+
+		final Thread notifyRH = new Thread((new StringBuilder())
+				.append(com.marconi.fusion.tmf.i38PlugIn.I38PlugIn.class.getSimpleName()).append("-CircuitEventNotifier")
+				.append(threadCount).toString()) {
+
+			@Override
+			public void run() {
+				I38PlugIn.LOG.debug(" Invoking RH with eventType " + eventType);
+				pcSupport.firePropertyChange(eventType, oldDnLst, newDnLst);
+			}
+		};
+		threadCount++;
+		if (threadCount >= Integer.MAX_VALUE) {
+			threadCount = 0;
+		}
+		notifyRH.start();
+	}
+
+	/**
+	 * Method to notify List to Realignment Handler. This method is used for
+	 * notifying EMList and also Realignment Events
+	 *
+	 * @param newList
+	 * @param oldList
+	 * @param eventType
+	 */
+	public void notifyRH(final List<?> newList, final List<?> oldList, final String eventType) {
+
+		final Thread notifyRH = new Thread((new StringBuilder()).append(
+				com.marconi.fusion.tmf.i38PlugIn.I38PlugIn.class.getSimpleName()).append("-Circuit").toString()) {
+
+			@Override
+			public void run() {
+				I38PlugIn.LOG.debug(" Invoking RH with eventType " + eventType);
+				pcSupport.firePropertyChange(eventType, oldList, newList);
+			}
+		};
+		notifyRH.start();
+
+	}
+
+	/**
+	 * Method to notify new MEDn to Realignment Handler. This method is used for
+	 * notifying ForcedMEOnline event.
+	 * 
+	 * @param newME
+	 * @param oldME
+	 * @param eventType
+	 */
+	public void notifyRHMe(final MEDn newME, final MEDn oldME,
+			final String eventType) {
+
+		final Thread notifyRH = new Thread((new StringBuilder())
+				.append(com.marconi.fusion.tmf.i38PlugIn.I38PlugIn.class
+						.getSimpleName()).append("-Circuit").toString()) {
+
+			@Override
+			public void run() {
+				I38PlugIn.LOG.debug(" Invoking RH with eventType " + eventType);
+				pcSupport.firePropertyChange(eventType, oldME, newME);
+			}
+		};
+		notifyRH.start();
+
+	}
+
+	/**
+	 * @return the nmList
+	 */
+	public List<ConnectionInfo> getNmList() {
+		return nmList;
+	}
+
+	/**
+	 * @param nmList
+	 *            the nmList to set
+	 */
+
+	public void setNmList(final List<ConnectionInfo> nmList) {
+		// In single NM scenario nmList in the argument will be null. So
+		// keeping check as below. This needs to be check in Multiple NM
+		// scenario.
+		if (nmList == null) {
+			final String hostName = getNMProfile().getProperty(NmSBIPluginProperty.Key.SBI_HOST, "localhost");
+			final String configPort = getNMProfile().getProperty(NmSBIPluginProperty.Key.SBI_CONFIG_PORT, "17601");
+			final ConnectionInfo nmProperty = new ConnectionInfo(hostName);
+			nmProperty.setHost(profile.getProperty(NmSBIPluginProperty.Key.SBI_HOST));
+			nmProperty.setConfPort(configPort);
+			this.nmList.add(nmProperty);
+		} else {
+			this.nmList = nmList;
+		}
+
+	}
+
+	@Override
+	public void shutdownPlugIn() {
+
+		LOG.info(">>> I38PlugIn::shutdownPlugIn");
+		try {
+
+			// dumpActualSession(); ci sono prob. di sincronizzazione
+			if (sbiClient != null) {
+				sbiClient.shutdown();
+			}
+		} catch (final Exception ex) {
+			LOG.error(new DumpInfo(ex));
+		}
+	}
+
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.tmfFramework.delegates.PlugIn#getSBIInfo()
+	 */
+
+	@Override
+	public String getSBIInfo() {
+		return X38.getModule().toString();
+	}
+
+	public Configuration loadConfiguration(final String resourceName, final Class<?> clazz) {
+		Configuration configuration = null;
+
+		final String fileName = Utils.makeFileName(profile.getProperty(I38Profile.Key.FRAMEWORK_CONF), resourceName);
+		configuration = loadConfiguration(fileName);
+		if (configuration == null) {
+			try {
+				configuration = new PropertiesConfiguration(clazz.getResource(resourceName));
+				LOG.info(String.format("Loaded '%s' from resources.", resourceName));
+			} catch (final Exception ex) {
+				LOG.warn(String.format("Cannot load resource: '%s'", resourceName));
+			}
+		}
+
+		return configuration;
+	}
+
+	private Configuration loadConfiguration(final String fileName) {
+		Configuration configuration = null;
+		if (fileName != null && fileName.length() > 0) {
+			final File file = new File(fileName);
+			if (file.exists()) {
+				try {
+					configuration = new PropertiesConfiguration(file);
+					LOG.info(String.format("Loaded configuration from file: '%s'", fileName));
+				} catch (final ConfigurationException e) {
+					LOG.warn(String.format("Cannot load file: '%s'", fileName));
+				}
+			}
+		}
+		return configuration;
+	}
+
+	@Override
+	public void fileChanged(final String fileName) {
+		final Configuration configuration = loadConfiguration(fileName);
+		if (configuration != null) {
+			i38Profile.update(configuration);
+		} else {
+			LOG.error(String.format("Cannot update '%s' from file:", fileName));
+		}
+	}
+
+	@Override
+	public void checkCXC() {
+		if (!licCheckEnabled) {
+			return;
+		}
+
+		final boolean checkDisabled = profile.getBoolProperty(LicenseManagerFactory.Properties.CHECK_DISABLED, true);
+		if (checkDisabled) {
+			return;
+		}
+
+		if (licUtil == null) {
+			final String msg = String.format("LicenseUtils is null");
+			LOG.error(msg);
+			throw new WrongInitializationException(msg);
+		}
+
+		// parameter added to check which plugin is calling checkCapacity method
+		licUtil.checkCapacity(this.getClass().getSimpleName());
+
+		return;
+	}
+
+	@Override
+	public void checkProductType() {
+		if (!licCheckEnabled) {
+			return;
+		}
+
+		final boolean checkDisabled = profile.getBoolProperty(LicenseManagerFactory.Properties.CHECK_DISABLED, true);
+		if (checkDisabled) {
+			return;
+		}
+
+		if (licUtil == null) {
+			final String msg = String.format("LicenseUtils is null");
+			LOG.error(msg);
+			throw new WrongInitializationException(msg);
+		}
+
+		// parameter added to check which plugin is calling checkCapacity method
+		licUtil.checkProductType(this.getClass().getSimpleName());
+
+		return;
+
+	}
+
+	@Override
+	public void onEndDate(final LicenseEvent arg0) {
+		if (!licCheckEnabled) {
+			return;
+		}
+
+		if (sbiClient != null) {
+			sbiClient.shutdown();
+		}
+
+		if (licUtil != null) {
+			licUtil.onEndDate(arg0);
+		}
+
+		return;
+	}
+
+	/**
+	 * @return the nmList
+	 */
+	public List<ConnectionInfo> getEmList() {
+		return getEmListFromMap(map_emInfo_meDN);
+	}
+
+	/**
+	 * returns Set of EmIds
+	 * 
+	 * @return Set<Integer>
+	 */
+	public Set<Integer> getEmIds() {
+		EmInfo emInfo = null;
+		int emId = 0;
+		final Set<Integer> emIdSet = new HashSet<Integer>();
+
+		final Set<EmInfo> map_emInfo = map_emInfo_meDN.keySet();
+		final Iterator<EmInfo> map_emInfoItr = map_emInfo.iterator();
+		while (map_emInfoItr.hasNext()) {
+			emInfo = map_emInfoItr.next();
+			emId = emInfo.getEMId();
+			emIdSet.add(emId);
+		}
+
+		return emIdSet;
+	}
+
+	/**
+	 * This method checks Licenses
+	 */
+	private void checkLIC() {
+		final Properties properties = Utility.getProperties(profile.getProperty("Orchestrator.PlugIn", "UNDEFFINED"));
+
+		final String property = new Profile(properties).getProperty("plugIn.installed");
+
+		if (property.equals(getClass().getName())) {
+			licCheckEnabled = true;
+			LOG.info(String.format("License for %s is: %s", getClass().getName(), licCheckEnabled ? "Enabled" : "Disabled"));
+		}
+
+		if (licCheckEnabled) {
+			try {
+				licUtil = new LicenseUtils(super.profile);
+			} catch (final Exception e) {
+				final String msg = e.getMessage().toString();
+				throw new WrongInitializationException(msg);
+			}
+
+			super.initLicenseManager();
+			checkCXC();
+		}
+	}
+
+	private List<ConnectionInfo> getEmListFromMap(final Map<EmInfo, List<MEDn>> map_emInfo_meDN) {
+		final List<ConnectionInfo> emList = new ArrayList<ConnectionInfo>();
+		EmInfo emInfo = null;
+		final Set<EmInfo> map_emInfo = map_emInfo_meDN.keySet();
+		final Iterator<EmInfo> map_emInfoItr = map_emInfo.iterator();
+		while (map_emInfoItr.hasNext()) {
+			emInfo = map_emInfoItr.next();
+
+			final ConnectionInfo connInfo = new ConnectionInfo(emInfo.getEMName());
+			connInfo.setConfPort(String.valueOf(emInfo.getCommandPort()));
+			// connInfo.setHost(emInfo.getEMName());
+			connInfo.setEvtPort(String.valueOf(emInfo.getAlarmPort()));
+
+			emList.add(connInfo);
+		}
+		return emList;
+	}
+
+	public Set<EmInfo> getEmInfoList() {
+		return getMap_emInfo_meDN().keySet();
+	}
+
+	@Override
+	public void propertyChange(final PropertyChangeEvent event) {
+		try {
+			LOG.info(" Recived event from RH : " + event);
+
+			final String propertyName = event.getPropertyName();
+
+			if (propertyName.equalsIgnoreCase("RealignmentStart")) {
+
+				final MEDnList mednLst = getMeDnList();
+				// final MEDnList mednLst = (MEDnList) event.getNewValue();
+
+				if (mednLst.size() > 0) {
+					// while (neListItr.hasNext()) {
+					// neListItr.next();
+
+					final Realigner realigner = new Realigner(sbiClient,
+							getNmList());
+
+					realigner.postRealign();
+					// }
+
+					sbiClient.saveTimeStamp();
+					sbiClient.startAsyncRealign();
+				}
+				notifyRH(null, null, "RealignmentEnd");
+				sbiClient.startAlarms(sbiClient.getHostName());
+			}
+			if (propertyName.equalsIgnoreCase("NMList")) {
+				setNmList((List) event.getNewValue());
+			}
+
+		} catch (final Exception ex) {
+			LOG.error(ex);
+
+		}
+	}
+
+	/**
+	 * Method to get the MEDn list by iterating through map maintained in 38
+	 * Plugin.
+	 *
+	 * @return
+	 */
+	public MEDnList getMeDnList() {
+		final MEDnList mednLst = new MEDnList();
+		final Iterator<EmInfo> iter = map_emInfo_meDN.keySet().iterator();
+		while (iter.hasNext()) {
+
+			final EmInfo item = iter.next();
+
+			final List<MEDn> mednlist = map_emInfo_meDN.get(item);
+			for (int i = 0; i < mednlist.size(); i++) {
+				mednLst.add(mednlist.get(i));
+			}
+		}
+		return mednLst;
+	}
+
+	@Override
+	public void addPropertyChangeListener(final PropertyChangeListener listener) {
+		this.pcSupport.addPropertyChangeListener(listener);
+	}
+
+	public void deletePropertyChangeListener(final PropertyChangeListener listener) {
+		this.pcSupport.removePropertyChangeListener(listener);
+	}
+
+	/**
+	 * Method to return MeDn List corresponding to emId from the EMInfo Map
+	 *
+	 * @param emId
+	 * @return
+	 */
+	public List<MEDn> getNeListFromMap(final int emId) {
+		Set<EmInfo> emInfoSet = new HashSet<EmInfo>();
+		EmInfo emInfo;
+		int emIdfromMap = 0;
+
+		emInfoSet = map_emInfo_meDN.keySet();
+		final Iterator<EmInfo> emInfoSetItr = emInfoSet.iterator();
+		while (emInfoSetItr.hasNext()) {
+			emInfo = emInfoSetItr.next();
+			emIdfromMap = emInfo.getEMId();
+			if (emIdfromMap == emId) {
+
+				neList = map_emInfo_meDN.get(emInfo);
+
+			}
+		}
+		// List<MEDn> neList=this.map_emID_meDN.get(emId);
+
+		return neList;
+	}
+
+	/**
+	 * Method to return EMInfo corresponding to emId from the EMInfo Map
+	 *
+	 * @param emId
+	 * @return
+	 */
+	public EmInfo getEmInfoFromMap(final int emId) {
+		Set<EmInfo> emInfoSet = new HashSet<EmInfo>();
+		EmInfo emInfo = null;
+		;
+		EmInfo emInfoFromMap = null;
+		int emIdfromMap = 0;
+
+		emInfoSet = map_emInfo_meDN.keySet();
+		final Iterator<EmInfo> emInfoSetItr = emInfoSet.iterator();
+		while (emInfoSetItr.hasNext()) {
+			emInfo = emInfoSetItr.next();
+			emIdfromMap = emInfo.getEMId();
+			if (emIdfromMap == emId) {
+				emInfoFromMap = emInfo;
+
+			}
+		}
+		return emInfoFromMap;
+	}
+
+	/**
+	 * Method to return EMInfo corresponding to emName from the EMInfo Map
+	 *
+	 * @param emName
+	 * @return
+	 */
+	public EmInfo getEmInfoFromMap(final X38EMName emName) {
+		Set<EmInfo> emInfoSet = new HashSet<EmInfo>();
+		EmInfo emInfo = null;
+
+		EmInfo emInfoFromMap = null;
+		String emNamefromMap = null;
+
+		emInfoSet = map_emInfo_meDN.keySet();
+		final Iterator<EmInfo> emInfoSetItr = emInfoSet.iterator();
+		while (emInfoSetItr.hasNext()) {
+			emInfo = emInfoSetItr.next();
+			emNamefromMap = emInfo.getEMName();
+			if (emNamefromMap.equalsIgnoreCase(emName.toString())) {
+				emInfoFromMap = emInfo;
+
+			}
+		}
+		return emInfoFromMap;
+	}
+
+	/**
+	 * Method to return emInfo and meDn Map
+	 *
+	 * @return
+	 */
+	public Map<EmInfo, List<MEDn>> getMap_emInfo_meDN() {
+		return map_emInfo_meDN;
+	}
+
+	/**
+	 * Removes EmInfo from the Map_emInfo_meDN
+	 * 
+	 * @param hostName
+	 */
+	public void removeEmInfoFromMap(final String hostName) {
+		final Set<EmInfo> emInfoSet = getMap_emInfo_meDN().keySet();
+		final Iterator<EmInfo> itr = emInfoSet.iterator();
+		while (itr.hasNext()) {
+			final EmInfo emInfo = itr.next();
+			if (emInfo.getEMName().equals(hostName)) {
+				map_emInfo_meDN.remove(emInfo);
+				break;
+			}
+		}
+	}
+
+	/**
+	 * 
+	 * @return
+	 */
+	public ISession getOrchestratorSession() {
+		final IContext iContext = Context.getApplicationContext();
+		final RealignmentHandler rh = (RealignmentHandler) iContext
+				.get(TmfFramework.RealignmentHandler);
+		return rh.getOrchestratorSession();
+	}
+
+}

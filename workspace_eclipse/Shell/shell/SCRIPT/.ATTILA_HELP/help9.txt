@@ -1,0 +1,2 @@
+This command allows the restoration of a previously saved users,
+to replace the users of the selected TM Agent installation.

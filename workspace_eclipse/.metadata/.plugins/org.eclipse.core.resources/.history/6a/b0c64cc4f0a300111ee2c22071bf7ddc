@@ -1,0 +1,4352 @@
+package com.marconi.fusion.tmf.i36PlugIn.converter;
+
+import static com.marconi.fusion.tmf.exportimport.ExportImportConstants.EI_CUSTOMER_DATA;
+import static com.marconi.fusion.tmf.exportimport.ExportImportConstants.EI_SLASH;
+import static com.marconi.fusion.tmf.exportimport.ExportImportConstants.EI_SNC_LABEL;
+
+import java.io.EOFException;
+import java.io.FileNotFoundException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+
+import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.mutable.MutableBoolean;
+import org.apache.commons.lang.time.StopWatch;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36CardId;
+import com.marconi.fusion.X36.X36CardIdentification;
+import com.marconi.fusion.X36.X36ChannelIdentification;
+import com.marconi.fusion.X36.X36CoordPh;
+import com.marconi.fusion.X36.X36CrossConnection;
+import com.marconi.fusion.X36.X36DataCrossConnection;
+import com.marconi.fusion.X36.X36DropAndContinueProtection;
+import com.marconi.fusion.X36.X36EthVCn;
+import com.marconi.fusion.X36.X36Frequency;
+import com.marconi.fusion.X36.X36InterfaceType;
+import com.marconi.fusion.X36.X36LmTransponder;
+import com.marconi.fusion.X36.X36ODUMapping;
+import com.marconi.fusion.X36.X36OchId;
+import com.marconi.fusion.X36.X36PointToPoint;
+import com.marconi.fusion.X36.X36PortId;
+import com.marconi.fusion.X36.X36PortIdentification;
+import com.marconi.fusion.X36.X36PortInformation;
+import com.marconi.fusion.X36.X36ProtectedRing;
+import com.marconi.fusion.X36.X36RST;
+import com.marconi.fusion.X36.X36RmTransponder;
+import com.marconi.fusion.X36.X36SetOfCrossConnection;
+import com.marconi.fusion.X36.X36SetOfEthVCn;
+import com.marconi.fusion.X36.X36ShelfId;
+import com.marconi.fusion.X36.X36SlotId;
+import com.marconi.fusion.X36.X36SpecificCrossConnection;
+import com.marconi.fusion.X36.X36SpecificPortInformation;
+import com.marconi.fusion.X36.X36TerminationChannel;
+import com.marconi.fusion.X36.X36TerminationChannelProtection;
+import com.marconi.fusion.X36.X36TimeSlot;
+import com.marconi.fusion.X36.X36TrafficType;
+import com.marconi.fusion.X36.X36TunnelDetails;
+import com.marconi.fusion.X36.X36VPNCrossConnection;
+import com.marconi.fusion.X36.X36WdmAdaptPort;
+import com.marconi.fusion.base.application.BaseApplication;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.asn1.IntegerType;
+import com.marconi.fusion.base.asn1.SetType;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.util.Holder;
+import com.marconi.fusion.tmf.additionalInformation.AdditionalInfoUtils;
+import com.marconi.fusion.tmf.additionalInformation.ChannelInformation;
+import com.marconi.fusion.tmf.additionalInformation.CrossConnectionType;
+import com.marconi.fusion.tmf.additionalInformation.EQCoord;
+import com.marconi.fusion.tmf.additionalInformation.LegCountInfo;
+import com.marconi.fusion.tmf.additionalInformation.ProprietaryAdditionalInfo;
+import com.marconi.fusion.tmf.additionalInformation.ProtOperModeSupported;
+import com.marconi.fusion.tmf.additionalInformation.ProtOperModeSupported.ProtOperMode;
+import com.marconi.fusion.tmf.additionalInformation.ProtectedNonVirtual;
+import com.marconi.fusion.tmf.additionalInformation.RelaxedMplsTpIdFreeList;
+import com.marconi.fusion.tmf.additionalInformation.TimeSlotInformation;
+import com.marconi.fusion.tmf.agnosticInfo.AIChannelInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AIEquipmentCoord;
+import com.marconi.fusion.tmf.agnosticInfo.AIPortInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AIPortType;
+import com.marconi.fusion.tmf.agnosticInfo.AISetOfAssociatedAlarmPort;
+import com.marconi.fusion.tmf.agnosticInfo.AITimeSlotInfo;
+import com.marconi.fusion.tmf.db.DBAdditionalInformation;
+import com.marconi.fusion.tmf.db.DBComponent;
+import com.marconi.fusion.tmf.db.DBConnectionTerminationPoint;
+import com.marconi.fusion.tmf.db.DBCrossConnectableTp;
+import com.marconi.fusion.tmf.db.DBCrossConnection;
+import com.marconi.fusion.tmf.db.DBCtp;
+import com.marconi.fusion.tmf.db.DBFtp;
+import com.marconi.fusion.tmf.db.DBIdentifier;
+import com.marconi.fusion.tmf.db.DBIterator;
+import com.marconi.fusion.tmf.db.DBList;
+import com.marconi.fusion.tmf.db.DBMFDFragment;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.DBMultiroutedConnection;
+import com.marconi.fusion.tmf.db.DBPortTp;
+import com.marconi.fusion.tmf.db.DBRelation;
+import com.marconi.fusion.tmf.db.DBRouteDescriptor;
+import com.marconi.fusion.tmf.db.DBSnc;
+import com.marconi.fusion.tmf.db.DBSubnetwork;
+import com.marconi.fusion.tmf.db.DBTopologicalLink;
+import com.marconi.fusion.tmf.db.DBTp;
+import com.marconi.fusion.tmf.db.Database;
+import com.marconi.fusion.tmf.db.Predicate;
+import com.marconi.fusion.tmf.exportimport.CSDReader;
+import com.marconi.fusion.tmf.i36PlugIn.I36DatabaseManager;
+import com.marconi.fusion.tmf.i36PlugIn.I36LayeredParameterManager;
+import com.marconi.fusion.tmf.i36PlugIn.I36Naming;
+import com.marconi.fusion.tmf.i36PlugIn.I36PlugIn;
+import com.marconi.fusion.tmf.i36PlugIn.I36PlugIn.PluginProperty;
+import com.marconi.fusion.tmf.i36PlugIn.I36Utilities;
+import com.marconi.fusion.tmf.i36PlugIn.LayerRateConverter;
+import com.marconi.fusion.tmf.i36PlugIn.NeHelper;
+import com.marconi.fusion.tmf.i36PlugIn.NeHelper.PortInfo;
+import com.marconi.fusion.tmf.i36PlugIn.NeHelper.VCGroup;
+import com.marconi.fusion.tmf.i36PlugIn.SBIClientI;
+import com.marconi.fusion.tmf.i36PlugIn.SNCManager.SNCUtilities;
+import com.marconi.fusion.tmf.i36PlugIn.converter.AbstractPortConverter.AssociatedAlarmPortsInfo;
+import com.marconi.fusion.tmf.i36PlugIn.keys.IndexesHelper;
+import com.marconi.fusion.tmf.keys.KeysHelper;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.TpType;
+import com.marconi.fusion.tmf.plugIn.types.ActualState;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.AdministrativeState;
+import com.marconi.fusion.tmf.plugIn.types.ConnectionDirection;
+import com.marconi.fusion.tmf.plugIn.types.CrossConnect;
+import com.marconi.fusion.tmf.plugIn.types.CtpNameComponent;
+import com.marconi.fusion.tmf.plugIn.types.CtpNameComponents;
+import com.marconi.fusion.tmf.plugIn.types.Directionality;
+import com.marconi.fusion.tmf.plugIn.types.GenericTPId;
+import com.marconi.fusion.tmf.plugIn.types.LayerRate;
+import com.marconi.fusion.tmf.plugIn.types.LinkDn;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.NVSList;
+import com.marconi.fusion.tmf.plugIn.types.NameAndStringValue;
+import com.marconi.fusion.tmf.plugIn.types.NetworkRouted;
+import com.marconi.fusion.tmf.plugIn.types.PointDn;
+import com.marconi.fusion.tmf.plugIn.types.PointDnList;
+import com.marconi.fusion.tmf.plugIn.types.PortCoordinates;
+import com.marconi.fusion.tmf.plugIn.types.Reroute;
+import com.marconi.fusion.tmf.plugIn.types.Route;
+import com.marconi.fusion.tmf.plugIn.types.RouteDescriptor;
+import com.marconi.fusion.tmf.plugIn.types.SNCDn;
+import com.marconi.fusion.tmf.plugIn.types.SNCId;
+import com.marconi.fusion.tmf.plugIn.types.SNCType;
+import com.marconi.fusion.tmf.plugIn.types.SNDn;
+import com.marconi.fusion.tmf.plugIn.types.StaticProtectionLevel;
+import com.marconi.fusion.tmf.plugIn.types.SubnetworkConnection;
+import com.marconi.fusion.tmf.plugIn.types.TPDn;
+import com.marconi.fusion.tmf.plugIn.types.TPDnList;
+import com.marconi.fusion.tmf.plugIn.types.TPId;
+import com.marconi.fusion.tmf.plugIn.types.TPProtectionAssociation;
+import com.marconi.fusion.tmf.plugIn.types.TPType;
+import com.marconi.fusion.tmf.plugIn.types.TerminationMode;
+import com.marconi.fusion.tmf.plugIn.types.TerminationPoint;
+import com.marconi.fusion.tmf.plugIn.types.TopologicalLink;
+import com.marconi.fusion.tmf.predicate.AdditionalInfoPredicate;
+import com.marconi.fusion.tmf.predicate.PhLinkPredicate;
+import com.marconi.fusion.tmf.tmfFramework.TmfNameUtilities;
+import com.marconi.fusion.tmf.tmfFramework.TmfUtilities2;
+import com.marconi.fusion.tmf.tmfFramework.db.DatabaseSupport;
+import com.marconi.fusion.tmf.tmfFramework.db.DnIdentifier;
+import com.marconi.fusion.tmf.tmfFramework.repository.AdditionalInfoManager;
+import com.marconi.fusion.tmf.tmfFramework.repository.AdditionalInfoManager.Standard;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayerRateManager;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayeredParameterManager;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayeredParameterManager.ParameterName;
+import com.marconi.fusion.tmf.utilities.Stats;
+import com.marconi.fusion.tmf.utilities.Utilities;
+import com.marconi.fusion.tmf.utils.AIHelper;
+import com.marconi.fusion.tmf.utils.CrossConnectionHelper;
+import com.marconi.fusion.tmf.utils.LayeredParametersUtils;
+import com.marconi.fusion.tmf.utils.TpUtils;
+
+public class CrossConnectionConverter {
+	static private final Log LOG = LogFactory.getLog(CrossConnectionConverter.class);
+
+	static public final String PROCESS_CC = "Process XCONN";
+
+	protected DBManagedElement me;
+	protected String neLocator;
+	protected Map<String, DBCrossConnection> oldCCs = new TreeMap<String, DBCrossConnection>();
+	protected Map<String, DBCrossConnection> oldMPLSCCs = new TreeMap<String, DBCrossConnection>();
+	protected Map<String, Boolean> invalidOldCCs = new TreeMap<String, Boolean>();
+	public I36DatabaseManager dbManager;
+	protected Map<String, DBTopologicalLink> oldTLs = new TreeMap<String, DBTopologicalLink>();
+
+	// Map which stores the SNCRevertive information of all the db xConns
+	protected Map<String, Boolean> sncRevertiveInfo = new HashMap<String, Boolean>();
+	//Map which stores the SNCSwitchMode information of all the db xConns
+	protected Map<String,String> sncSwitchMode = new HashMap<String,String>();
+	protected ArrayList<X36TunnelDetails> newlspXConnList = new ArrayList<X36TunnelDetails>();
+	protected ArrayList<X36VPNCrossConnection> newpwXConnList = new ArrayList<X36VPNCrossConnection>();
+	protected ArrayList<X36CrossConnection> dataXConnList = new ArrayList<X36CrossConnection>();
+	/**
+	 * Sorted MFDFrs map with key as flow points in aEnd; as zEnd is empty for Point-To-Point MFDFr(currently supported)
+	 */
+
+	private NeHelper helper;
+	private int count = 0;
+	protected Stats stats = new Stats();
+
+	private static Map<String, String> sncDnLabelMap;
+
+	private X36SpecificPortInformation aEndTpInfo;
+	private X36SpecificPortInformation zEndTpInfo;
+	private TPDn fromCtpdn;
+	private TPDn toCtpdn;
+	private X36CardId aEndCardId;
+	private X36CardId zEndCardId;
+	private X36CoordPh aEndCoord;
+	private X36CoordPh zEndCoord;
+	private boolean isInterPortProt;// For InterPort protection, the
+	// additionalInfo -- 'ProtectingClientPort'
+
+	private SBIClientI sbiClient;
+	private ControlPlaneManager controlPlaneManager;
+
+	private CrossConnectionConverterUtils xUtils;
+	private CrossConnectionConverterHelper xHelper;
+	private EthernetXConnConverter mfdConverter;
+	private MPLSXConnConverter mplsXCConverter;
+	private static final String REG_GROUP_G709 = "regGroupG709";
+	private static final String REG_MODE_G709 = "regModeG709";
+	private static final String REG_NON_G709 = "nonG709Reg";
+
+	private boolean controlPlaneManagement = false;
+
+	public CrossConnectionConverter(){
+
+	}
+
+	public CrossConnectionConverter(final NeHelper helper){
+		this.helper = helper;
+		this.sbiClient = helper.getSBIClient();
+		this.dbManager = sbiClient.getDbManager();
+	}
+
+	/* ************************************************************************** */
+
+	// /*
+	// **************************************************************************
+	// */
+	// public static void initStats(Stats stats) {
+	// stats.getEntry(CREATED_CC);
+	// stats.getEntry(UPDATED_CC);
+	// }
+	//
+	// /*
+	// **************************************************************************
+	// */
+	// public static void closeStats(Stats stats, long millis) {
+	// stats.incTime(CREATED_CC, millis);
+	// stats.incTime(UPDATED_CC, millis);
+	// }
+
+	/* ************************************************************************** */
+	public I36Naming getNaming() {
+		return sbiClient.getNaming();
+	}
+
+	public String getNeLocator() {
+		if (neLocator == null) {
+			this.neLocator = sbiClient.getNeLocator(helper.getMEDn());
+		}
+
+		return neLocator;
+	}
+
+	/******************************************************************
+	 * ' Gestione xconns per le porte ethernet tra frammenti e ctp backplane
+	 */
+
+	/* ************************************************************************** */
+	private void linkVCn(final VCGroup vcGroup) {
+
+		final X36PortIdentification portId = vcGroup.getEthernetPortIdentification();
+		final X36SetOfEthVCn setOf = vcGroup.getSetOfVCn();
+		final boolean isNotConfigurable = vcGroup.isNotConfigurable();
+
+		/**
+		 * A questo punto ho creato tutto quello che dovevo creare, quindi se ci sono dei VC del backplane collegati a dei vcGroup
+		 * creo le cross connessioni opportune, come da modello!
+		 */
+		for (final X36EthVCn vcn : setOf) {
+			// cerco il vc del backplane e guardo il layerRate, poi mi prendo un
+			// frammento libero (se c'e`)
+			// visto che qui non so se il backplane e` nested o flat provo a
+			// costruirmi il nome nei 2 casi
+			final X36TerminationChannel tc = vcn.getVcIdentification();
+			if (tc.isConcatenated()) {
+				LOG.error(new DumpInfo(tc, "Termination channel <concatenated> non supported for backplane port"));
+				continue;
+			}
+
+			final X36ChannelIdentification chId = tc.getSimple();
+			final X36PortIdentification bPportId = chId.getPort();
+			final X36TimeSlot tS = chId.getTimeSlot();
+			/*
+			 * if (!tS.isKlm()) { log.error(new DumpInfo(tS, "Time slot different from <klm> non supported for backplane port" ));
+			 * continue; }
+			 */
+
+			// Costruisco il nome del CTP del backplane (provo prima con
+			// backplane flat)
+			TPDn dn = null;
+			/*
+			 * Fix for TR HO78393: When timeSlot is null, a CTP cannot be created over the backplane FTP. So skipping creation of
+			 * cross connection between the associated backplane port and ethernet port
+			 */
+			if (tS.isNull()) {
+				continue;
+			} else if (tS.isRst()) {
+
+				final X36SlotId slotId = helper.getSlotId(portId);
+				final X36RST rst = tS.getRst();
+				final TPDn ptpDn = helper.getSBIClient().getNaming()
+						.makePTPDn(helper.getMEDn(), bPportId.getShelfId(), slotId, bPportId.getCardId(), bPportId.getPortId());
+				dn = helper.getSBIClient().getNaming()
+						.makePDHCTPDn(ptpDn, rst.getR().getValue(), rst.getS().getValue(), rst.getT().getValue());
+
+			} else if (tS.isKlm()) {
+				// Costruisco il nome del CTP del backplane (provo prima con
+				// backplane flat)
+				dn = xUtils.getName(bPportId, tS.getKlm(), true);
+			}
+
+			/**
+			 * Cerco il CTP, se lo trovo sono a posto, se non lo trovo probabilmente il backplane e` nested quindi riprovo con
+			 * l'altro naming (zEnd)
+			 */
+			DBCrossConnectableTp<?, ?> bTp = dbManager.getCTP(dn);
+			if (bTp == null) {
+
+				if (tS.isKlm()) {
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(dn, "WARNING: backplane ctp not found, trying with nested..."));
+					}
+					dn = xUtils.getName(bPportId, tS.getKlm(), false);
+					bTp = dbManager.getCTP(dn);
+					if (bTp == null) {
+						LOG.error(new DumpInfo(dn, "Cannot find CTP on the backplane port"));
+						continue;
+					}
+				} else if (tS.isRst()) {
+					LOG.error(new DumpInfo(vcn, String.format("Couldn't find the E1 Ctp using TPDn <%s>. Skipping the EthVCn",
+							TmfNameUtilities.toString(dn))));
+					continue;
+				}
+			}
+
+			/**
+			 * ora che ho il CTP del backplane cerco se c'e` qualche xconn che fa riferimento ad esso: se c'e` e punta allo stesso
+			 * vcGroup la rimuovo dal setOf delle xconn da rimuovere (visto l'altro lato me lo invento io lascio la xconn com'e`)
+			 * altrimenti la lascio nel setOf e verra` poi rimossa piu` avanti
+			 */
+			final boolean isAlreadyPresent = xHelper.isXConnPresent(bTp, portId);
+
+			if (isAlreadyPresent) {
+				/**
+				 * la xconn che rappresenta questa parte di banda esiste gia`, passo al vcn successivo
+				 */
+				continue;
+			}
+			/**
+			 * la xconn ci deve essere ma non l'ho trovata nella lista delle xconns caricate (oldCCs) quindi la creo; con questo
+			 * CTP del backplane cerco un frammento libero (aEnd)
+			 */
+			final DBCrossConnectableTp<?, ?> fragmentTp = xUtils.getFragment(portId, tS);
+			if (fragmentTp == null) {
+				LOG.error(new DumpInfo(vcn, "No fragment CTPs found to model bandwidth"));
+				continue;
+			}
+
+			/**
+			 * Ora che ho i due CTP posso creare o updatare la cross-connessione! Creo una xconn bidirezionale (per ora e per
+			 * semplicita`)
+			 */
+
+			final CrossConnect crossConn = new CrossConnect();
+			crossConn.setActive(true);
+			// TR HO42739 ( No layer rate is set for the cross connection)
+			if (tS.isKlm()) {
+				crossConn.setLayerRate(xUtils.getLayerRate(tS.getKlm()));
+			} else if (tS.isRst()) {
+				crossConn.setLayerRate(xUtils.getLayerRate(tS.getRst()));
+			}
+			final SNCType sncType = new SNCType(SNCType.st_simple);
+			crossConn.setCcType(sncType);
+
+			final PointDn fragmentPointDn = new PointDn();
+			fragmentPointDn.setTpDn((TPDn) fragmentTp.getDn());
+			crossConn.getAEndNameList().add(fragmentPointDn);
+
+			final PointDn bPointDn = new PointDn();
+			bPointDn.setTpDn((TPDn) bTp.getDn());
+			crossConn.getZEndNameList().add(bPointDn);
+
+			crossConn.getDirection().setCd_bi();
+
+			// additionalInfo
+			final AdditionalInfoManager mgr = AdditionalInfoManager.getManager();
+			final Profile prof = mgr.getProfile();
+			// When EoPDH port is assoicated with E1 line port,crossconnection
+			// will not be fixed
+
+			if (isNotConfigurable) {
+				prof.setProperty(AdditionalInfoManager.Standard.Fixed, "True");
+			} else {
+				prof.setProperty(AdditionalInfoManager.Standard.Fixed, "False");
+			}
+
+			final AdditionalInfo ai = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.CrossConnection, prof);
+			crossConn.setAdditionalInfo(ai);
+			final DBCrossConnection cc = dbManager.createCrossConnection(crossConn);
+			me.getCrossConnections().add(cc);
+			cc.getAEnds().add(fragmentTp);
+			cc.getZEnds().add(bTp);
+			CrossConnectionHelper.indexDBCrossConnection(helper.getSBIClient().getDbManager().getDatabase(), me, cc);
+			// Fix for TR_HN25256 : update TpConnection state of AEnd and ZEnd
+			// after creation for VCG CrossConnection
+			TpUtils.updateConnectionState(fragmentTp);
+			TpUtils.updateConnectionState(bTp);
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(crossConn, String.format("Created %s...", cc.getName())));
+			}
+		} // end for
+	}
+
+	/* ************************************************************************** */
+	private void processVCGroup() {
+		final List<VCGroup> vcGroupList = helper.getVCGroupList();
+		helper.dumpVCGroupList();
+		for (final VCGroup vcGroup : vcGroupList) {
+			linkVCn(vcGroup);
+		}
+	}
+
+	/*
+	 * MEUser
+	 */
+	// public Stats process(NeHelper helper,
+	// Set<TPDn> skippedPTPs)
+	public Stats process(final NeHelper helper) throws PlugInException {
+
+		this.helper = helper;
+		this.sbiClient = helper.getSBIClient();
+		this.dbManager = sbiClient.getDbManager();
+		this.controlPlaneManager = new ControlPlaneManager(sbiClient);
+		this.controlPlaneManagement = helper.getSBIClient().getPlugIn().getProfile()
+				.getBoolProperty("PlugIn.ControlplaneManagement", false);
+		final int xConnCount = helper.getCrossConnections().size();
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("Process %d crossConnection on ME <%s>: start....", xConnCount, getNeLocator()));
+		}
+
+		final StopWatch watch = new StopWatch();
+		watch.start();
+
+		// this.skippedPTPs = skippedPTPs;
+
+		final MEDn meDn = helper.getMEDn();
+		try {
+			me = dbManager.getManagedElement(meDn);
+			if (me == null) {
+				final String msg = String.format("Unable to locate ME <%s>", getNeLocator());
+				LOG.error(msg);
+				// throw PlugInExceptionHandler.internalError(msg);
+				return stats;
+			}
+		} catch (final Exception e) {
+			LOG.error(String.format("Unable to locate ME <%s>", getNeLocator()));
+			return stats;
+		}
+		xUtils = new CrossConnectionConverterUtils(helper);
+		xHelper = new CrossConnectionConverterHelper(helper, oldCCs, xUtils, this);
+		mfdConverter = new EthernetXConnConverter(helper, me, this);
+		mplsXCConverter = new MPLSXConnConverter(helper, this);
+		// Load old CrossConnections, Flowpoints, MFds and TLs.
+		loadOldCC();
+		mfdConverter.loadOldFPs();
+		mfdConverter.loadOldMfdFrs();
+		loadOldTLs(); // Added for Regeneration Group G709
+
+		// Start Processing CrossConnections, SNCs, FlowPoints, MFds, TLs
+		process();
+		processRegenTransponderFixedXConn(helper); // Added for Regeneration
+		// Mode/Group
+
+		/**
+		 * Devo processare qui le xconn tra i frammenti ethernet ed i CTP del backplane altrimenti mi saltano
+		 */
+		processDataMuxponderTLs();
+
+		/**
+		 * If Backplane Transponder port is involved in a Cascade Muxponder configuration, a topological link will be created
+		 * between the PTP's. Added as part of MHL6.0
+		 */
+		processCascadedMuxTLs();
+		processVCGroup();
+		mfdConverter.processLagFixedXConnection();
+		processRadioPacketLinks();
+
+		processSNCs();
+
+		// Discard old XConnections, SNCs, MFds, FlowPionts and TLs.
+		discardOldies();
+		discardOldMplsCCs();
+		mfdConverter.discardOldMFDFrs();
+		mfdConverter.discardOldFPs();
+		discardOldTLs(); // Added for Regeneration Group G709
+
+		watch.stop();
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("Process %d/%d crossConnection on ME <%s>: end in %s", count, xConnCount, getNeLocator(),
+					watch.toString()));
+		}
+
+		// closeStats(stats, watch.getTime());
+		return stats;
+	}
+
+	/* ************************************************************************** */
+	/**
+	 * This method loads all the non virtual cross connections present in the Database, into a map
+	 */
+	protected void loadOldCC() {
+
+		final StopWatch watch = new StopWatch();
+		watch.start();
+
+		int oldXConnCount = 0;
+		/*
+		 * virtual and not active CC must be skipped virtual --> used to model the traffic flow not active --> used by not active
+		 * SNC NOTE: skipping virtual introduces the problem that unconfiguring a MUX card the XConn is not deleted
+		 */
+		final LayerRate mplsLayerRate = LayerRateManager.getLayerRate("LR_MPLS_TP");
+		Predicate<DBCrossConnection> virtual = new AdditionalInfoPredicate<DBCrossConnection>("Virtual", "True", false);
+
+		com.marconi.fusion.tmf.iterator.Iterator<DBCrossConnection> itr = DatabaseSupport.getCrossConnections(dbManager,
+				me.getDn(), virtual);
+
+		oldXConnCount += itr.size();
+
+		/*
+		 * for each virtual we test if aEnd AND zEnd are present if false the CC has to be deleted
+		 */
+		while (itr.hasNext()) {
+			final DBCrossConnection dbXConn = itr.next();
+			final boolean allocToControlPlane = false;
+			final String ccName = CrossConnectionHelper.makeCCName(dbXConn.getInformation());
+
+			// Skip loading LAG fragment CCs as they are managed separately in EthernetXConnConverter
+			// They have "virtual = true" and have only one TP in each end
+
+			if (I36Utilities.isLagFragmentCC(dbXConn)) {
+				continue;
+			}
+
+			DBIterator<DBCrossConnectableTp<? extends SetType, ? extends SetType>> end = dbXConn.getAEnds().iterator();
+
+			boolean empty = !end.hasNext();
+			end.close();
+			// Do not load the oldXConn, the Crossconnection which is present in
+			// the syntax as first aEnd an SNP
+			/*	while (end.hasNext()) {
+				final DBCrossConnectableTp<?, ?> dbXconnFromaEnd = end.next();
+				final DBTp DbTp = (DBTp) dbXconnFromaEnd;
+				final TerminationPoint tp = DbTp.getInformation();
+				final AdditionalInfo additionalInfo = tp.getAdditionalInfo();
+				allocToControlPlane = AdditionalInfoUtils.findBoolean(additionalInfo,
+						ProprietaryAdditionalInfo.AllocatedToControlPlane);
+				if (allocToControlPlane) {
+					break;
+				}
+			}*/
+			if (empty) {
+				/*
+				 * Checks whether the TPs involved in xConn are controlPlane resources , If Yes it will not load the OldCCs with
+				 * xConn.
+				 */
+				final boolean isCpResource = isCpResource(dbXConn);
+				if (!isCpResource) {
+					oldCCs.put(ccName, dbXConn);
+				}
+				continue;
+			}
+			end = dbXConn.getZEnds().iterator();
+
+			empty = !end.hasNext();
+			end.close();
+
+			if (empty) {
+				/*
+				 * Checks whether the TPs involved in xConn are controlPlane resources , If Yes it will not load the OldCCs with
+				 * xConn.
+				 */
+				final boolean isCpResource = isCpResource(dbXConn);
+				if (!isCpResource) {
+					oldCCs.put(ccName, dbXConn);
+				}
+				continue;// Added 'continue' as part of fix for TR HL97635.
+			}
+			/*
+			 * As part of the Fix for TR HL97635: For all the Invalid CCs which were not yet added to the map 'OldCCs', the
+			 * following methods are called.
+			 */
+			loadInvalidCCs(dbXConn);
+
+		}
+		itr.close();
+
+		/* non-virtual xconns */
+		virtual = new AdditionalInfoPredicate<DBCrossConnection>("Virtual", "False", false);
+
+		final com.marconi.fusion.tmf.iterator.Iterator<DBCrossConnection> nonVirtualDbXConn = DatabaseSupport
+				.getCrossConnections(dbManager, me.getDn(), virtual);
+
+		oldXConnCount += nonVirtualDbXConn.size();
+
+		/*
+		 * for each virtual we test if aEnd AND zEnd are present if false the CC has to be deleted
+		 */
+		while (nonVirtualDbXConn.hasNext()) {
+			final DBCrossConnection dbXConn = nonVirtualDbXConn.next();
+
+			// Ignore the processing for MPLS DB Cross Connections.
+			if (dbXConn.getLayerRate().equals(mplsLayerRate)) {
+				continue;
+			}
+			final ProtectedNonVirtual info = (ProtectedNonVirtual) dbXConn.getAdditionalInformation(ProtectedNonVirtual.NAME);
+			if (info == null || !info.getSyntax().getValue()) {
+				continue;
+			}
+
+			// Fix for TR HO35937
+			final String ccName = CrossConnectionHelper.makeCCName(dbXConn.getInformation());
+
+			DBIterator<DBCrossConnectableTp<? extends SetType, ? extends SetType>> end = dbXConn.getAEnds().iterator();
+
+			boolean empty = !end.hasNext();
+			end.close();
+
+			if (empty) {
+				/*
+				 * Checks whether the TPs involved in xConn are controlPlane resources , If Yes it will not load the OldCCs with
+				 * xConn.
+				 */
+				final boolean isCpResource = isCpResource(dbXConn);
+				if (!isCpResource) {
+					oldCCs.put(ccName, dbXConn);
+				}
+
+				continue;
+			}
+			end = dbXConn.getZEnds().iterator();
+			empty = !end.hasNext();
+			end.close();
+
+			if (empty) {
+				/*
+				 * Checks whether the TPs involved in xConn are controlPlane resources , If Yes it will not load the OldCCs with
+				 * xConn.
+				 */
+				final boolean isCpResource = isCpResource(dbXConn);
+				if (!isCpResource) {
+					oldCCs.put(ccName, dbXConn);
+				}
+
+				continue;// Added 'continue' as part of fix for TR HL97635.
+			}
+			/*
+			 * As part of the Fix for TR HL97635: For all the Invalid CCs which were not yet added to the map 'OldCCs', the
+			 * following methods are called.
+			 */
+			loadInvalidCCs(dbXConn);
+
+		}
+		nonVirtualDbXConn.close();
+		// set the value as false to AdditionalInfo parameter virtual
+		virtual = new AdditionalInfoPredicate<DBCrossConnection>("Virtual", "False", true);
+
+		/*
+		 * The crossconnection which is in pending state in TMF, can be reported by SOEM. In this case, that crossconnection
+		 * object in TMF need to be updated. So, getting and loading crossconnections which are in both active and pending states.
+		 * Fix for TRHM37333.
+		 */
+		itr = DatabaseSupport.getCrossConnections(dbManager, me.getDn(), virtual);
+		final SNCUtilities utils = new SNCUtilities(helper.getSBIClient());
+		while (itr.hasNext()) {
+			final DBCrossConnection dbXConn = itr.next();
+			CrossConnectionHelper.makeCCName(dbXConn.getInformation());
+			/*
+			 * Fix for TR HO 49946 -Fix is provided as part of MHL6.0. In MHL6.0
+			 * , the cross connection are fixed and non virtual. Hence,When fast
+			 * realignment is set to true, and when we perform
+			 * FORCE_REALIGNMENT, the fixed cross connections are being deleted.
+			 *
+			 * Hence added the below condition:
+			 *
+			 * 1) If the cross connection is fixed and fastRealignment is set to
+			 * true, then skip adding dbXConn to oldCCs map. 2) If cross
+			 * connection is fixed and fast realignment is set to false, the add
+			 * the dbXConn to oldCCs map. 3) If cross connection is not fixed ,
+			 * then add the dbXConn to oldCCs map.
+			 */
+
+			final String name = CrossConnectionHelper.makeCCName(dbXConn.getAEndPoints(), dbXConn.getZEndPoints(), dbXConn
+					.getConnectionDirection().isCd_bi());
+
+			final ProtectedNonVirtual info = (ProtectedNonVirtual) dbXConn.getAdditionalInformation(ProtectedNonVirtual.NAME);
+			if (info == null || !info.getSyntax().getValue()) {
+				/*
+				 * Checks whether the TPs involved in xConn are controlPlane resources , If Yes it will not load the OldCCs with
+				 * xConn.
+				 */
+				final boolean isCpResource = isCpResource(dbXConn);
+				if (!isCpResource && !dbXConn.getLayerRate().equals(mplsLayerRate)) {
+					oldCCs.put(name, dbXConn);
+				}
+				final DBIterator<DBRouteDescriptor> routeItr = dbXConn.getRouteDescriptors().iterator();
+				while (routeItr.hasNext()) {
+					final DBRouteDescriptor rd = routeItr.next();
+					// DBSnc snc = (DBSnc) rd.getSnc();
+					final DBRelation<DBMultiroutedConnection> multiRoutedConnection = rd.getSnc();
+					final SNCDn sncDn = multiRoutedConnection.get().getDn();
+					// Fix for TR HO86561 : no need to process if snc is has
+					// MLRAId.
+					if (!sncDn.getSn().isMlraId()) {
+						final DBSnc snc = helper.getSBIClient().getDbManager().getObject(DBSnc.class, sncDn);
+						utils.checkAndUpdatePFSIInfo(snc);
+					}
+				}
+				routeItr.close();
+			}
+
+			// If the cross connection is MPLS cross connection, then add it to oldMPLSCCs map
+			if (dbXConn.getLayerRate().equals(mplsLayerRate)) {
+				if (!oldMPLSCCs.containsKey(name)) {
+					oldMPLSCCs.put(name, dbXConn);
+				}
+			}
+
+		}
+		itr.close();
+
+		watch.stop();
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("Loaded %d xConn from ME <%s> in %s.", oldXConnCount, getNeLocator(), watch.toString()));
+		}
+	}
+
+	public boolean isMHLXConn(final DBCrossConnection dbXConn) {
+		X36SpecificPortInformation aEndPortInformation = null;
+		X36SpecificPortInformation zEndPortInformation = null;
+		LOG.debug(new DumpInfo(dbXConn.getInformation()));
+
+		if (dbXConn.getAEnds() != null && dbXConn.getAEnds().size() > 0) {
+			final DBTp aEndDBTp = (DBTp) dbXConn.getAEnds().get(0);
+			aEndPortInformation = xUtils.getPortConfiguration(aEndDBTp);
+		}
+		if (dbXConn.getZEnds() != null && dbXConn.getZEnds().size() > 0) {
+			final DBTp zEndDBTp = (DBTp) dbXConn.getZEnds().get(0);
+			zEndPortInformation = xUtils.getPortConfiguration(zEndDBTp);
+		}
+		if (aEndPortInformation != null && zEndPortInformation != null) {
+			if (aEndPortInformation.isInternalODUPort()) {
+				if (zEndPortInformation.isOtmPort() || zEndPortInformation.isCbrPort() || zEndPortInformation.isInternalODUPort()) {
+					return true;
+				}
+			} else if (zEndPortInformation.isInternalODUPort()) {
+				if (aEndPortInformation.isOtmPort() || aEndPortInformation.isCbrPort() || aEndPortInformation.isInternalODUPort()) {
+					return true;
+				}
+			} else if ((aEndPortInformation.isEStm1Port() && zEndPortInformation.isPdh_CtpPort())
+					|| (zEndPortInformation.isEStm1Port() && aEndPortInformation.isPdh_CtpPort())) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * If Data Muxponder is involved in InterPortProtection this method is used to create Topological links between coupler and
+	 * PTP of data Muxponder
+	 */
+	private void processDataMuxponderTLs() {
+
+		try {
+			if (sbiClient.isStandAlone()) {
+				if (helper.getDataMuxponderTls().size() != 0) {
+					if (LOG.isDebugEnabled()) {
+						LOG.debug("Inside processDataMuxponderTLs() to process topological "
+								+ "links for Data Muxponder Inter port protection");
+					}
+					final HashMap<TPDn, TPDn> datMuxTlList = helper.getDataMuxponderTls();
+					for (final Entry<TPDn, TPDn> datMuxTl : datMuxTlList.entrySet()) {
+						final TPDn aEndTpDn = datMuxTl.getKey();
+						final TPDn zEndTpDn = datMuxTl.getValue();
+						if (aEndTpDn != null && zEndTpDn != null) {
+							createTopologicalLink(aEndTpDn, zEndTpDn);
+						} else {
+							LOG.error("Topological link not created because of invalid aEnd and zEnd");
+						}
+					}
+
+				}
+			}
+		}
+
+		catch (final Exception ex) {
+			LOG.error(new DumpInfo("Error while Creating Topological Links For Data Muxponder", ex.getStackTrace()));
+		}
+
+	}
+
+	/**
+	 * If Backplane Transponder port is involved in a Cascade Muxponder configuration, a topological link will be created between
+	 * the PTP's
+	 */
+	private void processCascadedMuxTLs() {
+
+		try {
+			if (sbiClient.isStandAlone()) {
+				if (helper.getCascadedMuxLinks().size() != 0) {
+					LOG.debug("Inside processCascadedMuxLinks() to process topological " + "links for cascaded Muxponder");
+					final HashMap<TPDn, TPDn> cascadedMuxLinkList = helper.getCascadedMuxLinks();
+					for (final Entry<TPDn, TPDn> cascadedMuxLink : cascadedMuxLinkList.entrySet()) {
+						final TPDn aEndTpDn = cascadedMuxLink.getKey();
+						final TPDn zEndTpDn = cascadedMuxLink.getValue();
+						if (aEndTpDn != null && zEndTpDn != null) {
+							createTopologicalLink(aEndTpDn, zEndTpDn);
+						} else {
+							LOG.error("Topological link not created because of invalid aEnd and zEnd");
+						}
+					}
+				}
+			}
+		}
+
+		catch (final Exception ex) {
+			LOG.error(new DumpInfo("Error while Creating Topological Links For cascaded Muxponder", ex.getStackTrace()));
+		}
+	}
+
+	/**
+	 * This method is used for creation of Topological Link
+	 *
+	 * @param aEndTpDn
+	 * @param zEndTpDn
+	 */
+	public void createTopologicalLink(final TPDn aEndTpDn, final TPDn zEndTpDn) {
+		final MutableBoolean created = new MutableBoolean();
+		final PortCoordinates aEndPortCoord;
+		final TPId aEndTpId=aEndTpDn.getTp();
+		if (aEndTpId.isFtp()) {
+			aEndPortCoord = aEndTpId.getFtp().getCoord();
+		} else {
+			aEndPortCoord = aEndTpId.getPtp().getCoord();
+		}
+		final PortCoordinates zEndPortCoord = zEndTpDn.getTp().getPtp().getCoord();
+		if (aEndPortCoord != null && zEndPortCoord != null) {
+			LOG.debug("AEnd and ZEnd are getting processed to process topological links for cascaded Muxponder ");
+			final int aEndShelfId = Integer.parseInt(aEndPortCoord.getShelf().getValue());
+			final int aEndSlotId = Integer.parseInt(aEndPortCoord.getSlot().getValue());
+			final X36CardId aEndCardId = helper.getCardId(aEndShelfId, aEndSlotId);
+			final int zEndShelfId = Integer.parseInt(zEndPortCoord.getShelf().getValue());
+			final int zEndSlotId = Integer.parseInt(zEndPortCoord.getSlot().getValue());
+			final X36CardId zEndCardId = helper.getCardId(zEndShelfId, zEndSlotId);
+
+			final TopologicalLink tpLink = xHelper.processTopologicalLink(X36TrafficType.PHYSICAL, aEndTpDn, aEndCardId,
+					zEndTpDn, zEndCardId);
+
+			if (tpLink != null) {
+				createOrUpdateTL(tpLink, created);
+				if (created.booleanValue()) {
+					LOG.info("Topological link created or updated in db ");
+				}
+			} else {
+				LOG.error("Topological link not created because of invalid aEnd and zEnd");
+			}
+		}
+	}
+
+	/**
+	 * Updates the additionalInfo of SNC.
+	 * @param dbSnc DBSnc
+	 * @param cc DBCrossConnection
+	 */
+	private void updateSNCAdditionalInfo(final DBSnc dbSnc, final DBCrossConnection cc){
+		final SubnetworkConnection snc = dbSnc.getInformation();
+		final AdditionalInfo sncAdditionalInfo = snc.getAdditionalInfo();
+		final String ccName = TmfNameUtilities.toString(cc.getMe().get().getDn());
+		String switchMode = sncSwitchMode.get(ccName);
+		if(switchMode == null){
+			final DBAdditionalInformation protOperMode = cc.getAdditionalInformation(ProtOperModeSupported.NAME);
+			if(protOperMode != null){
+				switchMode = ((ProtOperMode)protOperMode.getValue()).name();
+			}
+		}
+		// Removing the old SNC_SwitchMode
+		final java.util.Iterator<NameAndStringValue> additionalInfoItr = sncAdditionalInfo.iterator();
+		while (additionalInfoItr.hasNext()) {
+			final NameAndStringValue additionalInfoStr = additionalInfoItr.next();
+			if (additionalInfoStr.getName().equals(ProprietaryAdditionalInfo.SwitchMode.name())) {
+				additionalInfoItr.remove();
+				break;
+			}
+		}
+		// Updating the SNC SwitchMode additional info
+		// SwitchMode Field is not stored in xConn structure when switchMode is null
+		if (switchMode != null) {
+			Utilities.addNameAndStringValue(sncAdditionalInfo, ProprietaryAdditionalInfo.SwitchMode.name(), switchMode);
+			sncSwitchMode.remove(ccName);
+			dbSnc.setAdditionalInfo(sncAdditionalInfo);
+		}
+	}
+
+	private void processSNCs() {
+
+		if (!sbiClient.isStandAlone()) {
+			return;
+		}
+
+
+		final SBIClientI sbiClient = helper.getSBIClient();
+		final String hostName = sbiClient.getHostName(helper.getMEDn(), true);
+		final SNDn snDn = sbiClient.getPlugIn().getSNDnFor(helper.getNeId(),
+				hostName);
+		final DBSubnetwork subnetwork = dbManager.getSubnetwork(snDn);
+
+		final DBIterator<DBCrossConnection> ccItr = me.getCrossConnections().iterator();
+		while (ccItr.hasNext()) {
+			final DBCrossConnection cc = ccItr.next();
+			// If the cc is to be deleted, no need to process the SNCs for that
+			// xConn
+
+			if (oldCCs.values().contains(cc) ||  oldMPLSCCs.values().contains(cc)) {
+				continue;
+			}
+
+			final SNCDn sncName = new SNCDn();
+			final SNCId sncId = new SNCId(CrossConnectionHelper.makeCCName(cc.getInformation()));
+			sncName.setSnc(sncId);
+			sncName.setSn(subnetwork.getDn().getSn());
+			final DBSnc dbSNC = dbManager.getObject(DBSnc.class, sncName);
+			createOrUpdateSnc(subnetwork, cc, dbSNC);
+		}
+		ccItr.close();
+	}
+
+	private void createOrUpdateSnc(final DBSubnetwork subnetwork, final DBCrossConnection dbCC, final DBSnc dbSnc1) {
+		DBSnc dbSnc = dbSnc1;
+		final CrossConnect cc = dbCC.getInformation();
+		final SubnetworkConnection snc = new SubnetworkConnection();
+		final SNCDn dn = snc.getName();
+		dn.setSn(subnetwork.getDn().getSn());
+		final SNCId sncId = new SNCId(CrossConnectionHelper.makeCCName(dbCC.getInformation()));
+		dn.setSnc(sncId);
+		// DBList<DBCrossConnectableTp> aEndList = dbCC.getAEnds();
+		final DBList<DBCrossConnectableTp<?, ?>> aEndList = dbCC.getAEnds();
+		snc.setAEnd(xUtils.getPointDataList(aEndList));
+		final DBList<DBCrossConnectableTp<? extends SetType, ? extends SetType>> zEndList = dbCC.getZEnds();
+		snc.setZEnd(xUtils.getPointDataList(zEndList));
+		snc.setDirection(cc.getDirection());
+		snc.setSncType(cc.getCcType());
+		snc.setAdditionalInfo(cc.getAdditionalInfo());
+
+		/*
+		 * 
+		 * Fix for TR HP11560, Incase if the Mode is singleton, StateProtection
+		 * Level should be Unprotected. As broadcast will be
+		 * 
+		 * represented as many uni this should work...
+		 */
+
+			snc.setStaticProtectionLevel(StaticProtectionLevel.UNPROTECTED);
+		snc.setRerouteAllowed(Reroute.RR_NO);
+		snc.setNetworkRouted(NetworkRouted.NR_NA);
+		snc.setRate(cc.getLayerRate());
+		if (cc.getActive().getValue()) {
+		snc.getSncState().setSncs_active();
+		} else {
+			snc.getSncState().setSncs_pending();
+		}
+		// /SNC_revertive field add to additional Info of Snc
+		final String ccName = CrossConnectionHelper.makeCCName(cc);
+		final Boolean revertive_info = sncRevertiveInfo.get(ccName);// (RevertiveFieldInfo)
+		// dbCC.getAdditionalInformation(RevertiveFieldInfo.NAME);
+		if (revertive_info != null) {
+			Utilities.addNameAndStringValue(snc.getAdditionalInfo(), Standard.SNC_REVERTIVE.name(),
+							revertive_info.booleanValue() ? "True" : "False");
+			sncRevertiveInfo.remove(ccName);
+		}
+		String switchMode = sncSwitchMode.get(ccName);
+		if (switchMode == null) {
+			final DBAdditionalInformation protOperMode = dbCC.getAdditionalInformation(ProtOperModeSupported.NAME);
+			if (protOperMode != null) {
+				switchMode = ((ProtOperMode) protOperMode.getValue()).name();
+			}
+		} else {
+			sncSwitchMode.remove(ccName);
+		}
+		if (switchMode != null) {
+			Utilities.addNameAndStringValue(snc.getAdditionalInfo(), ProprietaryAdditionalInfo.SwitchMode.name(), switchMode);
+		}
+		final RouteDescriptor rd = new RouteDescriptor();
+		rd.setId("1"); // only one RD for each SNC in EM mode
+		rd.setIntended(true);
+		rd.setActualState(ActualState.active);
+		rd.setAdministrativeState(AdministrativeState.unlocked);
+		rd.setInUseBy(false);
+		rd.setExclusive(true);
+		final Route route = rd.getRouteXCs();
+		route.add(cc);
+		DBRouteDescriptor dbRd = null;
+
+		if (dbSnc != null) {
+			final DBIterator<DBRouteDescriptor> dbRdItr = dbSnc.getRouteDescriptors().iterator();
+			dbRd = dbRdItr.hasNext() ? dbRdItr.next() : null;
+			dbRdItr.close();
+		}
+
+		if (dbSnc == null) {
+			dbSnc = dbManager.createSNC(snc);
+		} else {
+			if (!snc.getRate().equals(LayerRateManager.getLayerRate("LR_MPLS_TP"))) {
+				final SNCUtilities utils = new SNCUtilities(sbiClient);
+				utils.updatePFSIonSNC(dbCC, dbSnc);
+				utils.checkAndUpdatePFSIInfo(dbSnc);
+			}
+			dbManager.update(dbSnc, snc, false);
+		}
+
+		if (dbRd == null) {
+			dbRd = dbManager.createRouteDescriptor(rd);
+			dbRd.getSnc().set(dbSnc);
+		}
+
+		dbRd.getCrossConnections().clear();
+		dbRd.getCrossConnections().add(dbCC);
+		dbSnc.getAEnds().clear();
+		final DBIterator<DBCrossConnectableTp<?, ?>> aEndListItr = aEndList.iterator();
+		while (aEndListItr.hasNext()) {
+			dbSnc.getAEnds().add(aEndListItr.next());
+		}
+		aEndListItr.close();
+		dbSnc.getZEnds().clear();
+		final DBIterator<DBCrossConnectableTp<?, ?>> zEndListItr = zEndList.iterator();
+		while (zEndListItr.hasNext()) {
+			dbSnc.getZEnds().add(zEndListItr.next());
+		}
+		zEndListItr.close();
+
+		/**
+		 * 
+		 * Trying to get the 'CrossConnectionType' - DBAdditionalInfo of the
+		 * 'dbCC'. If present (i.e 'ccDBAddInfoXconnType' not null), the same
+		 * should be added even for 'dbSnc'. This 'dbSnc' DBAdditionalInfo will
+		 * be used later for SNC operations
+		 * 
+		 * like deactivateSNC etc.
+		 */
+
+		final CrossConnectionType ccDBAddInfoXconnType = (CrossConnectionType) dbCC
+				.getAdditionalInformation(CrossConnectionType.NAME);
+
+		if (ccDBAddInfoXconnType != null && ccDBAddInfoXconnType.getSyntax() != null) {
+			// Adding this 'CrossConnectionType' DBAdditionalInfo of 'dbCC' to
+			// 'dbSnc'
+			dbSnc.setAdditionalInformation(ccDBAddInfoXconnType);
+		} else {
+			dbSnc.addAdditionalInformation(ccDBAddInfoXconnType);
+		}
+	}
+
+
+	/**
+	 * This method deletes the OLD MPLS cross connection and its associated TP(LSP or VPN) from TMF DB. If the aEnd or zEnd is
+	 * involved in more than one MPLS cross connection, then do not delete the aEnd or zEnd TP.Else delete the TPs and the cross
+	 * connection.
+	 */
+	private void discardOldMplsCCs() {
+
+		if (oldMPLSCCs.values().size() == 0) {
+			return;
+		}
+		if (sbiClient.isStandAlone()) {
+
+			// rimuovo anche ls SNC...
+
+			final List<DBMultiroutedConnection> sncs = new ArrayList<DBMultiroutedConnection>();
+			final Iterator<Entry<String, DBCrossConnection>> oldCCIter = oldMPLSCCs
+					.entrySet().iterator();
+			while (oldCCIter.hasNext()) {
+				final DBCrossConnection cc = oldCCIter.next().getValue();
+				/*
+				 * 
+				 * Added condition as part of fix for TR HM37333. While loading
+				 * 
+				 * crossconnections into oldCCs map, both active and pending
+				 * 
+				 * crossconnections are loaded. If xconn which is in pending
+				 * 
+				 * state is present in oldCCs now, that crossconnection should
+				 * 
+				 * not be deleted from the database.
+				 * 
+				 * 
+				 * 
+				 * Also this logic should be followed in EM mode only, because
+				 * 
+				 * in this mode we can have cross connection associated to a
+				 * 
+				 * pending SNC. But in NM mode, the pending SNC's will not have
+				 * 
+				 * its corresponding CC's on NE, so they will not be handled in
+				 * 
+				 * I36Plugin.
+				 */
+
+				if (cc.getInformation().getActive().getValue()) {
+					final DBIterator<DBRouteDescriptor> itr = cc
+							.getRouteDescriptors().iterator();
+					while (itr.hasNext()) {
+						final DBRouteDescriptor rd = itr.next();
+						final DBMultiroutedConnection snc = rd.getSnc().get();
+						if (snc != null) {
+							sncs.add(snc);
+						}
+					}
+					itr.close();
+				} else {
+					/*
+					 * CC is in pending state, so it should not be deleted, so
+					 * removing from oldCCs
+					 */
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(String.format("MPLS xConn <%s> is not active. Not removing it.",
+										CrossConnectionHelper.makeCCName(cc.getInformation())));
+					}
+					oldCCIter.remove();
+				}
+			}
+			for (final DBMultiroutedConnection item : sncs) {
+				final SubnetworkConnection snc = ((DBSnc) item)
+						.getInformation();
+				if (snc.getSncState().isSncs_active()) {
+					xHelper.updateBeforeDicardingOldies((DBSnc) item);
+				}
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(String.format("Deleting MPLS SNC <%s>", TmfNameUtilities.toString(item.getDn())));
+				}
+				dbManager.delete(item);
+			}
+			LOG.info(String.format("Removed %d SNCs for ME <%s>", sncs.size(),
+					getNeLocator()));
+		}
+		final Iterator<Entry<String, DBCrossConnection>> oldCCItr = oldMPLSCCs
+				.entrySet().iterator();
+		int xConnsDeleted = 0;
+		while (oldCCItr.hasNext()) {
+			final DBCrossConnection dbCC = oldCCItr.next().getValue();
+			if (dbCC != null) {
+				if (!dbCC.getActive().getValue()) {
+					oldCCItr.remove();
+					continue;
+				}
+
+				// If the xConn is an MPLS xConn
+				final TPDnList tpsToBeDeleted = new TPDnList();
+
+				final DBIterator<DBCrossConnectableTp<?, ?>> aEndTpItr = dbCC
+						.getAEnds().iterator();
+
+				if (aEndTpItr.hasNext()) {
+					final DBCrossConnectableTp aEndTp = aEndTpItr.next();
+					/*
+					 * Check if the aEnd aEnd CTP is used for another MPLS xConn
+					 * (xConn size will be 1 if the ctp is not used for any
+					 * other MPLS xConn
+					 */
+					if (aEndTp.getCrossConnections().size() == 1) {
+						final TPDn aEndDn = ((DBTp) aEndTp).getDn();
+						tpsToBeDeleted.add(aEndDn);
+					}
+				}
+
+				aEndTpItr.close();
+
+				final DBIterator<DBCrossConnectableTp<?, ?>> zEndTpItr = dbCC
+						.getZEnds().iterator();
+
+				if (zEndTpItr.hasNext()) {
+					final DBCrossConnectableTp zEndTp = zEndTpItr.next();
+					/*
+					 * Check if the aEnd aEnd CTP is used for another MPLS xConn
+					 * (xConn size will be 1 if the ctp is not used for any
+					 * other MPLS xConn
+					 */
+					if (zEndTp.getCrossConnections().size() == 1) {
+						final TPDn zEndDn = ((DBTp) zEndTp).getDn();
+						tpsToBeDeleted.add(zEndDn);
+					}
+				}
+				zEndTpItr.close();
+
+				if (LOG.isDebugEnabled()) {
+					final String ccName = CrossConnectionHelper.makeCCName(dbCC
+							.getInformation());
+					LOG.debug(String.format("Deleting the MPLS xConn <%s>",
+							ccName));
+				}
+
+				dbManager.delete(dbCC, tpsToBeDeleted);
+				xConnsDeleted++;
+				for (final TPDn end : tpsToBeDeleted) {
+					final DBTp endTp = dbManager.getTP(end);
+
+					if (endTp != null) {
+						if (LOG.isDebugEnabled()) {
+							LOG.debug(String.format(
+									"Deleting the MPLS TP <%s>",
+									TmfNameUtilities.toString(end)));
+						}
+						dbManager.delete(endTp);
+					} else {
+						LOG.info(String.format(
+								"Could not find the MPLS TP <%s> in the db.",
+								TmfNameUtilities.toString(end)));
+					}
+				}
+			}
+		}
+
+		LOG.info(String.format("Removed %d MPLS CCs on ME <%s>", xConnsDeleted,
+				getNeLocator()));
+
+		if (!oldMPLSCCs.isEmpty()) {
+			oldMPLSCCs.clear();
+		}
+
+	}
+
+
+	/* ************************************************************************** */
+	private void discardOldies() {
+
+		if (oldCCs.values().size() == 0) {
+			return;
+		}
+
+		if (sbiClient.isStandAlone()) {
+
+			// rimuovo anche ls SNC...
+
+			final List<DBMultiroutedConnection> sncs = new ArrayList<DBMultiroutedConnection>();
+			final Iterator<Entry<String, DBCrossConnection>> oldCCIter = oldCCs.entrySet().iterator();
+			while (oldCCIter.hasNext()) {
+				final DBCrossConnection cc = oldCCIter.next().getValue();
+				/*
+				 *
+				 * Added condition as part of fix for TR HM37333. While loading
+				 *
+				 * crossconnections into oldCCs map, both active and pending
+				 *
+				 * crossconnections are loaded. If xconn which is in pending
+				 *
+				 * state is present in oldCCs now, that crossconnection should
+				 *
+				 * not be deleted from the database.
+				 *
+				 *
+				 *
+				 * Also this logic should be followed in EM mode only, because
+				 *
+				 * in this mode we can have cross connection associated to a
+				 *
+				 * pending SNC. But in NM mode, the pending SNC's will not have
+				 *
+				 * its corresponding CC's on NE, so they will not be handled in
+				 *
+				 * I36Plugin.
+				 */
+
+				if (cc.getInformation().getActive().getValue()) {
+					final DBIterator<DBRouteDescriptor> itr = cc.getRouteDescriptors().iterator();
+					while (itr.hasNext()) {
+						final DBRouteDescriptor rd = itr.next();
+						final DBMultiroutedConnection snc = rd.getSnc().get();
+						if (snc != null) {
+							sncs.add(snc);
+						}
+					}
+					itr.close();
+				} else {
+					/*
+					 * CC is in pending state, so it should not be deleted, so
+					 * removing from oldCCs
+					 */
+					oldCCIter.remove();
+				}
+			}
+			for (final DBMultiroutedConnection item : sncs) {
+				final SubnetworkConnection snc = ((DBSnc) item).getInformation();
+				if (snc.getSncState().isSncs_active()) {
+					xHelper.updateBeforeDicardingOldies((DBSnc) item);
+				}
+				dbManager.delete(item);
+			}
+			LOG.info(String.format("Removed %d SNCs for ME <%s>", sncs.size(), getNeLocator()));
+		}
+		final Iterator<Entry<String, DBCrossConnection>> oldCCItr = oldCCs.entrySet().iterator();
+		int xConnsDeleted = 0;
+		while (oldCCItr.hasNext()) {
+			final DBCrossConnection dbCC = oldCCItr.next().getValue();
+			if (dbCC != null) {
+				if (!dbCC.getActive().getValue()) {
+					oldCCItr.remove();
+					continue;
+				}
+
+				// If the xConn is a packet link CC
+				if (xUtils.isPacketLinkXConn(dbCC)) {
+
+					final TPDnList tpsToBeDeleted = new TPDnList();
+
+					final DBIterator<DBCrossConnectableTp<?, ?>> aEndTpItr = dbCC.getAEnds().iterator();
+
+					if (aEndTpItr.hasNext()) {
+						final DBCtp aEndTp = (DBCtp) aEndTpItr.next();
+						/*
+						 * Check if the aEnd dsr CTP is used for another packet
+						 * link (xConn size will be 1 if the ctp is not used for
+						 * any other packet link
+						 */
+						if (aEndTp.getCrossConnections().size() == 1) {
+							tpsToBeDeleted.add(aEndTp.getDn());
+						}
+					}
+
+					aEndTpItr.close();
+
+					if (LOG.isDebugEnabled()) {
+						final String ccName = CrossConnectionHelper.makeCCName(dbCC.getInformation());
+						LOG.debug(String.format("Deleting the packet link xConn <%s>", ccName));
+					}
+
+					// Delete the packet link
+					dbManager.delete(dbCC, tpsToBeDeleted);
+					xConnsDeleted++;
+					/*
+					 * Delete the aEnd dsr ctps which are no more used by any
+					 * other packet links
+					 */
+					for (final TPDn aEnd : tpsToBeDeleted) {
+						final DBTp aEndTp = dbManager.getTP(aEnd);
+
+						if (aEndTp != null) {
+							if (LOG.isDebugEnabled()) {
+								LOG.debug(String.format("Deleting the packet link TP (DSR ctp) <%s>",
+										TmfNameUtilities.toString(aEnd)));
+							}
+							dbManager.delete(aEndTp);
+						} else {
+							LOG.info(String.format("Could not find the packet link TP (DSR ctp) <%s> in the db.",
+									TmfNameUtilities.toString(aEnd)));
+						}
+					}
+
+				} else {
+					dbManager.delete(dbCC, null);
+					xConnsDeleted++;
+				}
+			}
+		}
+
+		LOG.info(String.format("Removed %d CCs on ME <%s>", xConnsDeleted, getNeLocator()));
+		if (!oldCCs.isEmpty()) {
+			oldCCs.clear();
+		}
+	}
+
+
+	/* ************************************************************************** */
+	@SuppressWarnings("unchecked")
+	protected void process() {
+
+		sbiClient = helper.getSBIClient();
+		final X36SetOfCrossConnection setOf = helper.getCrossConnections();
+		final boolean berRealignmentMode = BaseApplication.getApplication().getCommandLine().hasOption("readBer");
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(setOf, String.format("Ready to process crossConnections for ME <%s>", getNeLocator())));
+		}
+
+		/*
+		 * Added as part of CR 375 WI 1.3, if application is started in BER realignment mode, reading snclabel file.
+		 */
+		if (berRealignmentMode && sbiClient.isStandAlone() && sncDnLabelMap == null) {
+			sncDnLabelMap = new HashMap<String, String>();
+			CSDReader csdReader = null;
+			final String defaultDir = sbiClient.getProfile().getProperty("Framework.home") + EI_SLASH + EI_CUSTOMER_DATA
+					+ EI_SLASH;
+			final String sncLabelDirPath = sbiClient.getProfile().getProperty(PluginProperty.snclabelFile, defaultDir);
+			final String sncLabelFilePath = sncLabelDirPath + EI_SNC_LABEL;
+			if (StringUtils.isNotEmpty(sncLabelFilePath)) {
+				try {
+					csdReader = new CSDReader(sncLabelFilePath);
+					final Object objArray = csdReader.read();
+					if (objArray != null) {
+						sncDnLabelMap = (HashMap<String, String>) objArray;
+					}
+				} catch (final FileNotFoundException fnf) {
+					LOG.info("SNC Label File doesn't exist");
+				} catch (final EOFException eof) {
+					LOG.info("Loading SNC labels completed");
+				} catch (final Exception e) {
+					LOG.error(new DumpInfo(e, String.format("Exception while loading snclabel file : <%s>", sncLabelFilePath)));
+				} finally {
+					csdReader.close();
+				}
+			}
+		}
+		for (final X36CrossConnection xconn : setOf) {
+			/*
+			 * Added as part of CR 375 WI 1.3, if cross connection label is not reported by SO-EM, retreiving label from snclabel
+			 * file and setting.
+			 */
+			if (berRealignmentMode) {
+				xUtils.getLableFromFile( xconn, sncDnLabelMap);
+			}
+			boolean nmMode = false;// Added for Regeneration Group G709
+			boolean regenProcessed = false;
+			String regFlag = null;
+
+			final X36TrafficType tt = xconn.getTrafficType();
+			if (tt.isOch()) { // Added for Regeneration Group/Mode G709 and non
+				// G709 Regeneration
+				try {
+					if (isRegeneration(xconn)) {
+						regFlag = findRegenerationType(regFlag);
+						if (regFlag != null && regFlag.equals(REG_GROUP_G709)) {
+							if (sbiClient.isStandAlone()) {
+								processRegGroupG709();
+							} else if (!sbiClient.isStandAlone()) {
+								nmMode = true;
+								LOG.debug("TMF is running in NM mode. So dont process topological link in I36 plugin");
+							}
+							regenProcessed = true;
+						}
+						if (regFlag != null && regFlag.equals(REG_MODE_G709)) {
+							processRegModeG709();
+							regenProcessed = true;
+						}
+					}
+				} catch (final Exception ex) {
+					LOG.error(new DumpInfo("Exception occurred while processing for Regeneration group or mode for NE : ", ex));
+				} finally {
+					aEndTpInfo = null;
+					zEndTpInfo = null;
+					fromCtpdn = null;
+					toCtpdn = null;
+					aEndCoord = null;
+					zEndCoord = null;
+				}
+				if (regenProcessed) {
+					// then dont proceed with the normal xconn
+					continue;
+				}
+			}
+			if (nmMode) { // In NM mode do not process the cross connection
+				// received for Regeneration Group
+				LOG.debug("TMF is running in NM mode. So topological link for Regeneration group will be handled by I38 plugin");
+				continue;
+			}
+			// if the regFlag is err then we log an error and do not proceed
+			// with the Xconnection.
+			if ((regFlag != null) && (regFlag.equals("err"))) {
+				LOG.error("One of the transponders in the regeneration module has not been processed, so not proceeding with the cross connection");
+				continue;
+			}
+			boolean isNotConfigurable = false;
+			final List<DBCrossConnection> listDBCC = new ArrayList<DBCrossConnection>();
+			final List<DBMFDFragment> listMfdFr = new ArrayList<DBMFDFragment>();
+			if (xconn.isPresentConnectionNotConfigurable()) {
+				isNotConfigurable = xconn.getConnectionNotConfigurable().getValue();
+			}
+			if (regFlag != null && regFlag.equals("REG_NON_G709")) {// If it is
+				// non G709
+				// then the
+				// additionalInfo
+				// fixed =
+				// true
+				isNotConfigurable = true;
+			}
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(xconn, "Ready to process crossConnections for ME <%s>", new Object[] { getNeLocator() }));
+			}
+
+			final X36SpecificCrossConnection specXConn = xconn.getSpecificCrossConnection();
+
+			// SpecificCrossConnection ::= CHOICE {
+			// degenerate Degenerate,
+			// unidirectional PointToPoint,
+			// bidirectional PointToPoint,
+			// broadcast PointToMultipoint,
+			// unidirectionalProt PointToPointProt,
+			// bidirectionalProt PointToPointProt,
+			// broadcastProt PointToMultipointProt,
+			// interconnectionProt ProtectedRing,
+			// dropAndContinueUnidirectional DropAndContinueProtection,
+			// dropAndContinueBidirectional DropAndContinueProtection,
+			// unidirectionalDroppedConnection DropAndContinueProtection,
+			// endToEndHoSncpProt EndToEndHoSncpProt
+
+			processCrossConnection(xconn, listDBCC, listMfdFr, nmMode, isNotConfigurable);
+			for (final DBCrossConnection cc : listDBCC) {
+				if (cc == null) {
+					LOG.warn(new DumpInfo(new Object[] { specXConn, tt }, String.format("XConn not yet managed on ME <%s>...",
+							getNeLocator())));
+				} else {
+					count++;
+					/*
+					 * store the matrix identifier if any
+					 */
+					if (xconn.isPresentMatrixId()) {
+						final X36CardIdentification cId = xconn.getMatrixId();
+						final AIEquipmentCoord aiEquipmentCoord = new AIEquipmentCoord();
+						aiEquipmentCoord.setShelfId(cId.getShelfId().getValue());
+						aiEquipmentCoord.setCardId(cId.getCardId().getValue());
+						final EQCoord eqCoord = new EQCoord(aiEquipmentCoord);
+
+						cc.setAdditionalInformation(eqCoord);
+					}
+				}
+			}
+		}
+		/*
+		 * Updating the DBAdditionalInformation of the Managed Element with the
+		 * free TP Id list
+		 */
+		updateRealxedMplsTpIdFreeList();
+		//Processing the new LSP and PW cross connections
+		if (!newlspXConnList.isEmpty()) {
+			final List<DBCrossConnection> newLSPConnList = mplsXCConverter.processLspCrossConnection(newlspXConnList);
+			removeXConnsFromOldMplsCCs(newLSPConnList);
+		}
+		if (!newpwXConnList.isEmpty()) {
+			final List<DBCrossConnection> newVPNXConnList = mplsXCConverter.processVpnCrossConnection(newpwXConnList);
+			removeXConnsFromOldMplsCCs(newVPNXConnList);
+		}
+		//Processing the MPLS TP supported data cross connections
+		if (!dataXConnList.isEmpty()) {
+			for (final X36CrossConnection xConn : dataXConnList) {
+				mfdConverter.createDataXConn(xConn, xConn.getTrafficType());
+			}
+		}
+	}
+
+	/**
+	 * This method updates the RealxedMplsTpIdFreeList DBAdditionalInformation of the Managed Element. When an MPLS cross
+	 * connection(LSP or VPN) is deleted, then get the ID value (/mpls_tp = ID) from the name and add it to the RealxedMplsTpIdFreeList.
+	 * So next time when a new MPLS cross connection is reported, reuse the ID values present in the list.
+	 */
+	@SuppressWarnings("unchecked")
+	private void updateRealxedMplsTpIdFreeList() {
+
+		if (oldMPLSCCs.size() == 0) {
+			return;
+		}
+
+		final DBManagedElement dbMe = dbManager.getManagedElement(helper.getMEDn());
+
+		if(dbMe == null){
+			LOG.error("Error while retrieving the Managed element");
+			return;
+		}
+
+		final String meStr = TmfNameUtilities.toString(dbMe.getDn());
+
+		final RelaxedMplsTpIdFreeList relaxedAdditionalInfo = (RelaxedMplsTpIdFreeList) dbMe
+						.getAdditionalInformation(RelaxedMplsTpIdFreeList.NAME);
+
+		TreeSet<Integer> freeIdSet = null;
+
+		if (relaxedAdditionalInfo != null) {
+			freeIdSet = (TreeSet<Integer>) relaxedAdditionalInfo.getValue();
+		}
+
+		if (freeIdSet == null) {
+			freeIdSet = new TreeSet<Integer>();
+		}
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("Existing FreeIdSet (Relaxed Containment) of ME [" + meStr + "] is: \n %s", freeIdSet));
+		}
+
+		for (final DBCrossConnection dbCC : oldMPLSCCs.values()) {
+			/*
+			 * If the aEnd or zEnd TP is involved in more than one cross connection,do not add the ID value to
+			 * RealxedMplsTpIdFreeList, as the same TP can be reused.
+			 */
+			final DBIterator<DBCrossConnectableTp<?, ?>> aEndTpItr = dbCC.getAEnds().iterator();
+			if (aEndTpItr.hasNext()) {
+				final DBCrossConnectableTp<?, ?> aEndTp = aEndTpItr.next();
+				if (aEndTp.getCrossConnections().size() == 1) {
+					final String aEndName = aEndTp.getName();
+					final Integer freeId = I36Utilities.fetchIDFromRelaxedMplsTpName(aEndName);
+					freeIdSet.add(freeId);
+				} else {
+					LOG.error(String.format("MPLS Tp <%s> is involved in more than one cross connection",
+									TmfNameUtilities.toString(aEndTp.getDn())));
+				}
+			}
+			aEndTpItr.close();
+
+			final DBIterator<DBCrossConnectableTp<?, ?>> zEndTpItr = dbCC.getZEnds().iterator();
+			if (zEndTpItr.hasNext()) {
+				final DBCrossConnectableTp<?, ?> zEndTp = zEndTpItr.next();
+				if (zEndTp.getCrossConnections().size() == 1) {
+					final String zEndName = zEndTp.getName();
+					final Integer freeId = I36Utilities.fetchIDFromRelaxedMplsTpName(zEndName);
+					freeIdSet.add(freeId);
+				} else {
+					LOG.error(String.format("MPLS Tp <%s> is involved in more than one cross connection",
+									TmfNameUtilities.toString(zEndTp.getDn())));
+				}
+			}
+			zEndTpItr.close();
+		}
+
+		final RelaxedMplsTpIdFreeList updatedFreeIdSet = new RelaxedMplsTpIdFreeList(freeIdSet);
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(String.format("Updated FreeIdSet (Relaxed Containment) of ME [" + meStr + "] is: \n %s", updatedFreeIdSet));
+		}
+
+		dbMe.setAdditionalInformation(updatedFreeIdSet);
+
+	}
+
+
+	/**
+	 * This method created the CrossConnections depending on the
+	 * SpecificCrossConnection type.
+	 *
+	 * @param xConn
+	 * @param listDBCC
+	 * @param listMfdFr
+	 * @param nmMode
+	 * @param isNotConfigurable
+	 */
+	private void processCrossConnection(final X36CrossConnection xConn, final List<DBCrossConnection> listDBCC,
+			final List<DBMFDFragment> listMfdFr, final boolean nmMode, final boolean isNotConfigurable) {
+
+		stats.start(PROCESS_CC);
+
+		try {
+			final X36SpecificCrossConnection specXConn = xConn.getSpecificCrossConnection();
+			final X36TrafficType trafficType = xConn.getTrafficType();
+			DBCrossConnection dbXconn = null;
+			List<DBCrossConnection> xConnList = null;
+			final String controlplaneManagement = sbiClient.getProfile().getProperty(
+					I36PlugIn.PluginProperty.ControlplaneManagement, "no");
+			switch (specXConn.getMemberId()) {
+			case X36SpecificCrossConnection.degenerate:
+				if (!(controlplaneManagement.equalsIgnoreCase("yes"))) {
+					/*
+					 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So,
+					 * before adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+					 */
+					dbXconn = xHelper.createXConn(specXConn.getDegenerate(), trafficType);
+					if (dbXconn != null) {
+						listDBCC.add(dbXconn);
+					}
+				} else {
+					LOG.debug("dbXconn will not be added to List<DBCrossConnection> when Tp is allocated to control plane ");
+				}
+				processControlPlaneMgmt(controlplaneManagement, dbXconn, nmMode);
+				break;
+
+			case X36SpecificCrossConnection.unidirectional:
+				/*
+				 * To Iterate through the list of Tp's involved in the crossconnection. If any of the Tp is in control plane, the
+				 * cross connection is not processed
+				 */
+				if (!(controlplaneManagement.equalsIgnoreCase("yes"))) {
+					/*
+					 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So,
+					 * before adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+					 */
+					dbXconn = xHelper.createXConn(specXConn.getUnidirectional(), trafficType, false, isNotConfigurable);
+					if (dbXconn != null) {
+						listDBCC.add(dbXconn);
+					}
+				} else {
+					LOG.debug("Not add dbXconn to listDBCC when Tp is allocated to control plane ");
+				}
+				processControlPlaneMgmt(controlplaneManagement, dbXconn, nmMode);
+				break;
+
+			case X36SpecificCrossConnection.bidirectional:
+				if (!(controlplaneManagement.equalsIgnoreCase("yes"))) {
+					/*
+					 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So,
+					 * before adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+					 */
+					dbXconn = xHelper.createXConn(specXConn.getBidirectional(), trafficType, true, isNotConfigurable);
+					if (dbXconn != null) {
+						listDBCC.add(dbXconn);
+					}
+				} else {
+					LOG.debug("Not add dbXconn to listDBCC when Tp is allocated to control plane ");
+				}
+				processControlPlaneMgmt(controlplaneManagement, dbXconn, nmMode);
+				break;
+
+			case X36SpecificCrossConnection.broadcast:
+				if (!(controlplaneManagement.equalsIgnoreCase("yes"))) {
+					/*
+					 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So,
+					 * before adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+					 */
+					xConnList = xHelper.createXConn(specXConn.getBroadcast(), trafficType, xConn);
+					if (xConnList != null) {
+						listDBCC.addAll(xConnList);
+					}
+				} else {
+					LOG.debug("Not add dbXconn to listDBCC when Tp is allocated to control plane ");
+				}
+				processControlPlaneMgmt(controlplaneManagement, xConnList, nmMode);
+				break;
+
+			case X36SpecificCrossConnection.unidirectionalProt:
+				if (!(controlplaneManagement.equalsIgnoreCase("yes"))) {
+					/*
+					 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So,
+					 * before adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+					 */
+					xConnList = xHelper.createXConn(specXConn.getUnidirectionalProt(), trafficType, false, xConn);
+					if (xConnList != null) {
+						listDBCC.addAll(xConnList);
+					}
+				} else {
+					LOG.debug("Not add dbXconn to listDBCC when Tp is allocated to control plane ");
+				}
+				processControlPlaneMgmt(controlplaneManagement, xConnList, nmMode);
+				break;
+
+			case X36SpecificCrossConnection.bidirectionalProt:
+				if (!(controlplaneManagement.equalsIgnoreCase("yes"))) {
+					/*
+					 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So,
+					 * before adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+					 */
+					xConnList = xHelper.createXConn(specXConn.getBidirectionalProt(), trafficType, true, xConn);
+					if (xConnList != null) {
+						listDBCC.addAll(xConnList);
+					}
+				} else {
+					LOG.debug("Not add dbXconn to listDBCC when Tp is allocated to control plane ");
+				}
+				processControlPlaneMgmt(controlplaneManagement, xConnList, nmMode);
+				break;
+
+			case X36SpecificCrossConnection.tandemSNCP:
+				/*
+				 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So, before
+				 * adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+				 */
+				dbXconn = createXConn(specXConn.getTandemSNCP(), trafficType, true);
+				if (dbXconn != null) {
+					listDBCC.add(dbXconn);
+				}
+				break;
+
+			case X36SpecificCrossConnection.broadcastProt:
+				if (!(controlplaneManagement.equalsIgnoreCase("yes"))) {
+					/*
+					 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So,
+					 * before adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+					 */
+					xConnList = xHelper.createXConn(specXConn.getBroadcastProt(), trafficType, false, xConn);
+					if (xConnList != null) {
+						listDBCC.addAll(xConnList);
+					}
+				} else {
+					LOG.debug("Not add dbXconn to listDBCC when Tp is allocated to control plane ");
+				}
+				processControlPlaneMgmt(controlplaneManagement, xConnList, nmMode);
+				break;
+
+				// unidirDropContinue le tratto come le broadcastProt ?!?
+			case X36SpecificCrossConnection.unidirDropContinue:
+				if (!(controlplaneManagement.equalsIgnoreCase("yes"))) {
+					/*
+					 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So,
+					 * before adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+					 */
+					xConnList = xHelper.createXConn(specXConn.getUnidirDropContinue(), trafficType, true, xConn);
+					if (xConnList != null) {
+						listDBCC.addAll(xConnList);
+					}
+				} else {
+					LOG.debug("Not add dbXconn to listDBCC when Tp is allocated to control plane ");
+				}
+				processControlPlaneMgmt(controlplaneManagement, xConnList, nmMode);
+				break;
+
+			case X36SpecificCrossConnection.endToEndHoSncpProt:
+				if (!(controlplaneManagement.equalsIgnoreCase("yes"))) {
+					/*
+					 * Fix for null pointer during the realignment. At certain conditions createXConn() method returns null So,
+					 * before adding the DBCrossconnection returned by createXConn(), it shall be checked for null
+					 */
+					dbXconn = xHelper.createXConn(specXConn.getEndToEndHoSncpProt(), trafficType);
+					if (dbXconn != null) {
+						listDBCC.add(dbXconn);
+					}
+				} else {
+					LOG.debug("Not add dbXconn to listDBCC when Tp is allocated to control plane ");
+				}
+				processControlPlaneMgmt(controlplaneManagement, dbXconn, nmMode);
+				break;
+
+			case X36SpecificCrossConnection.data:
+				final X36DataCrossConnection dataXConn = xConn.getSpecificCrossConnection().getData();
+				/*
+				 * If the Data XConn supports MPLS service, then we have to
+				 * process that data XConn after processing the LSP nad VPN.
+				 * Hence checking for the presence of AdditionalDetails. If
+				 * AdditionalDetails is present, it indicates that the data
+				 * Xconn belongs to MPLS Service.Hence adding it to a list
+				 */
+				if (dataXConn.isPresentAdditionalDetails()) {
+					dataXConnList.add(xConn);
+				} else {
+					final DBMFDFragment dbMfdFr = mfdConverter.createDataXConn(xConn, trafficType);
+					if (dbMfdFr != null) {
+						listMfdFr.add(dbMfdFr);
+					}
+				}
+				break;
+
+			case X36SpecificCrossConnection.vpnConnection:
+
+				/*
+				 * Suppose if the LSP/VPN cross connections are deleted,the next
+				 * created LSP/VPN XConns should use the free mpls tp IDs of the
+				 * previously deleted XConns.In order to identify the free TP
+				 * IDs (/mpls_tp=ID),first we will update all the VPN/LSP cross
+				 * connections present in DB.Once all the XConns are updated we
+				 * will get to know the Cross connections which are
+				 * deleted(present in oldMPLSCCs map).Using this map we will
+				 * identify the IDs which can be reused.
+				 */
+				final List<DBCrossConnection> updatedVPNXConnList = mplsXCConverter.updateVPNXConn(xConn, trafficType,
+								newpwXConnList);
+				if (updatedVPNXConnList != null && !updatedVPNXConnList.isEmpty()) {
+					removeXConnsFromOldMplsCCs(updatedVPNXConnList);
+				}
+				break;
+
+			case X36SpecificCrossConnection.mplsTunnelsLspConnection:
+
+				/*
+				 * Suppose if the LSP/VPN cross connections are deleted,the next
+				 * created LSP/VPN XConns should use the free mpls tp IDs of the
+				 * previously deleted XConns.In order to identify the free TP
+				 * IDs (/mpls_tp=ID),first we will update all the VPN/LSP cross
+				 * connections present in DB.Once all the XConns are updated we
+				 * will get to know the Cross connections which are
+				 * deleted(present in oldMPLSCCs map).Using this map we will
+				 * identify the IDs which can be reused.
+				 */
+				final List<DBCrossConnection> updatedLSPXConnList = mplsXCConverter.updateLSPXConn(xConn, trafficType,
+								newlspXConnList);
+				if (updatedLSPXConnList != null && !updatedLSPXConnList.isEmpty()) {
+					removeXConnsFromOldMplsCCs(updatedLSPXConnList);
+				}
+				break;
+			default:
+				LOG.info("Unmanaged cross conneection type :" + specXConn.getMemberName().toString());
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(new DumpInfo(specXConn, "Unmanaged cross conneection type "));
+				}
+				break;
+			}
+		} catch (final PlugInException ex) {
+			LOG.error("Not possible to create a CrossConnection using information retrieved from the DB, due to an unexpected error: "
+					+ ex);
+		}
+
+		stats.end(PROCESS_CC);
+	}
+
+	/**
+	 * @param listDBCC
+	 * @param dbLspVPNXconnList
+	 */
+	private void removeXConnsFromOldMplsCCs(final List<DBCrossConnection> dbLspVPNXconnList) {
+		for (final DBCrossConnection dbXConnection : dbLspVPNXconnList) {
+
+			if (!oldMPLSCCs.isEmpty()) {
+				final String ccDn = CrossConnectionHelper.makeCCName(dbXConnection.getInformation());
+				final DBCrossConnection updatedXConn = oldMPLSCCs.remove(ccDn);
+				if (updatedXConn != null) {
+					LOG.debug(String.format("The MPLS XConn <%s> was updated successfully", ccDn));
+				}
+			}
+		}
+	}
+
+	/**
+	 * This method creates cross connection when the TPs are allocation to
+	 * control plane.
+	 *
+	 * @param controlplaneManagement
+	 * @param dbXconn
+	 * @param nmMode
+	 */
+	private void processControlPlaneMgmt(final String controlplaneManagement, final DBCrossConnection dbXconn,
+			final boolean nmMode) {
+		if (nmMode && controlplaneManagement.equalsIgnoreCase("yes")) {
+			TerminationPoint tp = null;
+			final DBList<DBCrossConnectableTp<?, ?>> dbXconnFromTpList = dbXconn.getAEnds();
+			final DBIterator<DBCrossConnectableTp<?, ?>> dbXconnFromTp = dbXconnFromTpList.iterator();
+			while (dbXconnFromTp.hasNext()) {
+				final DBCrossConnectableTp<?, ?> dbXconnFromTp1 = dbXconnFromTp.next();
+				final DBTp DbTp = (DBTp) dbXconnFromTp1;
+				tp = DbTp.getInformation();
+				controlPlaneManager.setConnectionState(tp);
+			}
+			dbXconnFromTp.close();
+		}
+	}
+
+	/**
+	 * This method creates cross connection when the TPs are allocation to
+	 * control plane.
+	 *
+	 * @param controlplaneManagement
+	 * @param xConnList
+	 * @param nmMode
+	 */
+	private void processControlPlaneMgmt(final String controlplaneManagement, final List<DBCrossConnection> xConnList,
+			final boolean nmMode) {
+		if (nmMode && controlplaneManagement.equalsIgnoreCase("yes")) {
+			TerminationPoint tp = null;
+			final List<TPDn> tpList = new ArrayList<TPDn>();
+			for (final DBCrossConnection dbXconn : xConnList) {
+				final DBList<DBCrossConnectableTp<?, ?>> dbXConnAEndList = dbXconn.getAEnds();
+				final DBIterator<DBCrossConnectableTp<?, ?>> dbXConnAEndListItr = dbXConnAEndList.iterator();
+				while (dbXConnAEndListItr.hasNext()) {
+					final DBCrossConnectableTp<?, ?> dbXconnFromTp1 = dbXConnAEndListItr.next();
+					final DBTp DbTp = (DBTp) dbXconnFromTp1;
+					tp = DbTp.getInformation();
+					if (!tpList.contains(tp.getName())) {
+						controlPlaneManager.setConnectionState(tp);
+						tpList.add(tp.getName());
+					}
+				}
+				dbXConnAEndListItr.close();
+			}
+		}
+	}
+
+	/**
+	 * This method is used to process topological link for Regeneration Group
+	 */
+	private void processRegGroupG709() {
+		TPDn aEndTP = null;
+		TPDn zEndTP = null;
+		final MutableBoolean created = new MutableBoolean();
+		final MEDn reqMEDn = helper.getMEDn();
+
+		aEndTP = getNaming().makePTPDn(reqMEDn, aEndCoord.getShelfId(), aEndCoord.getSlotId(), aEndCardId,
+				aEndCoord.getPortId());
+
+		zEndTP = getNaming().makePTPDn(reqMEDn, zEndCoord.getShelfId(), zEndCoord.getSlotId(), zEndCardId,
+				zEndCoord.getPortId());
+
+		if (aEndTP != null && zEndTP != null) {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug("aEndTP is : " + aEndTP.toString());
+				LOG.debug("zEndTP is : " + zEndTP.toString());
+			}
+			final TopologicalLink tpLink = xHelper.processTopologicalLink(X36TrafficType.PHYSICAL, aEndTP, aEndCardId, zEndTP,
+					zEndCardId);
+			if (tpLink != null) {
+				createOrUpdateTL(tpLink, created);
+				if (created.booleanValue()) {
+					LOG.info("Topological link created or updated in db ");
+				}
+			}
+		} else {
+			LOG.error("Topological link not created because of invalid aEnd and zEnd");
+		}
+
+	}
+
+	/**
+	 * This method is used to process the cross connection between the 2 FTPs of Regeneration Mode
+	 */
+	private void processRegModeG709() {
+
+		TPDn aEndCTP = null;
+		TPDn zEndCTP = null;
+		DBCrossConnection cc = null;
+		Integer rmKLevel = null;
+		X36TrafficType trafficType;
+		final X36ODUMapping oduMapping = new X36ODUMapping();
+		LOG.debug("Inside if loop : Regen transp is RM Transponder");
+
+		if (!aEndTpInfo.getWdmAdaptationPort().isPresentTranspInfo()) {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(aEndTpInfo, "Inside processRegModeG709() : SpecificPortInformation for "
+						+ "aEnd does not have TranspInfo"));
+			}
+			return;
+		}
+		final X36RmTransponder rmTransponder = aEndTpInfo.getWdmAdaptationPort().getTranspInfo().getRmTransponder();
+
+		if (rmTransponder.isPresentKLevel()) {
+			rmKLevel = rmTransponder.getKLevel().getValue();
+		}
+
+		if (rmKLevel == 1) {
+			trafficType = X36TrafficType.ODU1;
+
+		} else if (rmKLevel == 2) {
+			trafficType = X36TrafficType.ODU2;
+
+		} else {
+			trafficType = X36TrafficType.ODU3;
+
+		}
+
+		oduMapping.getOdu().setKLevel(rmKLevel);
+		aEndCTP = xUtils.getCtpDn(aEndTpInfo, aEndCoord, aEndCardId, oduMapping);
+		zEndCTP = xUtils.getCtpDn(zEndTpInfo, zEndCoord, zEndCardId, oduMapping);
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("processRegModeG709(): aEndCTP is :" + aEndCTP);
+			LOG.debug("processRegModeG709(): zEndCTP is :" + zEndCTP);
+		}
+
+		if ((aEndCTP != null) && (zEndCTP != null)) {
+			LOG.debug("Creating Cross Connection for NE:" + getNeLocator());
+			cc = createXConn(aEndCTP, zEndCTP, trafficType, true, true);
+
+		} else {
+			LOG.debug("Cross Connection process cannot be processed for RMTransponder as the values of CTP's are null for NE:"
+					+ getNeLocator());
+		}
+		if (cc == null) {
+			LOG.info(" Exception occurred while processing  Cross Connection for NE:" + getNeLocator());
+		} else {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug("XConn " + cc + " has been created in db for RMTransponder");
+			}
+		}
+
+	}
+
+	/**
+	 * This method returns true if the XConn received is for regeneration
+	 * group/mode or non G709 Regeneration. Else it returns false.
+	 *
+	 * @param xconn
+	 */
+	private boolean isRegeneration(final X36CrossConnection xconn) {
+		// Added for Regeneration Group / Mode and non G709 Regeneration
+		boolean regFlag = false;
+		try {
+			LOG.debug("Inside ProcessRegenInfo()");
+			if (!xconn.getSpecificCrossConnection().isBidirectional()) {
+				if (LOG.isDebugEnabled()) {
+					LOG.debug("The cross connection is not bidirectional,so dont proceed with code for regeneration " + xconn);
+				}
+				return regFlag;
+			}
+			X36SpecificPortInformation fromSpecPortInfo = null;
+			X36PortInformation fromPortInformation = null;
+			X36SpecificPortInformation toSpecPortInfo = null;
+			X36PortInformation toPortInformation = null;
+			X36OchId fromOchId = null;
+			X36OchId toOchId = null;
+			// The following code creates ctpDns for the FromTerminationChannel
+			// and the ToTerminationChannel
+			// of the XConn received and checks whether these ctpDns are present
+			// in the map TransponderCCInfo.
+			// If they are present then the XConn is for Regeneration Group/Mode
+			// or non-G709 Regeneration.
+			final X36PointToPoint pToPXConnForLink = xconn.getSpecificCrossConnection().getBidirectional();
+			final X36TerminationChannel tpFrom = pToPXConnForLink.getFromTermination();
+			final X36TerminationChannel tpTo = pToPXConnForLink.getToTermination();
+			if (!tpTo.isSimple() || !tpFrom.isSimple()) {
+				if (LOG.isDebugEnabled()) {
+					LOG.debug("The cross connection is not simple,so dont proceed with code for regeneration " + xconn);
+				}
+				return regFlag;
+			}
+			final X36TimeSlot fromTimeSlot = tpFrom.getSimple().getTimeSlot();
+			final X36TimeSlot toTimeSlot = tpTo.getSimple().getTimeSlot();
+			if (fromTimeSlot != null && fromTimeSlot.isOchId()) {
+				fromOchId = fromTimeSlot.getOchId();
+			}
+			if (toTimeSlot != null && toTimeSlot.isOchId()) {
+				toOchId = toTimeSlot.getOchId();
+			}
+
+			final X36ShelfId fromShelf = tpFrom.getSimple().getPort().getShelfId();
+			final X36CardId fromCard = tpFrom.getSimple().getPort().getCardId();
+			final X36PortId fromPort = tpFrom.getSimple().getPort().getPortId();
+			final MEDn meDn = helper.getMEDn();
+			final TPDn fromPtpdn = getNaming().makePTPDn(meDn, fromShelf,
+					fromCard, fromPort);
+			final PortInfo fromPortInfo = helper.getPort(fromShelf, fromCard, fromPort);
+			final X36ShelfId toShelf = tpTo.getSimple().getPort().getShelfId();
+			final X36CardId toCard = tpTo.getSimple().getPort().getCardId();
+			final X36PortId toPort = tpTo.getSimple().getPort().getPortId();
+			final TPDn toPtpdn = getNaming().makePTPDn(meDn, toShelf, toCard,
+					toPort);
+			final PortInfo toPortInfo = helper.getPort(toShelf, toCard, toPort);
+			if (fromPortInfo == null || fromPtpdn == null || toPortInfo == null || toPtpdn == null) {
+				if (LOG.isDebugEnabled()) {
+					LOG.debug("The portInfo and/or PtpDn of the FromTerminationChannel/ToTerminationChannel of the XConn is/are null ");
+					LOG.debug(new DumpInfo(fromPortInfo, "The portInfo of FromTerminationChannel"));
+					LOG.debug(new DumpInfo(toPortInfo, "The portInfo of ToTerminationChannel"));
+					LOG.debug(new DumpInfo(fromPtpdn, "The PtpDn of FromTerminationChannel"));
+					LOG.debug(new DumpInfo(toPtpdn, "The PtpDn of ToTerminationChannel"));
+				}
+				return regFlag;
+			}
+			fromPortInformation = fromPortInfo.getSyntax();
+			toPortInformation = toPortInfo.getSyntax();
+			if (fromPortInformation == null || toPortInformation == null) {
+				LOG.debug("The SpecificPortInformation of the FromTerminationChannel/ToTerminationChannel of the XConn is null ");
+				return regFlag;
+			}
+			fromSpecPortInfo = fromPortInformation.getSpecificPortInformation();
+			toSpecPortInfo = toPortInformation.getSpecificPortInformation();
+			fromCtpdn = xUtils.getCtpDn(fromPtpdn, fromSpecPortInfo, fromOchId);
+			toCtpdn = xUtils.getCtpDn(toPtpdn, toSpecPortInfo, toOchId);
+			aEndCoord = helper.getTransponderCCInfo().get(fromCtpdn);
+			zEndCoord = helper.getTransponderCCInfo().get(toCtpdn);
+			if (aEndCoord != null && zEndCoord != null) {
+				if (LOG.isDebugEnabled()) {
+					LOG.debug("aEndCoord value :" + aEndCoord.format().toString());
+					LOG.debug("zEndCoord value :" + zEndCoord.format().toString());
+				}
+				regFlag = true;
+			} else if (LOG.isDebugEnabled()) {
+				LOG.debug("aEndCoord and zEndCoord are null");
+				LOG.debug(new DumpInfo(aEndCoord, "The aEndCoord from TransponderCCInfo map"));
+				LOG.debug(new DumpInfo(zEndCoord, "The zEndCoord from TransponderCCInfo map"));
+			}
+
+		} catch (final Exception ex) {
+			LOG.error(new DumpInfo("Error while checking whether it is regeneration ", ex));
+		}
+		return regFlag;
+	}
+
+	/**
+	 * This method deletes the topological links which are remaining in OldTLs list from db Added for Regeneration Group G709
+	 */
+	private void discardOldTLs() {
+		if (sbiClient.isStandAlone()) {
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(String.format("Discarding unmanaged TLs on ME <%s>.", getNeLocator()));
+			}
+			for (final DBTopologicalLink oldTL : oldTLs.values()) {
+				if (oldTL != null) {
+					dbManager.delete(oldTL);
+				}
+			}
+			oldTLs.clear();
+		}
+	}
+
+	/**
+	 * This method loads the old topological links from the db and stores in the map 'oldTLs' if TMF is in standalone mode Added
+	 * for Regeneration Group
+	 */
+	protected void loadOldTLs() {
+		try {
+			if (sbiClient.isStandAlone()) {
+				final DBIterator<DBSubnetwork> snListItr = me.getSubnetworks().iterator();
+				while (snListItr.hasNext()) {
+					final SNDn subnetworkDn = snListItr.next().getDn();
+					if (subnetworkDn != null) {
+						final com.marconi.fusion.tmf.iterator.Iterator<DBTopologicalLink> topoLinkItr = DatabaseSupport
+								.getTopologicalLinks(dbManager, subnetworkDn, new PhLinkPredicate());
+						if (topoLinkItr != null) {
+							while (topoLinkItr.hasNext()) {
+								final DBTopologicalLink dbTL = topoLinkItr.next();
+								final String name = dbTL.getName();
+								oldTLs.put(name, dbTL);
+							}
+							topoLinkItr.close();
+						}
+					}
+				}
+				snListItr.close();
+			}
+
+		} catch (final Exception ex) {
+			LOG.error("Not able to load old topological links " + ex);
+		}
+	}
+
+	/**
+	 * @param tpLink
+	 * @param created
+	 * @return DBTopologicalLink This method removes the topological link object from the oldTLs list and proceeds to create or
+	 *         update the topological link in db Added for Regeneration Group G709
+	 */
+	protected DBTopologicalLink createOrUpdateTL(final TopologicalLink tpLink, final MutableBoolean created) {
+		final DBIdentifier id = new DnIdentifier<LinkDn>(tpLink.getName());// NameIdentifier.build(tpLink.getName().getLink());
+		DBTopologicalLink tl = oldTLs.remove(id.toString());
+		if (tl == null) {
+			tl = dbManager.getTopologicalLink(tpLink.getName());
+		}
+		final DBSubnetwork dbSn = me.getSubnetworks().get(0);
+		return createOrUpdateTL(dbSn, dbManager, tl, tpLink, created);
+	}
+
+	/**
+	 * @param dbSn
+	 * @param dbMgr
+	 * @param tl
+	 * @param tpLink
+	 * @param created
+	 * @return DBTopologicalLink This method creates or updates the DBTopologicalLink object in the db Added for Regeneration
+	 *         Group
+	 */
+	static public DBTopologicalLink createOrUpdateTL(final DBSubnetwork dbSn, final I36DatabaseManager dbMgr,
+			final DBTopologicalLink tl, final TopologicalLink tpLink, final MutableBoolean created) {
+		DBTopologicalLink temptl = tl;
+		if (temptl == null) {
+			temptl = dbMgr.createTopologicalLink(tpLink);
+			//Fix for TR HO99654
+			dbSn.getTopologicalLinks().add(temptl);
+			created.setValue(true);
+		} else {
+			dbMgr.update(temptl, tpLink, false);
+			// tl = dbMgr.getTopologicalLink(tpLink.getName());
+			created.setValue(false);
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.info(new DumpInfo(tpLink, String.format("Created/checked %s...", temptl.getName())));
+		}
+		return temptl;
+	}
+
+	/**
+	 *
+	 * This method creates fixed cross connections between the wdm port ctp and
+	 * corresponding regeneration module ftp and between the null port ctp and
+	 * corresponding regeneration module ftp for Regeneration Group and
+	 * Regeneration Mode
+	 *
+	 * @param helper
+	 */
+	protected void processRegenTransponderFixedXConn(final NeHelper helper) {
+
+		if (helper.getTransponderCCInfo().size() != 0) {
+
+			for (final Entry<TPDn, X36CoordPh> tp : helper.getTransponderCCInfo().entrySet()) {
+				/*
+				 * Fix for TR HM30380 and HM30503 Try - Catch has been shifted inside the for loop so that if one entry in the map
+				 * fails to process then also the exception will just be logged and the rest of the entries will continue to get
+				 * processed. *
+				 */
+				try {
+					TPDn transpFtpDn = null;
+					DBCrossConnection cc = null;
+					X36Frequency sinkFreq = null;
+					X36Frequency sourceFreq = null;
+
+					DBCrossConnectableTp<?, ?> aEnd = null;
+					DBCrossConnectableTp<?, ?> zEnd = null;
+					X36SpecificPortInformation transpSpecPortInfo = null;
+					final X36CoordPh transpCoord = tp.getValue();
+					if (LOG.isDebugEnabled()) {
+						LOG.debug("the entry set to be processed is :" + tp);
+					}
+					final X36CardId transpCardId = helper.getCardId(transpCoord.getShelfId().getValue(), transpCoord.getSlotId()
+							.getValue());
+					if (transpCardId == null) {
+						continue;
+					}
+					final PortInfo transpPortInfo = helper.getPort(transpCoord.getShelfId().getValue(), transpCardId.getValue(),
+							transpCoord.getPortId().getValue());
+
+					if (transpPortInfo == null) {
+						LOG.debug("transpInfo is null");
+						// transpSpecPortInfo =
+						// getTransponderSpecPortInfo(transpCoord,
+						// transpCardId);
+						transpSpecPortInfo = xUtils.getTransponderSpecPortInfo(transpCoord, transpCardId);
+					} else {
+						transpSpecPortInfo = transpPortInfo.getSyntax().getSpecificPortInformation();
+					}
+					if (LOG.isDebugEnabled()) {
+						LOG.debug("transpSpecPortInfo is :" + transpSpecPortInfo);
+					}
+					if (transpSpecPortInfo != null) {
+						final X36WdmAdaptPort wdmAdaptPort = transpSpecPortInfo.getWdmAdaptationPort();
+						if (wdmAdaptPort.getTranspInfo().isLmTransponder()) {
+							LOG.debug("Processing fixed cc for Regeneration Group");
+							final X36LmTransponder lmTransp = wdmAdaptPort.getTranspInfo().getLmTransponder();
+							if (lmTransp.getDigitalWrapperType().isStandardG709()) {
+								if (LOG.isDebugEnabled()) {
+									LOG.debug(new DumpInfo(transpSpecPortInfo, String.format(
+											"processRegenTransponderFixedXConn():"
+													+ "Specific port info for Lm Transponder in Regeneration Group",
+													getNeLocator())));
+									/*
+									 * Fix for TR HM30380 and HM30503 Here if Link Frequency source and sink were present in the
+									 * lmtransponder configuration it was being used. This has been removed and only
+									 * OpticFrequency sink and source should be used here for LmTransponder
+									 */
+								}
+
+								sinkFreq = wdmAdaptPort.getOpticFrequencySink();
+								sourceFreq = wdmAdaptPort.getOpticFrequencySource();
+
+							} else {
+								LOG.warn(new DumpInfo(transpSpecPortInfo, String.format("processRegenTransponderFixedXConn():"
+										+ "This LMTransponder is not standard G709.So fixed Xconn will not be created.")));
+							}
+
+						} else if (wdmAdaptPort.getTranspInfo().isRmTransponder()) {
+							LOG.debug("Processing fixed cc for Regeneration Mode");
+							final X36RmTransponder rmTransp = wdmAdaptPort.getTranspInfo().getRmTransponder();
+							final X36PortId clientPort = rmTransp.getBSideClientPort();
+							if (rmTransp.getDigitalWrapperType().isStandardG709()) {
+								if (clientPort.equals(transpCoord.getPortId())) {
+									LOG.debug("Processing fixed cc for client port in Regeneration Mode");
+									sinkFreq = rmTransp.getBSideFrequencySink();
+									sourceFreq = rmTransp.getBSideFrequencySource();
+								} else {
+									sinkFreq = wdmAdaptPort.getOpticFrequencySink();
+									sourceFreq = wdmAdaptPort.getOpticFrequencySource();
+								}
+
+							} else {
+								LOG.warn(new DumpInfo(transpSpecPortInfo, String.format("processRegenTransponderFixedXConn():"
+										+ "This RMTransponder is not standard G709.So fixed Xconn will not be created.")));
+							}
+						}
+					}
+					if (sinkFreq != null && sourceFreq != null) {
+						if (sinkFreq.getValue() != sourceFreq.getValue()) {
+							LOG.error("Optic Frequency Sink <" + sinkFreq.getValue() + "> differs from Optic Frequency Source <"
+									+ sourceFreq.getValue() + ">");
+						}
+						final MEDn reqMEDn = helper.getMEDn();
+
+						transpFtpDn = getNaming().makeFTPDn(reqMEDn,
+								transpCoord.getShelfId(),
+								transpCoord.getSlotId(),
+								transpCardId, transpCoord.getPortId(), sinkFreq);
+					}
+
+					if (transpFtpDn != null) {
+						aEnd = xUtils.getCTP(getNaming().getChannelId(dbManager.getTP(tp.getKey())), X36TrafficType.OCH);
+						if (LOG.isDebugEnabled()) {
+							LOG.debug("zEnd DBTp is :" + dbManager.getTP(transpFtpDn));
+						}
+						zEnd = xUtils.getFTP(getNaming().getChannelId(dbManager.getTP(transpFtpDn)), X36TrafficType.OCH, me);
+					}
+
+					if ((aEnd != null) && (zEnd != null)) {
+						if (LOG.isDebugEnabled()) {
+							LOG.debug("aEnd is: " + aEnd.getName());
+							LOG.debug("zEnd is: " + zEnd.getName());
+						}
+						cc = createXConn(aEnd, zEnd, X36TrafficType.OCH, true, true, false);
+						// cc = createXConn(tpFrom, tpTo, X36TrafficType.OCH,
+						// true, true, false);
+					} else {
+						LOG.debug("XConn cannot be proceed as tpFrom and tpTo are null");
+					}
+					if (cc == null) {
+						LOG.warn(new DumpInfo(new Object[] { tp.getKey().getTp(), X36TrafficType.OCH }, String.format(
+								"XConn for this ctp not yet managed on ME <%s>...", getNeLocator())));
+					} else {
+						if (LOG.isDebugEnabled()) {
+							LOG.debug("XConn " + cc + " has been created in db");
+						}
+					}
+				} catch (final NullPointerException ex) {
+					LOG.error(new DumpInfo(ex, String.format("NullPointerException has occurred for the key %s and value %s",
+							tp.getKey(), tp.getValue())));
+				} catch (final Exception ex) {
+					LOG.error(new DumpInfo("Not able to create process fixed cross connections for regeneration "
+							+ "transponders ", ex));
+				}
+			}
+		}
+	}
+
+	/* ********************************************************************** */
+	public static CrossConnect createFixedXConn(final DBCrossConnectableTp<?, ?> connectableTpFrom,
+			final DBCrossConnectableTp<?, ?> connectableTpTo, final LayerRate layerRate) {
+		/* ************************************************************************** */
+		final SNCType sncType = SNCType.ST_SIMPLE;
+		final boolean fBidirectional = true;
+		final boolean isNotConfigurable = true;
+		return createCrossConnect(connectableTpFrom, connectableTpTo, layerRate, sncType, fBidirectional, isNotConfigurable);
+	}
+
+	/**
+	 * This method creates a multi Z End Cross Connection
+	 *
+	 * @param connectableTpFrom
+	 *            - DBCrossConnectableTp of A End
+	 * @param connectableTp1To
+	 *            - DBCrossConnectableTp of Z End1
+	 * @param connectableTp2To
+	 *            - DBCrossConnectableTp of Z End2
+	 * @param layerRate
+	 *            - Layer Rate
+	 * @return CrossConnect
+	 */
+	public static CrossConnect createMultiZEndXConn(final DBCrossConnectableTp<?, ?> connectableTpFrom,
+			final DBCrossConnectableTp<?, ?> connectableTp1To, final DBCrossConnectableTp<?, ?> connectableTp2To,
+			final LayerRate layerRate) {
+		/**
+		 * 'ADD_DROP_Z' (MultiZEndXConn) is considered in TMF as an 'ADD_DROP_A' only
+		 */
+		final SNCType sncType = SNCType.ST_ADD_DROP_A;
+		final boolean fBidirectional = true;
+		final boolean isNotConfigurable = true;
+		return createMultiZEndCrossConnect(connectableTpFrom, connectableTp1To, connectableTp2To, layerRate, sncType,
+				fBidirectional, isNotConfigurable);
+	}
+
+	/* ********************************************************************** */
+	public static CrossConnect createCrossConnect(final DBCrossConnectableTp<?, ?> connectableTpFrom,
+			final DBCrossConnectableTp<?, ?> connectableTpTo, final LayerRate layerRate, final SNCType sncType,
+			final boolean fBidirectional, final boolean isNotConfigurable) {
+		/* ************************************************************************** */
+		if ((connectableTpFrom == null) || (connectableTpTo == null)) {
+			return null;
+		}
+
+		final CrossConnect crossConn = new CrossConnect();
+		// riempio la struttura CrossConnect
+		// CrossConnect ::= SEQUENCE {
+		// name CCDn,
+		// active BOOLEAN,
+		// direction ConnectionDirection,
+		// ccType SNCType,
+		// layerRate LayerRate,
+		// aEndNameList TPDnList,
+		// zEndNameList TPDnList,
+		// additionalInfo NVSList
+		// }
+		// CCDn dn = TmfNameUtilities.makeCCDn((TPDn)
+		// (connectableTpFrom.getDn()), (TPDn) (connectableTpTo.getDn()), true);
+
+		// crossConn.setName(dn);
+
+		crossConn.setActive(true);
+
+		final ConnectionDirection connDir = crossConn.getDirection();
+		if (fBidirectional) {
+			connDir.setCd_bi();
+		} else {
+			connDir.setCd_uni();
+		}
+
+		crossConn.setCcType(sncType);
+		crossConn.setLayerRate(layerRate);
+
+		final PointDn connectableFromPointDn = new PointDn();
+		connectableFromPointDn.setTpDn((TPDn) connectableTpFrom.getDn());
+		crossConn.getAEndNameList().add(connectableFromPointDn);
+
+		final PointDn connectableToPointDn = new PointDn();
+		connectableToPointDn.setTpDn((TPDn) connectableTpTo.getDn());
+		crossConn.getZEndNameList().add(connectableToPointDn);
+
+		// additionalInfo
+
+		final AdditionalInfoManager mgr = AdditionalInfoManager.getManager();
+		final Profile prof = mgr.getProfile();
+		prof.setProperty(AdditionalInfoManager.Standard.Fixed, isNotConfigurable ? "True" : "False");
+
+		final AdditionalInfo ai = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.CrossConnection, prof);
+
+		crossConn.setAdditionalInfo(ai);
+
+		// NVSList nvsList = new NVSList();
+		// Utilities.addNameAndStringValue(nvsList, "Fixed", isNotConfigurable ?
+		// "True" : "False");
+		// Utilities.addNameAndStringValue(nvsList, "Virtual", "False");
+
+		// NameAndStringValue nsv = new NameAndStringValue();
+		// nsv.setName("Fixed");
+		// nsv.setValue(isNotConfigurable ? "True" : "False");
+		// nvsList.add(nsv);
+		// crossConn.getAdditionalInfo().set(nvsList);
+
+		return crossConn;
+	}
+
+	/**
+	 * This method creates a CrossConnect object from one A End and two Z Ends
+	 *
+	 * @param connectableTpFrom
+	 *            - DBCrossConnectableTp of A End
+	 * @param connectableTp1To
+	 *            - DBCrossConnectableTp of Z End1
+	 * @param connectableTp2To
+	 *            - DBCrossConnectableTp of Z End2
+	 * @param layerRate
+	 *            - Layer Rate
+	 * @param sncType
+	 *            - SNC Type
+	 * @param fBidirectional
+	 *            represents whether Cross Connect is Bi-Directional or not
+	 * @param isNotConfigurable
+	 *            represents whether Cross Connect is configurable or not
+	 * @return
+	 */
+	public static CrossConnect createMultiZEndCrossConnect(final DBCrossConnectableTp<?, ?> connectableTpFrom,
+			final DBCrossConnectableTp<?, ?> connectableTp1To, final DBCrossConnectableTp<?, ?> connectableTp2To,
+			final LayerRate layerRate, final SNCType sncType, final boolean fBidirectional, final boolean isNotConfigurable) {
+		if ((connectableTpFrom == null) || (connectableTp1To == null) || (connectableTp2To == null)) {
+			return null;
+		}
+
+		final CrossConnect crossConn = new CrossConnect();
+
+		// Adding ProtectionRole for MultiZEnd CrossConnection created for Intra
+		// /Inter Card Protection
+		final Profile profile = LayeredParameterManager.getManager().getProfile();
+		final NameAndStringValue primary = LayeredParameterManager.getTransmissionParameter(layerRate,
+				ParameterName.ProtectionRole.name(), "Primary", profile);
+		final NameAndStringValue backup = LayeredParameterManager.getTransmissionParameter(layerRate,
+				ParameterName.ProtectionRole.name(), "Backup", profile);
+
+		final DBTp dbTpTo = DBTp.class.cast(connectableTp1To);
+		final DBTp dbTpToProt = DBTp.class.cast(connectableTp2To);
+
+		final String toTpProtProtectionRole = AdditionalInfoUtils.find(dbTpToProt.getInformation().getTransmissionParams().get(0)
+				.getTransmissionParams(), ParameterName.ProtectionRole.name());
+		final String toTpProtectionRole = AdditionalInfoUtils.find(dbTpTo.getInformation().getTransmissionParams().get(0)
+				.getTransmissionParams(), ParameterName.ProtectionRole.name());
+
+		// Added condition as part of fix for TR HL92499
+		// check if Protection role is already Set to dbTp
+		// Added empty check as part of TR HP63590 fix. Because due to new Fort
+		// changes the variable is set with empty value instead of null.
+		if (toTpProtectionRole == null || toTpProtectionRole.isEmpty()) {
+			TmfUtilities2.addTransmissionParameter(dbTpTo, layerRate, primary);
+		}
+		if (toTpProtProtectionRole == null || toTpProtProtectionRole.isEmpty()) {
+			TmfUtilities2.addTransmissionParameter(dbTpToProt, layerRate, backup);
+		}
+
+		/**
+		 * 'ADD_DROP_Z' (MultiZEndXConn) is considered in TMF as an 'ADD_DROP_A' only So CCDn is formed by giving 'FromTp' as
+		 * 'Z1', 'FromTpProt' as 'Z2' and 'ToTp' as 'A' Here 'Z1' is 'connectableTp1To', 'Z1' is 'connectableTp2To' and 'A' is
+		 * 'connectableTpFrom' It forms a CCDn as 'Z1[Z2]<-->A' which is nothing but an 'ADD_DROP_A'
+		 */
+		// CCDn dn = TmfNameUtilities.makeCCDn((TPDn) (dbTpTo.getDn()), (TPDn)
+		// (dbTpToProt.getDn()), (TPDn) (dbTpFrom.getDn()),
+		// true);
+
+		// crossConn.setName(dn);
+
+		crossConn.setActive(true);
+
+		final ConnectionDirection connDir = crossConn.getDirection();
+		if (fBidirectional) {
+			connDir.setCd_bi();
+		} else {
+			connDir.setCd_uni();
+		}
+
+		crossConn.setCcType(sncType);
+
+		crossConn.setLayerRate(layerRate);
+
+		/**
+		 * 'ADD_DROP_Z' (MultiZEndXConn) is considered in TMF as an 'ADD_DROP_A' only CCDn is created as 'Z1[Z2]<-->A' which is
+		 * nothing but an 'ADD_DROP_A' So here 'Z1' and 'Z2' is added in 'AEnds' list and 'A' is added in 'ZEnd' list. Here 'Z1'
+		 * is 'connectableTp1To', 'Z1' is 'connectableTp2To' and 'A' is 'connectableTpFrom'
+		 */
+		final PointDn connectablePoint1To = new PointDn();
+		connectablePoint1To.setTpDn((TPDn) (connectableTp1To.getDn()));
+		crossConn.getAEndNameList().add(connectablePoint1To);
+
+		final PointDn connectablePoint2To = new PointDn();
+		connectablePoint2To.setTpDn((TPDn) (connectableTp2To.getDn()));
+		crossConn.getAEndNameList().add(connectablePoint2To);
+
+		final PointDn connectablePointFrom = new PointDn();
+		connectablePointFrom.setTpDn((TPDn) (connectableTpFrom.getDn()));
+		crossConn.getZEndNameList().add(connectablePointFrom);
+
+		// additionalInfo
+		final AdditionalInfoManager mgr = AdditionalInfoManager.getManager();
+		final Profile prof = mgr.getProfile();
+		prof.setProperty(AdditionalInfoManager.Standard.Fixed, isNotConfigurable ? "True" : "False");
+
+		final AdditionalInfo ai = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.CrossConnection, prof);
+
+		crossConn.setAdditionalInfo(ai);
+
+		return crossConn;
+	}
+
+	// private DBCrossConnectableTp getTP(X36TerminationChannel channel,
+	// X36TrafficType tt) {
+	// DBCrossConnectableTp tp = null;
+	// if (channel.isSimple()) {
+	// tp = getTP(channel.getSimple(), tt);
+	// } else {
+	// tp = getTP(channel.getConcatenated(), tt);
+	// }
+	// if ((tp == null) && log.isWarnEnabled())
+	// log.warn(new DumpInfo(new Object[] {channel, tt},
+	// String.format("CTP NOT FOUND for ME <%s>...", getNeLocator())));
+	// return tp;
+	// }
+
+	// private DBCrossConnectableTp getTP(X36ChannelIdentification channel,
+	// X36TrafficType tt) {
+	// /**
+	// * potrebbe essere un CTP o un FTP
+	// */
+	// DBCrossConnectableTp outTp = null;
+	// DBCrossConnectableTp tmpTp = getCTP(channel, tt);
+	// if (tmpTp != null) {
+	// outTp = tmpTp;
+	// } else {
+	// /*
+	// * provo a vedere se e` un FTP
+	// * controllare che sia klm
+	// */
+	//
+	// log.debug(new DumpInfo(channel,
+	// "Cannot load CTP for channel, searching for FTP"));
+	//
+	// if (!channel.getTimeSlot().isKlm()) {
+	// log.error(new DumpInfo(channel.getTimeSlot(),
+	// "Time slot not supported for FTPs"));
+	// return null;
+	// }
+	//
+	// com.marconi.fusion.tmf.plugIn.types.LayerRate lR =
+	// getLayerRate(channel.getTimeSlot().getKlm());
+	//
+	// /**
+	// * Dal cardId tiro fuori lo slotId utilizzando l'neHelper
+	// */
+	// X36SlotId slotId = helper.getSlotId(channel.getPort());
+	//
+	// TPDn ftpDn = helper.getSBI().getNaming().makeFTPDn(
+	// helper.getNeId(), channel.getPort().getShelfId(),
+	// slotId,
+	// channel.getPort().getCardId(),
+	// channel.getPort().getPortId(),
+	// channel.getTimeSlot().getKlm().getAu4().getValue(),
+	// channel.getTimeSlot().getKlm().getTu3().getValue(),
+	// channel.getTimeSlot().getKlm().getTu2().getValue(),
+	// channel.getTimeSlot().getKlm().getTu12().getValue(), lR);
+	//
+	// DBFtp dbFtp = helper.getSBI().getDbManager().getFTP(ftpDn);
+	// if (dbFtp == null) {
+	// log.debug(new DumpInfo(ftpDn, "Cannot find FTP"));
+	// }
+	//
+	// outTp = dbFtp;
+	// }
+	// return outTp;
+	// }
+
+	// private DBCrossConnectableTp getTP(X36ConcatenatedChannelIdentification
+	// channel, X36TrafficType tt) {
+	// /**
+	// * per ora si supportano solo CTP concatenati
+	// */
+	// DBCrossConnectableTp dbCTP = getCTP(channel, tt);
+	// return dbCTP;
+	// }
+
+	/*
+	 * MEUser
+	 */
+
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	public DBCrossConnection createXConn(final DBCrossConnectableTp<?, ?> connectableTpFrom,
+			final DBCrossConnectableTp<?, ?> tpProt, final X36TrafficType tt, final boolean bidirectional,
+			final boolean isNotConfigurable, final boolean isBraodCast) {
+		/* ************************************************************************** */
+
+		final CrossConnect crossConn = new CrossConnect();
+
+		// CCDn dn = TmfNameUtilities.makeCCDn(tpFrom.getDn(), tpTo.getDn(),
+		// bidirectional);
+		// CCDn dn = TmfNameUtilities.makeCCDn((TPDn)
+		// (connectableTpFrom.getDn()), (TPDn) (tpProt.getDn()), bidirectional);
+
+		// crossConn.setName(dn);
+
+		final Collection<DBCrossConnectableTp> dbTps = new ArrayList<DBCrossConnectableTp>(Arrays.asList(tpProt));
+		dbTps.add(connectableTpFrom);
+
+		final LayerRate layerRate = LayerRateConverter.convertToLayerRate(tt, dbTps);
+
+		if (layerRate == null) {
+			LOG.warn("Cannot convert " + tt.getEnum() + " in the suitable layer rate. Skipping this cross-connection");
+			return null;
+		}
+
+		crossConn.setLayerRate(layerRate);
+
+		// riempio la struttura CrossConnect
+		// CrossConnect ::= SEQUENCE {
+		// name CCDn,
+		// active BOOLEAN,
+		// direction ConnectionDirection,
+		// ccType SNCType,
+		// layerRate LayerRate,
+		// aEndNameList TPDnList,
+		// zEndNameList TPDnList,
+		// additionalInfo NVSList
+		// }
+		crossConn.setActive(true);
+
+		final SNCType sncType = new SNCType(SNCType.st_simple);
+		crossConn.setCcType(sncType);
+
+		final PointDn connectableFromPointDn = new PointDn();
+		connectableFromPointDn.setTpDn((TPDn) connectableTpFrom.getDn());
+		crossConn.getAEndNameList().add(connectableFromPointDn);
+
+		final PointDn connectabletpProtPointDn = new PointDn();
+		connectabletpProtPointDn.setTpDn((TPDn) tpProt.getDn());
+		crossConn.getZEndNameList().add(connectabletpProtPointDn);
+
+		if (bidirectional) {
+			crossConn.getDirection().setCd_bi();
+		} else {
+			crossConn.getDirection().setCd_uni();
+		}
+
+		final AdditionalInfoManager mgr = AdditionalInfoManager.getManager();
+		final Profile prof = mgr.getProfile();
+		prof.setProperty(AdditionalInfoManager.Standard.Fixed, isNotConfigurable ? "True" : "False");
+
+		final AdditionalInfo ai = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.CrossConnection, prof);
+
+		crossConn.setAdditionalInfo(ai);
+
+		// NVSList nvsList = new NVSList();
+		// Utilities.addNameAndStringValue(nvsList, "Fixed", isNotConfigurable ?
+		// "True" : "False");
+		// Utilities.addNameAndStringValue(nvsList, "Virtual", "False");
+
+		// NameAndStringValue nsv = new NameAndStringValue();
+		//
+		// // additionalInfo
+		// nsv.setName("Fixed");
+		// nsv.setValue(isNotConfigurable ? "True" : "False");
+		//
+		// nvsList.add(nsv);
+		// crossConn.getAdditionalInfo().set(nvsList);
+
+		final MutableBoolean created = new MutableBoolean();
+		final DBCrossConnection cc = createOrUpdateCC(crossConn, created);
+
+		if (created.booleanValue()) {
+			cc.getAEnds().add(connectableTpFrom);
+			cc.getZEnds().add(tpProt);
+			if (isBraodCast) {
+				int legCnt = 0;
+				final LegCountInfo addLegCnt = (LegCountInfo) connectableTpFrom.getAdditionalInformation(LegCountInfo.NAME);
+				if (addLegCnt != null) {
+					legCnt = addLegCnt.getSyntax().getValue();
+					legCnt++;
+					connectableTpFrom.setAdditionalInformation(new LegCountInfo(new IntegerType(legCnt)));
+				} else {
+					legCnt++;
+					connectableTpFrom.addAdditionalInformation(new LegCountInfo(new IntegerType(legCnt)));
+				}
+			}
+		}
+
+		return cc;
+	}
+
+	public DBCrossConnection createXConn(final TPDn tpFrom, final TPDn tpTo, final X36TrafficType tt,
+			final boolean bidirectional, final boolean isNotConfigurable) {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("Processing of CrossConnection started for RMTransponder....");
+		}
+		final CrossConnect crossConn = new CrossConnect();
+
+		final Collection<TPDn> dbTps = new ArrayList<TPDn>(Arrays.asList(tpTo));
+		dbTps.add(tpFrom);
+
+		final LayerRate layerRate = LayerRateConverter.convertToLayerRateRegen(tt, dbTps, helper);
+		if (layerRate == null) {
+			LOG.warn("Cannot convert " + tt.getEnum() + " in the suitable layer rate. Skipping this cross-connection");
+			return null;
+		}
+
+		crossConn.setLayerRate(layerRate);
+		crossConn.setActive(true);
+
+		final SNCType sncType = new SNCType(SNCType.st_simple);
+		crossConn.setCcType(sncType);
+
+		final PointDn connectabletpFromPointDn = new PointDn();
+		connectabletpFromPointDn.setTpDn(tpFrom);
+		crossConn.getAEndNameList().add(connectabletpFromPointDn);
+
+		final PointDn connectabletpToPointDn = new PointDn();
+		connectabletpToPointDn.setTpDn(tpTo);
+		crossConn.getZEndNameList().add(connectabletpToPointDn);
+
+		if (bidirectional) {
+			crossConn.getDirection().setCd_bi();
+		} else {
+			crossConn.getDirection().setCd_uni();
+		}
+
+		final AdditionalInfoManager mgr = AdditionalInfoManager.getManager();
+		final Profile prof = mgr.getProfile();
+		prof.setProperty(AdditionalInfoManager.Standard.Fixed, isNotConfigurable ? "True" : "False");
+
+		final AdditionalInfo ai = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.CrossConnection, prof);
+		crossConn.setAdditionalInfo(ai);
+
+		final MutableBoolean created = new MutableBoolean();
+		final DBCrossConnection cc = createOrUpdateCC(crossConn, created);
+
+		// Fix for TR HM10066
+		final DBCrossConnectableTp<?, ?> dbTpFrom = dbManager.getCTP(tpFrom);
+		final DBCrossConnectableTp<?, ?> dbTpTo = dbManager.getCTP(tpTo);
+		if (dbTpFrom != null && dbTpTo != null) {
+			if (created.booleanValue()) {
+				cc.getAEnds().add(dbTpFrom);
+				cc.getZEnds().add(dbTpTo);
+				if (LOG.isDebugEnabled()) {
+					LOG.debug("XConn " + cc + " has been created in db for RMTransponder");
+				}
+
+			}
+		} else {
+			LOG.error(String
+					.format("Inside  createXConn:AEnds and ZEnds are not set for Cross Connection as either of values are null"));
+		}
+		return cc;
+	}
+
+	/**
+	 * This method is used to create a simple Crossconnection between WDM PORT
+	 * and WDM Adapt port
+	 *
+	 * @param tpFrom
+	 * @param (DBCrossConnectableTp)tpFromProt
+	 * @param trafficType
+	 * @param bidirectional
+	 * @param isprotected
+	 * @return
+	 */
+	@SuppressWarnings("rawtypes")
+	public DBCrossConnection createSimpleXconn(final DBCrossConnectableTp<?, ?> tpFrom,
+			final DBCrossConnectableTp<?, ?> tpFromProt, final X36TrafficType trafficType, final boolean bidirectional,
+			final boolean isprotected) {
+
+		final CrossConnect crossConn = new CrossConnect();
+		final Collection<DBCrossConnectableTp> dbTps = new ArrayList<DBCrossConnectableTp>(
+				Arrays.asList((DBCrossConnectableTp) tpFromProt));
+		dbTps.add(tpFrom);
+		dbTps.add(tpFromProt);
+
+		final LayerRate layerRate = LayerRateConverter.convertToLayerRate(trafficType, dbTps);
+		if(layerRate!=null){
+			crossConn.setLayerRate(layerRate);
+
+			final Profile profile = LayeredParameterManager.getManager().getProfile();
+
+			final DBCrossConnectableTp<?, ?> dbTpFrom = DBCrossConnectableTp.class.cast(tpFrom);
+			final DBCrossConnectableTp<?, ?> dbTpTo = DBCrossConnectableTp.class.cast(tpFromProt);
+
+			// IF Protected WDM Port is getting processed set the role as
+			// Primary
+			if (isprotected) {
+				final NameAndStringValue primary = LayeredParameterManager.getTransmissionParameter(layerRate,
+						ParameterName.ProtectionRole.name(), "Primary", profile);
+				TmfUtilities2.addTransmissionParameter((DBTp) dbTpFrom, layerRate, primary);
+			} else {// IF Protecting WDM Port is getting processed set the role
+				// as BackUp ,as it is the Back up for primary
+				final NameAndStringValue backup = LayeredParameterManager.getTransmissionParameter(layerRate,
+						ParameterName.ProtectionRole.name(), "Backup", profile);
+				TmfUtilities2.addTransmissionParameter((DBTp) dbTpFrom, layerRate, backup);
+			}
+
+			// CCDn ccDn =
+			// TmfNameUtilities.makeCCDn(((DBConnectionTerminationPoint)dbTpFrom).getDn(),
+			// ((DBConnectionTerminationPoint)dbTpTo).getDn(), bidirectional);
+
+			// crossConn.setName(ccDn);
+
+			crossConn.setActive(true);
+
+			final SNCType sncType = new SNCType(SNCType.st_simple);
+			crossConn.setCcType(sncType);
+
+			final PointDn connectableAEndPointDn = new PointDn();
+			connectableAEndPointDn.setTpDn((TPDn) dbTpFrom.getDn());
+			crossConn.getAEndNameList().add(connectableAEndPointDn);
+
+			final PointDn connectableZEndPointDn = new PointDn();
+			connectableZEndPointDn.setTpDn((TPDn) dbTpTo.getDn());
+			crossConn.getZEndNameList().add(connectableZEndPointDn);
+
+			if (bidirectional) {
+				crossConn.getDirection().setCd_bi();
+			} else {
+				crossConn.getDirection().setCd_uni();
+			}
+
+			final AdditionalInfoManager mgr = AdditionalInfoManager.getManager();
+			final Profile prof = mgr.getProfile();
+
+			final AdditionalInfo additionalInfo = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.CrossConnection,
+					prof);
+
+			crossConn.setAdditionalInfo(additionalInfo);
+
+			final MutableBoolean created = new MutableBoolean();
+			final DBCrossConnection cc = createOrUpdateCC(crossConn, created);
+			if ((cc != null) && (LOG.isDebugEnabled())) {
+				LOG.debug("Creating Cross Connection for NE:" + getNeLocator());
+			}
+			CrossConnectionHelper.updateUnreliableResource(tpFrom, dbTpTo);
+
+			if (created.booleanValue()) {
+
+				cc.getAEnds().add(dbTpFrom);
+
+				cc.getZEnds().add(dbTpTo);
+			}
+
+			TpUtils.updateConnectionState(tpFromProt);
+			TpUtils.updateConnectionState(tpFrom);
+
+			return cc;
+		}
+		return null;
+	}
+
+	/*
+	 * MOVED to
+	 * com.marconi.fusion.tmf.i36PlugIn.objectManagement.CrossConnectionHelper
+	 *
+	 * public void updateUnreliableResource(DBCrossConnectableTp tp,
+	 * DBCrossConnectableTp tpProtectionRelated) { String aiName =
+	 * ProprietaryAdditionalInfo.UnreliableResource.name();
+	 *
+	 * // TpHelper.updateAdditionalInfo(tp, aiName,
+	 * tpProtectionRelated.getName());
+	 *
+	 * TPDn dn = tpProtectionRelated.getDn(); String relatedName = ""; if
+	 * (dn.getTp().isFtp()) relatedName = Naming.makeValue(dn.getTp().getFtp());
+	 * else if (dn.getTp().isPtp()) relatedName =
+	 * Naming.makeValue(dn.getTp().getPtp());
+	 *
+	 * if (dn.isPresentCtp()) relatedName += Naming.makeValue(dn.getCtp());
+	 *
+	 * TpUtils.updateAdditionalInfo(tp, aiName, relatedName); }
+	 */
+
+	/*
+	 * MEUser
+	 */
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	public DBCrossConnection createXConn(final X36ProtectedRing pProtRing, final X36TrafficType tt, final boolean bidirectional) {
+		/* ************************************************************************** */
+		final CrossConnect crossConn = new CrossConnect();
+
+		final X36TerminationChannelProtection aTP = pProtRing.getFromTermination();
+		final X36TerminationChannelProtection zTP = pProtRing.getToTermination();
+
+		final ConnectableTPHolder[] froms = { new ConnectableTPHolder(), new ConnectableTPHolder() };
+		final ConnectableTPHolder[] tos = { new ConnectableTPHolder(), new ConnectableTPHolder() };
+		if (xUtils.getCTPs(aTP, zTP, tt, froms, tos) == false) {
+			return null;
+		}
+
+		final DBCrossConnectableTp<?, ?> tpFrom = froms[0].getTarget();
+		final DBCrossConnectableTp<?, ?> tpProt = froms[1].getTarget();
+		final DBCrossConnectableTp<?, ?> tpTo = tos[0].getTarget();
+		final DBCrossConnectableTp<?, ?> tpProtTo = tos[1].getTarget();
+
+		/**
+		 * RM - aggiungo nei leyeredParameters di from e prot l'informazione sul protection role (chi e` "primary" e chi e`
+		 * "backup"). Vedere SPR 15839
+		 */
+
+		final Collection<DBCrossConnectableTp> dbTps = new ArrayList<DBCrossConnectableTp>(Arrays.asList(tpTo));
+		dbTps.add(tpFrom);
+		dbTps.add(tpProt);
+		dbTps.add(tpProtTo);
+
+		final LayerRate layerRate = LayerRateConverter.convertToLayerRate(tt, dbTps);
+		if (layerRate == null) {
+			LOG.warn("Cannot convert " + tt.getEnum() + " in the suitable layer rate. Skipping this cross-connection");
+			return null;
+		}
+		crossConn.setLayerRate(layerRate);
+
+		final Profile profile = LayeredParameterManager.getManager().getProfile();
+		final NameAndStringValue primary = LayeredParameterManager.getTransmissionParameter(layerRate,
+				ParameterName.ProtectionRole.name(), "Primary", profile);
+		final NameAndStringValue backup = LayeredParameterManager.getTransmissionParameter(layerRate,
+				ParameterName.ProtectionRole.name(), "Backup", profile);
+
+		TmfUtilities2.addTransmissionParameter((DBTp) tpFrom, layerRate, primary);
+		TmfUtilities2.addTransmissionParameter((DBTp) tpTo, layerRate, backup);
+
+		crossConn.setActive(true);
+
+		final SNCType sncType = new SNCType(SNCType.st_double_add_drop);
+		crossConn.setCcType(sncType);
+
+		final PointDn connectableAEndPointDn = new PointDn();
+		connectableAEndPointDn.setTpDn((TPDn) tpFrom.getDn());
+		crossConn.getAEndNameList().add(connectableAEndPointDn);
+
+		connectableAEndPointDn.setTpDn((TPDn) tpProt.getDn());
+		crossConn.getAEndNameList().add(connectableAEndPointDn);
+
+		final PointDn connectableZEndPointDn = new PointDn();
+		connectableZEndPointDn.setTpDn((TPDn) tpTo.getDn());
+		crossConn.getZEndNameList().add(connectableZEndPointDn);
+
+		connectableZEndPointDn.setTpDn((TPDn) tpProtTo.getDn());
+		crossConn.getZEndNameList().add(connectableZEndPointDn);
+
+		if (bidirectional) {
+			crossConn.getDirection().setCd_bi();
+		} else {
+			crossConn.getDirection().setCd_uni();
+		}
+
+		final AdditionalInfoManager mgr = AdditionalInfoManager.getManager();
+		final Profile prof = mgr.getProfile();
+
+		final AdditionalInfo ai = AdditionalInfoManager.getAdditionalInfo(DBComponent.TMFObject.CrossConnection, prof);
+
+		crossConn.setAdditionalInfo(ai);
+
+		// additionalInfo
+		// NVSList nvsList = new NVSList();
+		// Utilities.addNameAndStringValue(nvsList, "Fixed", "False");
+		// Utilities.addNameAndStringValue(nvsList, "Virtual", "False");
+
+		// NameAndStringValue nsv = new NameAndStringValue();
+		//
+		// nsv.setName("Fixed");
+		// nsv.setValue("False");
+		//
+		// nvsList.add(nsv);
+		// crossConn.getAdditionalInfo().set(nvsList);
+
+		final MutableBoolean created = new MutableBoolean();
+		final DBCrossConnection cc = createOrUpdateCC(crossConn, created);
+
+		CrossConnectionHelper.updateUnreliableResource(tpFrom, tpProt);
+		CrossConnectionHelper.updateUnreliableResource(tpTo, tpProtTo);
+
+		// /Revertive value set to Xconnection AdditionalInfo
+		Boolean revertiveValA = null;
+		Boolean revertiveValZ = null;
+		Boolean revertiveVal = null;
+
+		if (aTP.isPresentRevertive()) {
+			revertiveValA = aTP.getRevertive().getValue();
+		}
+		if (zTP.isPresentRevertive()) {
+			revertiveValZ = zTP.getRevertive().getValue();
+		}
+
+		if (revertiveValA != null && revertiveValZ != null) {
+			revertiveVal = revertiveValA && revertiveValZ;
+		} else if (revertiveValA != null) {
+			revertiveVal = revertiveValA;
+		} else if (revertiveValZ != null) {
+			revertiveVal = revertiveValZ;
+		}
+
+		sncRevertiveInfo.put(TmfNameUtilities.toString(cc.getMe().get().getDn()), (revertiveVal != null) ? revertiveVal : false);
+
+		if (created.booleanValue()) {
+			cc.getAEnds().add(tpFrom);
+			cc.getAEnds().add(tpProt);
+			cc.getZEnds().add(tpTo);
+			cc.getZEnds().add(tpProtTo);
+		}
+
+		TpUtils.updateConnectionState(tpFrom);
+		TpUtils.updateConnectionState(tpProt);
+		TpUtils.updateConnectionState(tpProtTo);
+		TpUtils.updateConnectionState(tpTo);
+
+		return cc;
+	}
+
+	/**
+	 * This method is used to fetch Revertive field present on unreliable
+	 * termination and update the map
+	 *
+	 * @param cc
+	 *            is used as key value in map
+	 * @param unrelTP
+	 *            : Revertive value is retreived from
+	 *            unreliableTerminationChannel
+	 */
+	public void setRevertiveField(final DBCrossConnection cc, final X36TerminationChannelProtection unrelTP) {
+		if (unrelTP.isPresentRevertive()) {
+			final Boolean retrieveValue = unrelTP.getRevertive().getValue();
+
+			sncRevertiveInfo.put(CrossConnectionHelper.makeCCName(cc.getInformation()), retrieveValue);
+		} else {
+			sncRevertiveInfo.put(CrossConnectionHelper.makeCCName(cc.getInformation()), false);
+		}
+	}
+
+	/*
+	 * If X36TerminationChannelProtection has ProtOperationMode then adds the
+	 * crossconnection and its protection operation mode into the map
+	 * sncSwitchMode. This is used during the creation of the SNC.
+	 */
+	public void setSwitchMode(final DBCrossConnection cc, final X36TerminationChannelProtection unRelTp){
+		if(unRelTp.isPresentProtOperationMode()) {
+			final String protOperMode = unRelTp.getProtOperationMode().getEnum();
+			sncSwitchMode.put(CrossConnectionHelper.makeCCName(cc.getInformation()), protOperMode);
+		}
+	}
+
+	public void setSwitchMode(final DBCrossConnection cc, final String protOperMode){
+		sncSwitchMode.put(CrossConnectionHelper.makeCCName(cc.getInformation()), protOperMode);
+	}
+
+	/*
+	 * MEUser
+	 */
+	public CrossConnect createXConn(final X36ProtectedRing protRingConn, final X36TrafficType tt) {
+		/* ************************************************************************** */
+		// TODO
+		return null;
+	}
+
+	/*
+	 * MEUser
+	 */
+	public CrossConnect createXConn(final X36DropAndContinueProtection dropContXConn, final X36TrafficType tt) {
+		/* ************************************************************************** */
+		return null;
+	}
+
+	/* ********************************************************************** */
+	// private DBConnectableTp getCTP(X36ConcatenatedChannelIdentification
+	// channel, X36TrafficType tt) {
+	// X36PortIdentification portId = channel.getPort();
+	// TPDn ptpDn = helper.makeTPDn(portId, false);
+	//
+	// if (skippedPTPs.contains(ptpDn)) {
+	// log.info(new DumpInfo(ptpDn,
+	// String.format("CTP on skipped PTP for ME <%s>...", getNeLocator())));
+	// return null;
+	// }
+	// from.setTarget(connectableTp);
+	// TPDn ctpDn = sbiClient.getNaming().makeCTPDn(ptpDn,
+	// channel.getConcatenatedTimeSlot(), tt);
+	// DBConnectableTp ctp = dbManager.getCTP(ctpDn);
+	//
+	// if (ctp == null)
+	// log.warn(new DumpInfo(channel,
+	// String.format("CTP NOT FOUND for ME <%s>...", getNeLocator())));
+	// return ctp;
+	// }
+
+	/* ************************************************************************** */
+	protected DBCrossConnection createOrUpdateCC(final CrossConnect info, final MutableBoolean created) {
+
+		// DBIdentifier id = new DnIdentifier<CrossConnect>(info);
+		// DBCrossConnection cc = oldCCs.remove(id.toString());
+
+		final String xConnName = CrossConnectionHelper.makeCCName(info);
+		final DBCrossConnection cc = oldCCs.remove(xConnName);
+
+		// if (cc == null) {
+		// cc = helper.getSBI().getDbManager().create(me, info);
+		// created.setValue(true);
+		// } else {
+		// helper.getSBI().getDbManager().update(cc, info, false);
+		// created.setValue(false);
+		// }
+		//
+		// log.debug(new DumpInfo(info, String.format("Created/checked %s...",
+		// cc.getName())));
+		// return cc;
+
+		return createOrUpdateCC(helper, me, cc, info, created, false);
+	}
+
+	/****************************************************************************/
+	static public DBCrossConnection createOrUpdateCC(final NeHelper neHelper, final DBManagedElement dbMe,
+					final DBCrossConnection cc, final CrossConnect info, final MutableBoolean created, final boolean noCopy) {
+		DBCrossConnection tempcc = cc;
+		if (tempcc == null) {
+			tempcc = neHelper.getSBIClient().getDbManager().createCrossConnection(info);
+			// you must tie CC and ME
+			dbMe.getCrossConnections().add(tempcc);
+			created.setValue(true);
+			CrossConnectionHelper.indexDBCrossConnection(neHelper.getSBIClient().getDbManager().getDatabase(), dbMe, tempcc);
+		} else {
+			neHelper.getSBIClient().getDbManager().update(tempcc, info, noCopy);
+			created.setValue(false);
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(info, String.format("Created/checked %s...", tempcc.getName())));
+		}
+
+		return tempcc;
+	}
+
+	/****************************************************************************/
+
+	/****************************************************************************/
+	protected class ConnectableTPHolder extends Holder<DBCrossConnectableTp<?, ?>> {
+	}
+
+	/********************************************************************************************************************************/
+
+	/**
+	 * This method is added as part of fix for TR HL97635 The additional info is
+	 * checked for the parameter 'ProtectingPort'/'ProtectingClientPort' for the
+	 * invalidCCs.
+	 *
+	 * @param additionalInfo
+	 *            -- the additionalInfo of the TP involved in the invalidCC.
+	 * @return -- true if additionalInfo has one of these parameters -- false if
+	 *         additionalInfo has none of these parameters
+	 */
+	public boolean protectionExists(final AdditionalInfo additionalInfo) {
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(additionalInfo, "AdditionalInfo :"));
+		}
+		boolean isProtectingTrue = false;
+		final NameAndStringValue nsv[] = additionalInfo.getAll();
+		for (final NameAndStringValue element : nsv) {
+			if (element.getName().getValue().equals("ProtectingPort")) {
+				isProtectingTrue = true;
+				break;
+			} else if (element.getName().getValue().equals("ProtectingClientPort")) {
+				isProtectingTrue = true;
+				isInterPortProt = true;
+				break;
+			}
+		}
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(isProtectingTrue, "AdditionalInfo has 'ProtectingPort'/'ProtectingClientPort' ? :"));
+		}
+		return isProtectingTrue;
+	}
+
+	/**
+	 * This method is introduced as part of fix for TR HL97635 . In this method
+	 * all the invalidCCs will be deleted.
+	 *
+	 * When a protectedCC is deleted on an NE , it should be deleted from TMF DB
+	 * also. But, in TMF this Protected CC is not getting deleted. This fix is
+	 * for LM Single Stage with InterCard protection, LM Dual Stage with
+	 * Inter/Intra Card Protection and Muxponder(G709 wrapped) with Inter Port
+	 * Protection.
+	 *
+	 * So, to remove those invalid CCs(Ex:with protection), in this method , we
+	 * check for the TP involved in that CC and check if it has the parameter
+	 * "ProtectingPort"/"ProtectingClientPort". If it gets processed as invalid
+	 * ProtectedCC, it should not be having this additonalInfo. If it does not
+	 * have this additonal info, that particular XConn is added to oldCCs so
+	 * that it gets removed from TMF DB.
+	 *
+	 * And to remove those invalid CCs(Ex:without protection), in this method ,
+	 * we check for the TP involved in that CC and check if it has the parameter
+	 * "ProtectingPort"/"ProtectingClientPort". If it gets processed as invalid
+	 * ProtectedCC, it should not be having this additonalInfo. If it has this
+	 * additonal info, that particular XConn is added to oldCCs so that it gets
+	 *
+	 * @param dbXConn
+	 */
+
+	public void loadInvalidCCs(final DBCrossConnection dbXConn) {
+
+		try {
+
+			final CrossConnect cc = dbXConn.getInformation();
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(cc, "Processing XConn :"));
+			}
+			final PointDnList aEndList = cc.getAEndNameList();
+			final PointDnList zEndList = cc.getZEndNameList();
+			AdditionalInfo additionalInfo = new AdditionalInfo();
+			// Fix for TR HO35937
+			final String xConnName = CrossConnectionHelper.makeCCName(dbXConn.getInformation());
+			final SNCType ccType = dbXConn.getInformation().getCcType();
+			X36SpecificPortInformation portInfo = null;
+			DBTp dbTp = null;
+			X36WdmAdaptPort wdmAdaptPort = null;
+			boolean isProtectingTrue = false;// If protection exists -- true
+			boolean isInvalidCC = false;// If invalidCC -- true, So will be
+			// loaded to 'OldCCs' map.
+
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(ccType, "CCType of this XConn :"));
+			}
+			if (aEndList.isEmpty() || zEndList.isEmpty()) {
+				return;
+			}
+
+			if (ccType.equals(SNCType.ST_SIMPLE)) {
+				if (!zEndList.isEmpty()) {
+					dbTp = dbManager.getTP(zEndList.get(0).getTpDn());
+				}
+			} else if (ccType.equals(SNCType.ST_ADD_DROP_A)) {
+				dbTp = dbManager.getTP(aEndList.get(0).getTpDn());
+				if (dbTp == null) {
+					dbTp = dbManager.getTP(aEndList.get(1).getTpDn());
+				}
+			} else {
+				// This method will be processed only for the CCTypes ST_SIMPLE
+				// and ST_ADD_DROP_A
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(new DumpInfo(ccType, "This CCType will not be processed:"));
+				}
+				return;
+			}
+			if (xUtils.isPacketLinkXConn(dbXConn)) {
+				/*
+				 * Checks whether the TPs involved in xConn are controlPlane resources , If Yes it will not load the OldCCs with
+				 * xConn.
+				 */
+				final boolean isCpResource = isCpResource(dbXConn);
+				if (!isCpResource) {
+					oldCCs.put(xConnName, dbXConn);
+				}
+
+				return;
+			}
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(dbTp, "Getting X36SpecficPortInformation from dbTp:"));
+			}
+			try {
+				portInfo = xUtils.getPortConfiguration(dbTp);
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(new DumpInfo(portInfo, String.format("Port Info for the TP <%s>:", dbTp)));
+				}
+
+			} catch (final Exception e) {
+				LOG.error(new DumpInfo(e, String.format("Exception while getting PortConfguration for : <%s>", dbTp)));
+			}
+
+			// Fix for TR H093051 - added condition to check if the port is
+			// wdmAaptationPort or not.
+			if (portInfo != null && portInfo.isWdmAdaptationPort()) {
+				wdmAdaptPort = portInfo.getWdmAdaptationPort();
+			}
+			// This is processed only for WDM Adaptation Ports.
+			if (portInfo == null || (!portInfo.isWdmAdaptationPort())) {
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(new DumpInfo(portInfo, "This XConn will not be processed since it has invalid portInfo:"));
+				}
+				return;
+			}
+
+			// This is processed for Muxponders and LM Transponders
+			else if (!(wdmAdaptPort.isPresentTranspInfo())
+					|| (!(wdmAdaptPort.getTranspInfo().isMuxponder()) && !(wdmAdaptPort.getTranspInfo().isLmTransponder()))) {
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(new DumpInfo(portInfo, "This XConn will not be processed since it is not Muxponder/LM Transponder:"));
+				}
+				return;
+			} else if (wdmAdaptPort.getTranspInfo().isMuxponder()) {
+				// Inter Card Protection for Muxponder will not be handled here.
+				if (wdmAdaptPort.isPresentInterCardInfo()) {
+					return;
+				} else if (wdmAdaptPort.getTranspInfo().getMuxponder().isPresentEthPortBehaviour()) {
+					// If it is Data Muxponder will not be handled here
+					return;
+				}
+			}
+			if (ccType.equals(SNCType.ST_SIMPLE)) {
+				/*
+				 * isMuxponderSTMClient( boolean variable) is used to check for Muxponder if the XConn exists between the
+				 * clientSide CTP and CTP over ClientSide FTP as per the new model of Muxponder with G709 wrapped clients (STM and
+				 * Ethernet clients) In this case, it will be true.So, this ST_SIMPLE XConn will not be deleted from TMF DB.
+				 */
+
+				boolean isMuxponderSTMClient = false;
+
+				TPDn tpDn1 = aEndList.get(0).getTpDn();
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(new DumpInfo(tpDn1, "Processing aEnd :"));
+				}
+				/*
+				 * This aEnd can be either a CTP or FTP(clientSide). FTP in case of Muxponder(G709 wrapped) STM and Ethernet
+				 * Clients
+				 */
+				boolean isCTP = tpDn1.isPresentCtp();
+
+				if (isCTP) {
+					final boolean isFTP = tpDn1.getTp().isFtp();
+					final TPId tpId = new TPId();
+					final TPDn tpDn = new TPDn();
+					boolean isOTM = false;
+
+					if (isFTP) {
+						// Get AdditionalInfo for this CTP from its FTP(client
+						// side)
+						tpId.setFtp(tpDn1.getTp().getFtp());
+					} else {
+						/*
+						 * Get AdditionalInfo for this CTP from its PTP(client side) For Muxponder (G709 wrapped with OTM
+						 * Clients), the additionalInfo is saved in clientSide PTP
+						 */
+						tpId.setPtp(tpDn1.getTp().getPtp());
+						isOTM = true;// For OTM Clients of Muxponder(G709
+						// wrapped)
+					}
+
+					tpDn.setTp(tpId);
+					tpDn.setMe(tpDn1.getMe());
+					dbTp = dbManager.getTP(tpDn);
+
+					/*
+					 * Form the PTP/FTP for this CTP and get the DBTp from DB Get the additionalInfo from this PTP/FTP
+					 */
+
+					additionalInfo = dbTp.getAdditionalInfo();
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(additionalInfo, String.format("AdditionalInfo for the dbTp: <%s>", dbTp)));
+					}
+					if (additionalInfo != null) {
+						isProtectingTrue = protectionExists(additionalInfo);
+						if (LOG.isDebugEnabled()) {
+							LOG.debug(new DumpInfo(isProtectingTrue, String
+									.format("Protection Exists for the dbTp ?: <%s>", dbTp)));
+						}
+
+						// If 'isProtectingTrue' is true for a XConn of type
+						// ST_SIMPLE, it means it is an invalid XCConn.
+						if (isProtectingTrue) {
+							if (isOTM) {
+								// If 'isProtectingTrue' for OTM Clients, it is
+								// invalid XConn.
+								isInvalidCC = true;
+
+							} else {
+								// If 'isProtectingTrue' for Non OTM Clients.
+								isMuxponderSTMClient = true;
+								if (LOG.isDebugEnabled()) {
+									LOG.debug("Processing XConn between CTP over PTP and CTP over clientSide FTP(for Muxponder G709 wrapped STM/Ethernet clients)");
+								}
+							}
+						}
+					}
+				} else {
+					/*
+					 * If the aEnd is not a CTP but a FTP(i.e for Muxponder G709 wrapped with STM clients), the additionalInfo is
+					 * directly obtained from FTP.
+					 */
+
+					dbTp = dbManager.getTP(tpDn1);
+					additionalInfo = dbTp.getAdditionalInfo();
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(dbTp, "Getting additionalInfo from the clientSide FTP:"));
+						LOG.debug(new DumpInfo(additionalInfo, "additionalInfo for the clientSide FTP:"));
+					}
+					if (additionalInfo != null) {
+						isProtectingTrue = protectionExists(additionalInfo);
+						if (isProtectingTrue) {
+							isInvalidCC = true;
+
+						}
+					}
+				}
+
+				tpDn1 = zEndList.get(0).getTpDn();
+				isCTP = tpDn1.isPresentCtp();
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(new DumpInfo(tpDn1, "Processing zEnd :"));
+					LOG.debug(new DumpInfo(isCTP, "Is this zEnd a CTP? :"));
+				}
+				if (isCTP) {
+
+					final boolean isFTP = tpDn1.getTp().isFtp();
+					final TPId tpId = new TPId();
+					final TPDn tpDn = new TPDn();
+
+					if (isFTP) {
+						// Get AdditionalInfo from FTP( of this CTP)
+						LOG.debug("Getting this CTP's FTP to get additionalInfo :");
+						tpId.setFtp(tpDn1.getTp().getFtp());
+					} else {
+						// Get AdditionalInfo from PTP( of this CTP)
+						LOG.debug("Getting this CTP's PTP to get additionalInfo :");
+						tpId.setPtp(tpDn1.getTp().getPtp());
+					}
+
+					tpDn.setTp(tpId);
+					tpDn.setMe(tpDn1.getMe());
+					dbTp = dbManager.getTP(tpDn);
+					additionalInfo = dbTp.getAdditionalInfo();
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(additionalInfo, "additionalInfo for this zEnd:"));
+					}
+					if (additionalInfo != null) {
+						isProtectingTrue = protectionExists(additionalInfo);
+						if (LOG.isDebugEnabled()) {
+							LOG.debug(new DumpInfo(isProtectingTrue, "Protection Exists for this zEnd? : "));
+						}
+						/*
+						 * For Muxponder (G709 wrapped with STM/Ethernet clients), the additionalInfo is saved in clientSide FTP(
+						 * and also in clientSide PTP). So, the XConn that exists between CTP over ClientSide PTP and CTP over
+						 * clientSide FTP should not be deleted even if it has the additionalInfo as 'ProtectingClientPort'.
+						 */
+						if (isProtectingTrue && isInterPortProt) {
+							isMuxponderSTMClient = true;// This XConn should not
+							// be deleted even if
+							// 'isProtectingTrue' is
+							// true
+							if (LOG.isDebugEnabled()) {
+								LOG.debug("This XConn exists between CTP over PTP and CTP over client side FTP. So will not be deleted.");
+							}
+
+						} else {
+							/*
+							 * This XConn will be deleted if it has any of the parameters 'ProtectingPort'/'ProtectingClientPort'
+							 * for a XConn of type ST_SIMPLE.
+							 */
+							if (LOG.isDebugEnabled()) {
+								LOG.debug("protection does not exists for this ST_SIMPLE XConn. So it is a valid XConn.This XConn will not be deleted.");
+							}
+							isMuxponderSTMClient = false;
+						}
+					}
+				}
+
+				// If this XConn of type ST_SIMPLE has any additionalInfo
+				// related to Protection, it will be deleted.
+				if (additionalInfo != null && isProtectingTrue && !isMuxponderSTMClient) {
+					isInvalidCC = true;
+				}
+
+			} else if (ccType.equals(SNCType.ST_ADD_DROP_A)) {
+				/*
+				 * For a XConn of type ST_ADD_DROP_A, the additionalInfo(related to Protection) always exists in the lineSide FTP
+				 * except for Muxponder(G709 wrapped with STM/Ethernet clients)
+				 */
+				LOG.debug("Processing XConn of type ST_ADD_DROP_A:");
+
+				for (int i = 0; i < aEndList.size(); i++) {
+					final TPDn tpDn1 = aEndList.get(i).getTpDn();
+
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(tpDn1, "Processing aEnd this XConn:"));
+					}
+					final TPId tpId = new TPId();
+					final TPDn tpDn = new TPDn();
+					// Get AdditionalInfo from its FTP
+					tpId.setFtp(tpDn1.getTp().getFtp());
+					tpDn.setTp(tpId);
+					tpDn.setMe(tpDn1.getMe());
+					dbTp = dbManager.getTP(tpDn);
+					/*
+					 * Fix for TR HN11557 (removing ST_ADD_DROP_A during realignment if Protection is disabled.)
+					 */
+					if (dbTp != null) {
+						additionalInfo = dbTp.getAdditionalInfo();
+						if (LOG.isDebugEnabled()) {
+							LOG.debug(new DumpInfo(additionalInfo, String.format("additionalInfo of the lineSide FTP : <%s>",
+									dbTp)));
+						}
+					} else {
+						LOG.warn(new DumpInfo(tpDn, "Cannot Find DBTp for TPDN "));
+					}
+					if (additionalInfo != null) {
+						isProtectingTrue = protectionExists(additionalInfo);
+						if (LOG.isDebugEnabled()) {
+							LOG.debug(new DumpInfo(isProtectingTrue, "Protection exists for this lineSide FTP? "));
+						}
+						/*
+						 * For Muxponder(G709 wrapped for STM/Ethenrnet clients), the additionalInfo(related to Protection) exists
+						 * for clientSide FTP which is zEnd for this XConn.So, check for additionalInfo in zEnds also.
+						 */
+						if (isProtectingTrue) {
+							break;
+						}
+					}
+				}
+				/*
+				 * For other than Muxponder (G709 wrapped STM/Ethernet clients), if 'isProtectingTrue' is true for aEnd (i.e
+				 * lineSide FTP), the zEnds are not checked again. It will be skipped. If 'isProtectingTrue' is false even after
+				 * iterating the aEnds, then, the zEnds will be processed to check for the additionalInfo
+				 */
+
+				if (!isProtectingTrue) {
+
+					final TPDn tpDn1 = zEndList.get(0).getTpDn();
+					final boolean isCTP = tpDn1.isPresentCtp();
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(tpDn1, "Protection does not exists for aEnds, So processing zEnds : )"));
+						LOG.debug(new DumpInfo(isCTP, "Is this zEnd CTP? : "));
+					}
+					if (isCTP) {
+						final boolean isFTP = tpDn1.getTp().isFtp();
+						final TPId tpId = new TPId();
+						final TPDn tpDn = new TPDn();
+						if (isFTP) {
+							// Get AdditionalInfo from its FTP
+							LOG.debug("Getting FTP for this CTP : ");
+							tpId.setFtp(tpDn1.getTp().getFtp());
+						} else {
+							// Get AdditionalInfo from its PTP
+							LOG.debug("Getting PTP for this CTP : ");
+							tpId.setPtp(tpDn1.getTp().getPtp());
+						}
+						tpDn.setTp(tpId);
+						tpDn.setMe(tpDn1.getMe());
+						dbTp = dbManager.getTP(tpDn);
+						additionalInfo = dbTp.getAdditionalInfo();
+						if (LOG.isDebugEnabled()) {
+							LOG.debug(new DumpInfo(additionalInfo, String.format("AdditionalInfo of dbTp: <%s>", dbTp)));
+						}
+						if (additionalInfo != null) {
+							isProtectingTrue = protectionExists(additionalInfo);
+							if (LOG.isDebugEnabled()) {
+								LOG.debug(new DumpInfo(isProtectingTrue, "Protection exists for this zEnd? "));
+							}
+						}
+
+					} else {
+						if (LOG.isDebugEnabled()) {
+							LOG.debug("Getting additionalInfo from the zEnd which is a FTP ");
+						}
+						dbTp = dbManager.getTP(tpDn1);
+						additionalInfo = dbTp.getAdditionalInfo();
+						if (LOG.isDebugEnabled()) {
+							LOG.debug(new DumpInfo(additionalInfo, String.format("AdditionalInfo of the dbTp : <%s> ", dbTp)));
+						}
+						if (additionalInfo != null) {
+							isProtectingTrue = protectionExists(additionalInfo);
+							if (LOG.isDebugEnabled()) {
+								LOG.debug(new DumpInfo(isProtectingTrue, "Protection Exists for this zEnd? : "));
+							}
+						}
+					}
+				}
+
+				/*
+				 * For XConn of type ST_ADD_DROP_A , additionalInfo related to Protection is mandatory. If it is null or emtpy,
+				 * that paticular XCOnn will be deleted
+				 */
+				if (additionalInfo == null || (additionalInfo != null && additionalInfo.isEmpty()) || !isProtectingTrue) {
+					isInvalidCC = true;
+				}
+
+			} else {
+				// Other than ST_SIMPLE and ST_ADD_DROP_A types of CCTypes, this
+				// method will not be processed.
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(new DumpInfo(ccType, "This CCType will not be processed : "));
+				}
+				return;
+			}
+
+			if (isInvalidCC) {
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(new DumpInfo(xConnName, "Invalid XConn that will be deleted : "));
+				}
+				/*
+				 * Checks whether the TPs involved in xConn are controlPlane resources , If Yes it will not load the OldCCs with
+				 * xConn.
+				 */
+				final boolean isCpResource = isCpResource(dbXConn);
+				if (!isCpResource) {
+					oldCCs.put(xConnName, dbXConn);
+				}
+			}
+
+		} catch (final Exception e) {
+			LOG.error(new DumpInfo(e, String.format("Exception while getting Invalid Virtual CC : <%s>", dbXConn.getName())));
+		}
+	}
+
+	/**
+	 * This method is to process (create/update/delete) virtual cross connections and dsr CTPs over FTP in NPU3 B card by using
+	 * the info in a map, which is filled in NodeConverter
+	 */
+	protected void processRadioPacketLinks() {
+
+		try {
+
+			// Set of Radio Packet Links (between NPU3B and MMU2/H cards
+			final HashMap<X36PortIdentification, Set<X36PortIdentification>> radioPacketLinks = helper.getPacketLinks();
+
+			// Set of NPU3B ports (Ethernet ports)
+			final Set<X36PortIdentification> ethernetPortSet = radioPacketLinks.keySet();
+
+			// Processing packet links for each pure ethernet port
+			for (final X36PortIdentification ethernetPort : ethernetPortSet) {
+
+				final PortInfo ethernetPortInfo = helper.getPort(ethernetPort);
+
+				if (ethernetPortInfo != null) {
+					processPacketLinksOfEthernetPort(ethernetPortInfo, radioPacketLinks.get(ethernetPort));
+				} else {
+					LOG.error(String
+							.format("Ethernet port [%s] on ME [%s] is not found. So skipping the processing of radio packet links associated ot it",
+									ethernetPort.getShelfId().getValue() + "/" + ethernetPort.getCardId().getValue() + "/"
+											+ ethernetPort.getPortId().getValue(), getNeLocator()));
+				}
+
+			}
+
+		} catch (final Exception e) {
+			LOG.error(new DumpInfo("Exception while processing the links of ME :", e));
+		}
+
+	}
+
+	private void processPacketLinksOfEthernetPort(final PortInfo ethernetPort, final Set<X36PortIdentification> radioPortSet) {
+
+		final String ethernetPortIdStr = ethernetPort.getShelfId().getValue() + "/" + ethernetPort.getCardId().getValue() + "/"
+				+ ethernetPort.getPortId().getValue();
+
+		final TPDn ethFtpDn = sbiClient.getNaming().makeFTPDn(helper.getMEDn(),
+				ethernetPort.getShelfId(), ethernetPort.getSlotId(),
+				ethernetPort.getCardId(), ethernetPort.getPortId());
+
+		if (ethFtpDn != null) {
+			final DBFtp ethFtp = dbManager.getFTP(ethFtpDn);
+			if (ethFtp != null) {
+
+				if (LOG.isDebugEnabled()) {
+					if (radioPortSet.size() > 0) {
+						final StringBuilder debugStr = new StringBuilder(String.format(
+								"Physical medialess ports associated to the ethernet port <%s> on ME <%s> are :",
+								ethernetPortIdStr, getNeLocator()));
+						for (final X36PortIdentification radioPort : radioPortSet) {
+							final String radioPortIdStr = radioPort.getShelfId().getValue() + "/"
+									+ radioPort.getCardId().getValue() + "/" + radioPort.getPortId().getValue();
+							debugStr.append("\n" + radioPortIdStr);
+						}
+						LOG.debug(debugStr.toString());
+					}
+
+					// Process the radio links for the NPU3B Ftp
+					processPacketLinkCtps(ethernetPort, ethFtp, radioPortSet);
+				}
+
+			} else {
+				LOG.error(String
+						.format("Couldn't find the FTP [%s] in the database. So skipping processing of the radio packet links associated to it.",
+								ethernetPortIdStr));
+				return;
+			}
+		} else {
+			LOG.error(String.format("Couldn't make FTPDn for the ethernet port [%s]", ethernetPortIdStr));
+			return;
+		}
+
+	}
+
+	private void processPacketLinkCtps(final PortInfo ethernetPort, final DBFtp ethFtp,
+			final Set<X36PortIdentification> radioPortSet) {
+
+		// old dsr ctps, which will be deleted at the end incase they are no more used
+		final Map<Integer, DBConnectionTerminationPoint> oldDsrCtps = new TreeMap<Integer, DBConnectionTerminationPoint>();
+
+		// old packet links, which will be deleted at the end incase they are no more used
+		final Map<String, DBCrossConnection> oldPacketLinks = new HashMap<String, DBCrossConnection>();
+
+		// new packet links to be created
+		final Map<IntegerType, X36PortIdentification> newPacketLinks = new HashMap<IntegerType, X36PortIdentification>();
+
+		// packet links which are already present in the db and still present on the NE
+		final Set<Integer> persistentDsrCtpValues = new TreeSet<Integer>();
+
+		final LayerRate dsrRate = LayerRateManager.getLayerRate("LR_DIGITAL_SIGNAL_RATE");
+
+		final DBIterator<DBConnectionTerminationPoint> oldEthCtpItr = ethFtp.getCTPs().iterator();
+
+		// load all the old dsr ctps
+		while (oldEthCtpItr.hasNext()) {
+			final DBConnectionTerminationPoint oldEthCtp = oldEthCtpItr.next();
+			final int dsrValue = getDsrValue(oldEthCtp);
+			if (dsrValue > 0) {
+				// load it into the old ctps map
+				oldDsrCtps.put(dsrValue, oldEthCtp);
+				// check the packet links
+				final DBIterator<DBCrossConnection> oldPacketLinkXConnItr = ((DBCtp) oldEthCtp).getACrossConnections().iterator();
+				while (oldPacketLinkXConnItr.hasNext()) {
+					// if a packet link xConn (having layer rate LR_DIGITAL_SIGNAL_RATE)
+					final DBCrossConnection oldPacketLinkXConn = oldPacketLinkXConnItr.next();
+					// packet link xConn is always a simple xConn
+					if (oldPacketLinkXConn.getSncType().isSt_simple() && oldPacketLinkXConn.getLayerRate().equals(dsrRate)) {
+						// zEnd is the radio port dsr ctp
+						final DBCrossConnectableTp<?, ?> radioPortCtp = oldPacketLinkXConn.getZEnds().get(0);
+						final TPId radioPortCtpId = ((TPDn) radioPortCtp.getDn()).getTp();
+						PortCoordinates radioPortCoordinates = null;
+						if (radioPortCtpId.isPtp()) {
+							radioPortCoordinates = radioPortCtpId.getPtp().getCoord();
+						} else {
+							radioPortCoordinates = radioPortCtpId.getFtp().getCoord();
+						}
+
+						if (radioPortCoordinates != null) {
+							final String radioPortCoords = radioPortCoordinates.getShelf().getValue() + "-"
+									+ radioPortCoordinates.getSlot().getValue() + "-" + radioPortCoordinates.getPort().getValue();
+							// load the packet link into the old packet links map
+							oldPacketLinks.put(radioPortCoords, oldPacketLinkXConn);
+						}
+					}
+				}
+				oldPacketLinkXConnItr.close();
+			}
+		}
+		oldEthCtpItr.close();
+
+		int ctpCount = -1;
+		for (final X36PortIdentification radioPort : radioPortSet) {
+
+			final String radioPortCoords = radioPort.getShelfId().getValue() + "-" + radioPort.getCardId().getValue() + "-"
+					+ radioPort.getPortId().getValue();
+
+			// Check if the latest packet link is already present in the db
+			final DBCrossConnection oldPacketLinkXConn = oldPacketLinks.get(radioPortCoords);
+
+			if (oldPacketLinkXConn != null) {
+				final int dsrValue = getDsrValue((DBConnectionTerminationPoint) oldPacketLinkXConn.getAEnds().get(0));
+				persistentDsrCtpValues.add(dsrValue);
+				// Remove the corresponding dsr Ctp from the old dsr ctp map
+				oldDsrCtps.remove(dsrValue);
+				// Remove the entry from the oldPacketLinks
+				oldPacketLinks.remove(radioPortCoords);
+				// Remove the entry from the oldCCs
+				final String ccName = CrossConnectionHelper.makeCCName(oldPacketLinkXConn.getInformation());
+				oldCCs.remove(ccName);
+			} else {
+				// Add the new packet link to the map
+				newPacketLinks.put(new IntegerType(ctpCount), radioPort);
+				ctpCount--;
+			}
+		}
+
+		// Process the new packet links
+
+		final Set<Entry<IntegerType, X36PortIdentification>> newPacketLinkSet = newPacketLinks.entrySet();
+
+		// Identify the dsr id for the each new packet link (next least available dsr value)
+		for (final Entry<IntegerType, X36PortIdentification> newPacketLink : newPacketLinkSet) {
+			getNextAvailableDsrValue(oldDsrCtps, persistentDsrCtpValues, newPacketLink);
+		}
+
+		// Create the new packet links in the database
+		processNewPacketLinks(ethFtp, ethernetPort, newPacketLinkSet);
+
+	}
+
+	private void processNewPacketLinks(final DBPortTp ethFtp, final PortInfo portInfo,
+			final Set<Entry<IntegerType, X36PortIdentification>> newPacketLinkSet) {
+
+		// Process each packet link entry
+		for (final Entry<IntegerType, X36PortIdentification> packetLink : newPacketLinkSet) {
+
+			// Ethernet dsr ctp identification
+			final IntegerType ethCtpIdentification = packetLink.getKey();
+
+			// Create or Update the dsrCtp over Ethernet port
+			final DBConnectionTerminationPoint ethCtp = createOrUpdatePacketLinkCTP(ethFtp, portInfo,
+					ethCtpIdentification.getValue());
+
+			// Radio port dsr ctp identification
+			final X36PortIdentification radioCtpCoords = packetLink.getValue();
+
+			final TPId radioDsrPtpId = new TPId();
+
+			final PortCoordinates radioPortCoords = new PortCoordinates();
+
+			radioPortCoords.setShelf("" + radioCtpCoords.getShelfId().getValue());
+			radioPortCoords.setSlot("" + radioCtpCoords.getCardId().getValue());
+			radioPortCoords.setPort("" + radioCtpCoords.getPortId().getValue());
+
+			final GenericTPId ptpId = new GenericTPId();
+			ptpId.setCoord(radioPortCoords);
+
+			radioDsrPtpId.setPtp(ptpId);
+
+			// Make the dsr ctp name
+			final TPDn radioDsrPtpDn = new TPDn();
+			radioDsrPtpDn.setMe(ethFtp.getDn().getMe());
+			radioDsrPtpDn.setTp(radioDsrPtpId);
+
+			final TPDn radioDsrCtpDn = getNaming().makeCTPDn(radioDsrPtpDn, 1);
+
+			// Check if the radio dsr ctp already exists in the db
+			final DBTp radioDsrCtp = dbManager.getTP(radioDsrCtpDn);
+
+			// If exists in the database
+			if (radioDsrCtp != null) {
+				// Create the packet link xConn
+				createPacketLinkXConn(ethCtp, radioDsrCtp);
+			} else {
+				LOG.error(String.format(
+						"Couldn't find the dsr ctp <%s> in the database. So can't create the packet link association",
+						TmfNameUtilities.toString(radioDsrCtpDn)));
+			}
+		}
+	}
+
+
+	/**
+	 * This method is to build a cross connection object, and update
+	 * transmission params of dsr CTP over FTP in NPU3 B card
+	 *
+	 * @param aEnd
+	 * @param radioDsrCtp
+	 * @return
+	 */
+	private CrossConnect createPacketLinkXConn(final DBTp aEnd, final DBTp radioDsrCtp) {
+
+		final CrossConnect crossConn = createFixedXConn((DBCrossConnectableTp<?, ?>) aEnd,
+				(DBCrossConnectableTp<?, ?>) radioDsrCtp, LayerRateManager.getLayerRate("LR_DIGITAL_SIGNAL_RATE"));
+
+		final NVSList nvsList = crossConn.getAdditionalInfo();
+		Utilities.addNameAndStringValue(nvsList, "Virtual", "True");
+		final MutableBoolean created = new MutableBoolean();
+
+		final MEDn meDn = new MEDn();
+		meDn.setMe((aEnd).getDn().getMe());
+		final DBManagedElement dbMe = dbManager.getManagedElement(meDn);
+
+		final String ccName = CrossConnectionHelper.makeCCName(crossConn);
+		DBCrossConnection dbCC = CrossConnectionHelper.getDBCrossConnection(dbManager, dbMe, ccName);
+		if (dbCC != null) {
+			oldCCs.remove(ccName);
+		}
+
+		dbCC = CrossConnectionConverter.createOrUpdateCC(helper, me, dbCC, crossConn, created, false);
+		if (dbCC != null) {
+			if (created.booleanValue()) {
+				dbCC.getAEnds().add((DBCrossConnectableTp<?, ?>) aEnd);
+				dbCC.getZEnds().add((DBCrossConnectableTp<?, ?>) radioDsrCtp);
+			}
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(new DumpInfo(crossConn, String.format("Created %s...", dbCC.getName())));
+			}
+			final String bandwidth = LayeredParametersUtils.getValue(radioDsrCtp.getInformation(),
+					LayerRateManager.getLayerRate("LR_DIGITAL_SIGNAL_RATE"), "Bandwidth");
+			final Profile profile = LayeredParameterManager.getManager().getProfile();
+			final NameAndStringValue bandwidthParam = LayeredParameterManager.getTransmissionParameter(
+					LayerRateManager.getLayerRate("LR_DIGITAL_SIGNAL_RATE"), "Bandwidth", bandwidth, profile);
+			final NameAndStringValue protIdenParam = LayeredParameterManager.getTransmissionParameter(
+					LayerRateManager.getLayerRate("LR_Encapsulation"), ParameterName.ProtocolIdentifier.name(), "IGFP", profile);
+			TmfUtilities2.addTransmissionParameter(aEnd, LayerRateManager.getLayerRate("LR_DIGITAL_SIGNAL_RATE"), bandwidthParam);
+			TmfUtilities2.addTransmissionParameter(aEnd, LayerRateManager.getLayerRate("LR_Encapsulation"), protIdenParam);
+			TpUtils.updateConnectionState((DBCrossConnectableTp<?, ?>) aEnd);
+			TpUtils.updateConnectionState((DBCrossConnectableTp<?, ?>) radioDsrCtp);
+		}
+		return crossConn;
+	}
+
+	private void getNextAvailableDsrValue(final Map<Integer, DBConnectionTerminationPoint> oldDsrCtps,
+			final Set<Integer> persistentDsrCtpValues, final Entry<IntegerType, X36PortIdentification> newPacketLink) {
+
+		// Check the next least available dsr ctp
+		for (int dsrValue = 1; dsrValue < Integer.MAX_VALUE; dsrValue++) {
+			// If the dsrValue already exists, check the next value
+			if (persistentDsrCtpValues.contains(dsrValue)) {
+				continue;
+			} else {
+				// Select the dsrValue
+				newPacketLink.getKey().set(dsrValue);
+				// Add the dsrValue to the set
+				persistentDsrCtpValues.add(dsrValue);
+				// Remove the corresponding dsr Ctp from the old dsr ctp map
+				oldDsrCtps.remove(dsrValue);
+				break;
+			}
+		}
+	}
+
+	private int getDsrValue(final DBConnectionTerminationPoint dbCrossConnectableTp) {
+		final CtpNameComponents ctpNameComps = dbCrossConnectableTp.getDn().getCtp().getComponents();
+		if (ctpNameComps.size() > 0) {
+			final CtpNameComponent ctpNameComponent = ctpNameComps.get(0);
+			// if a dsr ctp
+			if (ctpNameComponent.isDsr()) {
+				// return the dsr value
+				return ctpNameComponent.getDsr().getValue();
+			}
+		}
+		return -1;
+	}
+
+	/**
+	 * This method is to create CTP with dsr layerRate over FTP in NPU3 B card,
+	 * when it is associated to packet link
+	 *
+	 * @param ptp
+	 * @param portInfo
+	 * @param ctpCount
+	 * @return DBConnectionTerminationPoint
+	 */
+	protected DBConnectionTerminationPoint createOrUpdatePacketLinkCTP(final DBPortTp ptp, final PortInfo portInfo,
+			final int dsrId) {
+		final TerminationPoint tp = new TerminationPoint();
+		tp.setName(getNaming().makeCTPDn(ptp.getDn(), dsrId));
+		final String cardName = getNaming().makeNativeEMSName(helper.getShelf(portInfo.getShelfId()));
+		tp.setNativeEMSName(getNaming().makeNativeEMSName(cardName, portInfo.getSyntax()));
+		final AssociatedAlarmPortsInfo assocAlarmPortsInfo = new AssociatedAlarmPortsInfo();
+		assocAlarmPortsInfo.evaluateAssociatedAlarmPorts(null, new AISetOfAssociatedAlarmPort());
+
+		if (sbiClient.getPlugIn().useNativeLabels()) {
+			tp.setUserLabel(tp.getNativeEMSName());
+		}
+
+		tp.setType(TPType.TPT_CTP);
+		tp.getConnectionState().setTpcs_not_connected();
+		tp.setTpMappingMode(TerminationMode.TM_NA);
+		tp.setDirection(Directionality.D_BIDIRECTIONAL);
+		tp.setTransmissionParams(I36LayeredParameterManager.getLayeredParameterList(TpType.vc12GroupCTP));
+		tp.setTpProtectionAssociation(TPProtectionAssociation.TPPA_NA);
+		tp.setEdgePoint(true);
+		final X36ChannelIdentification chId = new X36ChannelIdentification();
+		chId.setPort(portInfo.getPortIdentification());
+		chId.getTimeSlot().getTimeSlotId().set(dsrId);
+		final DBConnectionTerminationPoint dbCtp = createOrUpdateCTP(ptp, tp, TpType.vc12GroupCTP, chId, assocAlarmPortsInfo);
+		return dbCtp;
+	}
+
+	/**
+	 * This method returns a string "regModeG709" if it is Regeneration Mode,
+	 * string "regGroupG709" if it is Regeneration Group and string "nonG709Reg"
+	 * if it non G709 Regeneration
+	 *
+	 * @param regFlag
+	 * @param aEndCardId
+	 * @param aEndCoord
+	 * @param zEndCardId
+	 * @param zEndCoord
+	 * @param aEndTpInfo
+	 * @param zEndTpInfo
+	 * @return
+	 */
+	protected String findRegenerationType(final String regFlag) {
+		String regType = null;
+		PortInfo aEndPortInfo = null;
+		PortInfo zEndPortInfo = null;
+		X36LmTransponder lmTransp = null;
+		X36RmTransponder rmTransp = null;
+		try {
+
+			aEndCardId = helper.getCardId(aEndCoord.getShelfId().getValue(), aEndCoord.getSlotId().getValue());
+			zEndCardId = helper.getCardId(zEndCoord.getShelfId().getValue(), zEndCoord.getSlotId().getValue());
+
+			if (aEndCardId != null) {
+				aEndPortInfo = helper.getPort(aEndCoord.getShelfId().getValue(), aEndCardId.getValue(), aEndCoord.getPortId()
+						.getValue());
+				if (aEndPortInfo != null) {
+					aEndTpInfo = aEndPortInfo.getSyntax().getSpecificPortInformation();
+				} else {
+					aEndTpInfo = xUtils.getClientPortSpecPortInfo(aEndCoord, aEndCardId);
+				}
+			}
+			if (zEndCardId != null) {
+				zEndPortInfo = helper.getPort(zEndCoord.getShelfId().getValue(), zEndCardId.getValue(), zEndCoord.getPortId()
+						.getValue());
+				if (zEndPortInfo != null) {
+					zEndTpInfo = zEndPortInfo.getSyntax().getSpecificPortInformation();
+				} else {
+					zEndTpInfo = xUtils.getClientPortSpecPortInfo(zEndCoord, zEndCardId);
+				}
+			}
+			if (aEndTpInfo != null && zEndTpInfo != null) {
+				if (!aEndTpInfo.getWdmAdaptationPort().isPresentTranspInfo()) {
+					if (LOG.isDebugEnabled()) {
+						LOG.debug(new DumpInfo(aEndTpInfo, "Inside findRegenerationType() : SpecificPortInformation for "
+								+ "aEnd does not have TranspInfo"));
+					}
+					return regType;
+				}
+				if (aEndTpInfo.getWdmAdaptationPort().getTranspInfo().isLmTransponder()) {
+					lmTransp = aEndTpInfo.getWdmAdaptationPort().getTranspInfo().getLmTransponder();
+					if (lmTransp.getDigitalWrapperType().isStandardG709()) {
+						if (zEndTpInfo.getWdmAdaptationPort().getTranspInfo().isLmTransponder()) {
+							lmTransp = zEndTpInfo.getWdmAdaptationPort().getTranspInfo().getLmTransponder();
+							if (lmTransp.getDigitalWrapperType().isStandardG709()) {
+								regType = REG_GROUP_G709;
+								return regType;
+							}
+						}
+					} else {
+						LOG.warn("The LM Transponders are not standard G709.So this is not Regeneration Group.");
+					}
+				}
+				if (aEndTpInfo.getWdmAdaptationPort().getTranspInfo().isRmTransponder()) {
+					rmTransp = aEndTpInfo.getWdmAdaptationPort().getTranspInfo().getRmTransponder();
+					if (rmTransp.getDigitalWrapperType().isStandardG709()) {
+						regType = REG_MODE_G709;
+						return regType;
+					} else {
+						LOG.warn("The RMTransponder is not standard G709.So this is not Regeneration Mode.");
+					}
+				}
+			}
+			final StringBuffer register = new StringBuffer(regFlag);
+			if (xUtils.isNonG709Regeneration(register, aEndCoord, zEndCoord)) {
+				regType = REG_NON_G709;
+				return regType;
+			} else {
+				regType = register.toString();
+				return regType;
+			}
+
+		} catch (final Exception ex) {
+			LOG.error(new DumpInfo("Error while checking for regeneration type ", ex));
+		}
+		return regType;
+	}
+
+	/**
+	 * This method is to create/update object of dsr CTP of NPU3 B card in
+	 * database
+	 *
+	 * @param ptp
+	 * @param tp
+	 * @param tpType
+	 * @param chId
+	 * @param assocAlarmPortsInfo
+	 * @return DBConnectionTerminationPoint
+	 */
+	protected DBConnectionTerminationPoint createOrUpdateCTP(final DBPortTp ptp, final TerminationPoint tp, final TpType tpType,
+			final X36ChannelIdentification chId, final AssociatedAlarmPortsInfo assocAlarmPortsInfo) {
+		assocAlarmPortsInfo.setOnlyCTPAffectedPort(true);
+		boolean fIndexReset = false;
+		final MEDn meDn = helper.getMEDn();
+		final Database dataBase = dbManager.getDatabase();
+		DBConnectionTerminationPoint ctp = dbManager.getCTP(tp.getName());
+
+		if (ctp == null) {
+			fIndexReset = true;
+
+			ctp = dbManager.createCTP(tp);
+
+			final TimeSlotInformation ts = new TimeSlotInformation(AIHelper.buildTimeSlotInfo(tpType, chId.getTimeSlot()));
+			ctp.addAdditionalInformation(ts);
+		} else {
+			dbManager.update(ctp, tp, false);
+
+			final TimeSlotInformation ts = (TimeSlotInformation) ctp.getAdditionalInformation(TimeSlotInformation.NAME);
+			if (ts != null) {
+				final AITimeSlotInfo aiTsInfo = ts.getSyntax();
+				final TpType oldValue = TpType.valueOf(aiTsInfo.getDescriptor().getValue());
+				if (oldValue != tpType) {
+					fIndexReset = true;
+
+					KeysHelper.removeConnectableTpIndex(meDn, (DBCtp) ctp, dataBase, AIHelper.buildXConnectableTpCoord(chId),
+							oldValue);
+					IndexesHelper.resetAlarmTpIndex(meDn, ctp, dataBase, chId, oldValue,
+							assocAlarmPortsInfo.getOldAssociatedAlarmPorts());
+					IndexesHelper.removePerformanceTpIndex(meDn, ctp, dataBase, chId, oldValue);
+					ctp.setAdditionalInformation(new TimeSlotInformation(AIHelper.buildTimeSlotInfo(tpType, chId.getTimeSlot())));
+				} else {
+					IndexesHelper.removeAssocPortAlarmTpIndex(meDn, ctp, dataBase, chId, oldValue,
+							assocAlarmPortsInfo.getAssociatedAlarmPortsToBeRemoved());
+				}
+			}
+		}
+
+		if (ctp != null) {
+			if (fIndexReset == true) {
+				KeysHelper.addConnectableTpIndex(meDn, (DBCtp) ctp, dataBase, AIHelper.buildXConnectableTpCoord(chId), tpType);
+				IndexesHelper.setAlarmTpIndex(meDn, ctp, dataBase, chId, tpType,
+						assocAlarmPortsInfo.getNewAssociatedAlarmPortsItr());
+				IndexesHelper.addPerformanceTpIndex(meDn, ctp, dataBase, chId, tpType);
+			} else {
+				IndexesHelper.addAssocPortAlarmTpIndex(meDn, ctp, dataBase, chId, tpType,
+						assocAlarmPortsInfo.getAssociatedAlarmPortsToBeAddedItr());
+			}
+		}
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(tp, String.format("Created/checked %s...", ctp.getName())));
+		}
+		return ctp;
+	}
+
+	/**
+	 * This method is to create/update object of LSP or VPN FTP in database
+	 *
+	 * @param ftp
+	 * @param tp
+	 * @param tpType
+	 * @param chId
+	 * @param portType
+	 * @param assocAlarmPortsInfo
+	 * @param interfaceType
+	 * @return
+	 */
+	protected DBFtp createOrUpdateFTP(final DBFtp ftp, final TerminationPoint tp, final TpType tpType,
+			final X36ChannelIdentification chId, final AIPortType portType, final AssociatedAlarmPortsInfo assocAlarmPortsInfo,
+			final X36InterfaceType interfaceType) {
+		DBFtp tempFtp = ftp;
+		assocAlarmPortsInfo.setOnlyCTPAffectedPort(false);
+		boolean fIndexReset = false;
+
+		final MEDn meDn = helper.getMEDn();
+
+		final Database dataBase = dbManager.getDatabase();
+
+		if (tempFtp == null) {
+			fIndexReset = true;
+
+			tempFtp = dbManager.createFTP(tp);
+
+			final ChannelInformation chInfo = new ChannelInformation(AIHelper.buildChannelInfo(tpType, chId, portType));
+			tempFtp.addAdditionalInformation(chInfo);
+
+		} else {
+			dbManager.update(tempFtp, tp, false);
+
+			final ChannelInformation chInfo = (ChannelInformation) tempFtp.getAdditionalInformation(ChannelInformation.NAME);
+
+			if (chInfo != null) {
+				final AIChannelInfo aiChInfo = chInfo.getSyntax();
+				final AIPortInfo aiPortInfo = aiChInfo.getPortInfo();
+				/*
+				 * Port type update
+				 */
+				aiPortInfo.setType(portType);
+
+				final TpType oldValue = TpType.valueOf(aiPortInfo.getDescriptor().getValue());
+
+				if (oldValue != tpType) {
+					fIndexReset = true;
+
+					IndexesHelper.resetAlarmTpIndex(meDn, tempFtp, dataBase, chId, oldValue,
+							assocAlarmPortsInfo.getOldAssociatedAlarmPorts());
+
+					tempFtp.setAdditionalInformation(new ChannelInformation(AIHelper.buildChannelInfo(tpType, chId, portType)));
+				}
+			}
+		}
+
+		if (tempFtp != null) {
+			if (fIndexReset) {
+				IndexesHelper.setAlarmTpIndex(meDn, tempFtp, dataBase, chId, tpType,
+						assocAlarmPortsInfo.getNewAssociatedAlarmPortsItr());
+			}
+		}
+
+		return tempFtp;
+	}
+
+	/**
+	 * }
+	 *
+	 * /** This method checks whether the DBXConn has control plane resources
+	 *
+	 * @param dbXConn
+	 * @return boolean
+	 */
+	private boolean isCpResource(final DBCrossConnection dbXConn) {
+		if (!helper.getSBIClient().getPlugIn().getProfile().getBoolProperty("PlugIn.ControlplaneManagement", false)) {
+			return false;
+		}
+		final Iterator<PointDn> aEndPointDnItr = dbXConn.getAEndPoints().iterator();
+
+		while (aEndPointDnItr.hasNext()) {
+			final PointDn pointDn = aEndPointDnItr.next();
+			if (pointDn.isSnpDn() || pointDn.isSnppDn()) {
+				return true;
+			} else {
+				final TPDn tpDn = pointDn.getTpDn();
+				final DBTp dBTp = helper.getSBIClient().getDbManager().getObject(DBTp.class, tpDn);
+				if (dBTp != null) {
+					final String allocatedToControlPlane = AdditionalInfoUtils.find(dBTp.getAdditionalInfo(),
+							"AllocatedToControlPlane");
+					if (allocatedToControlPlane != null) {
+						return true;
+					}
+				}
+			}
+		}
+
+		final Iterator<PointDn> zEndPointDnItr = dbXConn.getZEndPoints().iterator();
+		while (zEndPointDnItr.hasNext()) {
+			final PointDn pointDn = zEndPointDnItr.next();
+			if (pointDn.isSnpDn() || pointDn.isSnppDn()) {
+				return true;
+			} else {
+				final TPDn tpDn = pointDn.getTpDn();
+				final DBTp dBTp = helper.getSBIClient().getDbManager().getObject(DBTp.class, tpDn);
+				if (dBTp != null) {
+					final String allocatedToControlPlane = AdditionalInfoUtils.find(dBTp.getAdditionalInfo(),
+							"AllocatedToControlPlane");
+					if (allocatedToControlPlane != null) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	public static CrossConnect createVirtualXConn(final DBCrossConnectableTp<?, ?> connectableTpFrom,
+			final DBCrossConnectableTp<?, ?> connectableTpTo, final LayerRate layerRate) {
+		// Added this new method as part of LAG management to create the LAG associations as virtual xconns.
+		CrossConnect out = null;
+
+		final SNCType sncType = SNCType.ST_SIMPLE;
+		final boolean fBidirectional = true;
+		final boolean isNotConfigurable = false;
+		out = createCrossConnect(connectableTpFrom, connectableTpTo, layerRate, sncType, fBidirectional, isNotConfigurable);
+
+		Utilities.addNameAndStringValue(out.getAdditionalInfo(), "Virtual", "True");
+
+		return out;
+	}
+
+}

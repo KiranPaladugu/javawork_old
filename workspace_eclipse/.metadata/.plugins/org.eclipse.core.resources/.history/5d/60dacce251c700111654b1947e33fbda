@@ -1,0 +1,35 @@
+package com.marconi.tmp.tools;
+
+import java.util.EventObject;
+
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+
+@SuppressWarnings("serial")
+public abstract class BERConversionEvent extends EventObject {
+
+	private MEDn    meDn = null;
+	private X36NeId neId = null;
+	
+	public BERConversionEvent(Object source, MEDn meDn, X36NeId neId) {
+		super(source);
+		this.meDn = meDn;
+		this.neId = neId;
+	}
+
+	/**
+	 * @return the meDn
+	 */
+	public MEDn getMeDn() {
+		return meDn;
+	}
+
+	/**
+	 * @return the neId
+	 */
+	public X36NeId getNeId() {
+		return neId;
+	}
+
+	
+}

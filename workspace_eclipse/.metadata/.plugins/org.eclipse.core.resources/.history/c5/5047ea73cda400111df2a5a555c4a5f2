@@ -1,0 +1,3023 @@
+/**
+ *
+ */
+package com.marconi.fusion.tmf.i36PlugIn;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Properties;
+import java.util.Set;
+import java.util.StringTokenizer;
+import java.util.regex.Pattern;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36BFDConfiguration;
+import com.marconi.fusion.X36.X36BFDInfo;
+import com.marconi.fusion.X36.X36BfdSessionStyle;
+import com.marconi.fusion.X36.X36BfdSessionType;
+import com.marconi.fusion.X36.X36CommandType;
+import com.marconi.fusion.X36.X36Compliance;
+import com.marconi.fusion.X36.X36CrossConnectionCmd;
+import com.marconi.fusion.X36.X36FrameStructureDefineAction;
+import com.marconi.fusion.X36.X36G709Parameters;
+import com.marconi.fusion.X36.X36JTrace;
+import com.marconi.fusion.X36.X36KLM;
+import com.marconi.fusion.X36.X36LSPDetails;
+import com.marconi.fusion.X36.X36LSPDirection;
+import com.marconi.fusion.X36.X36LspOamBfdCommand;
+import com.marconi.fusion.X36.X36MplsMonitoringCommand;
+import com.marconi.fusion.X36.X36MsgReportSetOAMMonitoring;
+import com.marconi.fusion.X36.X36MsgSetOAMMonitoring;
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.X36.X36NodeRole;
+import com.marconi.fusion.X36.X36OAMPeriod;
+import com.marconi.fusion.X36.X36ODUId;
+import com.marconi.fusion.X36.X36ODUTimeSlot;
+import com.marconi.fusion.X36.X36OptionalOAMPeriod;
+import com.marconi.fusion.X36.X36OptionalSessionState;
+import com.marconi.fusion.X36.X36OptionalTunnelInfo;
+import com.marconi.fusion.X36.X36Parameters;
+import com.marconi.fusion.X36.X36ReqId;
+import com.marconi.fusion.X36.X36SdhFrameStructureDefinition;
+import com.marconi.fusion.X36.X36SessionState;
+import com.marconi.fusion.X36.X36SetOfLSPDetails;
+import com.marconi.fusion.X36.X36SetOfMplsMonitoringCommands;
+import com.marconi.fusion.X36.X36SetReportCrossConnections;
+import com.marconi.fusion.X36.X36TunnelDetails;
+import com.marconi.fusion.X36.X36TunnelInfo;
+import com.marconi.fusion.X36.X36UnitIdentification;
+import com.marconi.fusion.base.application.Profile;
+import com.marconi.fusion.base.asn1.ASN1Exception;
+import com.marconi.fusion.base.asn1.SetType;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.util.Holder;
+import com.marconi.fusion.base.util.Utility;
+import com.marconi.fusion.tmf.additionalInformation.AdditionalInfoUtils;
+import com.marconi.fusion.tmf.additionalInformation.AllocationMaximum;
+import com.marconi.fusion.tmf.additionalInformation.ChannelInformation;
+import com.marconi.fusion.tmf.additionalInformation.DBAdditionalInfoUtilities;
+import com.marconi.fusion.tmf.additionalInformation.EmSystemProfile;
+import com.marconi.fusion.tmf.additionalInformation.MappingModeInfo;
+import com.marconi.fusion.tmf.additionalInformation.NVAvailable;
+import com.marconi.fusion.tmf.additionalInformation.NextLongIdAdditionalInfo;
+import com.marconi.fusion.tmf.additionalInformation.PortInformation;
+import com.marconi.fusion.tmf.additionalInformation.ProprietaryAdditionalInfo;
+import com.marconi.fusion.tmf.additionalInformation.TimeSlotInformation;
+import com.marconi.fusion.tmf.agnosticInfo.AIChannelInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AILSPLogicalIndex;
+import com.marconi.fusion.tmf.agnosticInfo.AIPortCoord;
+import com.marconi.fusion.tmf.agnosticInfo.AIPortInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AIPortType;
+import com.marconi.fusion.tmf.agnosticInfo.AITimeSlotInfo;
+import com.marconi.fusion.tmf.db.DBAdditionalInformation;
+import com.marconi.fusion.tmf.db.DBComponent.TMFObject;
+import com.marconi.fusion.tmf.db.DBConnectionTerminationPoint;
+import com.marconi.fusion.tmf.db.DBCrossConnectableTp;
+import com.marconi.fusion.tmf.db.DBCtp;
+import com.marconi.fusion.tmf.db.DBFp;
+import com.marconi.fusion.tmf.db.DBFtp;
+import com.marconi.fusion.tmf.db.DBIterator;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.DBPortTp;
+import com.marconi.fusion.tmf.db.DBPtp;
+import com.marconi.fusion.tmf.db.DBSncConnectableTp;
+import com.marconi.fusion.tmf.db.DBTCProfile;
+import com.marconi.fusion.tmf.db.DBTp;
+import com.marconi.fusion.tmf.db.Predicate;
+import com.marconi.fusion.tmf.db.Session;
+import com.marconi.fusion.tmf.i36PlugIn.I36PlugIn.PluginProperty;
+import com.marconi.fusion.tmf.i36PlugIn.MEInfos.MEState;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.ProprietaryParameterName;
+import com.marconi.fusion.tmf.plugIn.TpType;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.CtpNameComponent;
+import com.marconi.fusion.tmf.plugIn.types.CtpNameComponents;
+import com.marconi.fusion.tmf.plugIn.types.LayerRate;
+import com.marconi.fusion.tmf.plugIn.types.LayeredParameterList;
+import com.marconi.fusion.tmf.plugIn.types.LayeredParameters;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEId;
+import com.marconi.fusion.tmf.plugIn.types.NameAndStringValue;
+import com.marconi.fusion.tmf.plugIn.types.TCProfileDn;
+import com.marconi.fusion.tmf.plugIn.types.TPConnectionState;
+import com.marconi.fusion.tmf.plugIn.types.TPData;
+import com.marconi.fusion.tmf.plugIn.types.TerminationMode;
+import com.marconi.fusion.tmf.plugIn.types.TerminationPoint;
+import com.marconi.fusion.tmf.plugIn.types.TransmissionParameters;
+import com.marconi.fusion.tmf.predicate.AdditionalInfoPredicate;
+import com.marconi.fusion.tmf.sbi.em.EmSBIPluginProperty;
+import com.marconi.fusion.tmf.tmfFramework.TmfNameUtilities;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayerRateManager;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayeredParameterManager;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayeredParameterManager.ParameterName;
+import com.marconi.fusion.tmf.utils.AIHelper;
+import com.marconi.fusion.tmf.utils.CrossConnectionHelper;
+import com.marconi.fusion.tmf.utils.CrossConnectionHelper.EndPoint;
+import com.marconi.fusion.tmf.utils.CtpNameUtil;
+import com.marconi.fusion.tmf.utils.LayeredParametersUtils;
+import com.marconi.fusion.tmf.utils.NumberGenerator;
+
+/**
+ * @author QGIUVUL
+ * 
+ */
+public class TPDataManager {
+	private static final Log LOG = LogFactory.getLog(TPDataManager.class);
+	private static Set<Short> validJ0Rates = new HashSet<Short>();
+	private static Set<Short> validJRates = new HashSet<Short>();
+	private static Set<Short> validMPLSRate = new HashSet<Short>();
+	private final Map<ParameterName, String> paramMap = new HashMap<ParameterName, String>();
+	private final Profile ovrHdMonProf = LayeredParameterManager.getManager().getProfile();
+	private LayerRate layerRate = null;
+	private final static String TRAIL_TRACE_MONITOR_ON = "On";
+	private final static String TRAIL_TRACE_MONITOR_OFF = "Off";
+
+	private final int ODU_LAYER = 1;
+	private final int OTU_LAYER = 2;
+
+	private Session session = null;
+
+	private SBIClientI sbiClient = null;
+
+	// variables added to handle OTMClient CTP
+	public boolean isMuxOtmClient = false;
+	public int otmCTPClientPort = 0;
+	private I36DatabaseManager dbManager = null;
+	private TrailTraceHelper trailTraceHelper = null;
+	private TrailTraceHandler trailTraceHandler = null;
+	private static Set<Short> validFragmentServerLayers = new HashSet<Short>();
+	static private final String LAYERRATE = "LR_Ethernet";
+
+	static {
+
+		validJ0Rates.add(LayerRateManager.getLayerRateAsShort("LR_Section_OC3_STS3_and_RS_STM1"));
+		validJ0Rates.add(LayerRateManager.getLayerRateAsShort("LR_Section_OC12_STS12_and_RS_STM4"));
+		validJ0Rates.add(LayerRateManager.getLayerRateAsShort("LR_Section_OC48_STS48_and_RS_STM16"));
+		validJ0Rates.add(LayerRateManager.getLayerRateAsShort("LR_Section_OC192_STS192_and_RS_STM64"));
+		validJ0Rates.add(LayerRateManager.getLayerRateAsShort("LR_Section_OC768_STS768_and_RS_STM256"));
+
+		/*
+		 * adding otu and odu layers
+		 */
+		validJRates.add(LayerRateManager.getLayerRateAsShort("LR_Optical_Transmission_Section"));
+		validJRates.add(LayerRateManager.getLayerRateAsShort("LR_OCH_Transport_Unit_1"));
+		validJRates.add(LayerRateManager.getLayerRateAsShort("LR_OCH_Transport_Unit_2"));
+		validJRates.add(LayerRateManager.getLayerRateAsShort("LR_OCH_Transport_Unit_3"));
+		validJRates.add(LayerRateManager.getLayerRateAsShort("LR_OCH_Data_Unit_0"));
+		validJRates.add(LayerRateManager.getLayerRateAsShort("LR_OCH_Data_Unit_1"));
+		validJRates.add(LayerRateManager.getLayerRateAsShort("LR_OCH_Data_Unit_2"));
+		validJRates.add(LayerRateManager.getLayerRateAsShort("LR_OCH_Data_Unit_3"));
+
+
+		validFragmentServerLayers.add(LayerRateManager.getLayerRateAsShort("LR_STS3c_and_AU4_VC4"));
+		validFragmentServerLayers.add(LayerRateManager.getLayerRateAsShort("LR_Low_Order_TU3_VC3"));
+		validFragmentServerLayers.add(LayerRateManager.getLayerRateAsShort("LR_VT2_and_TU12_VC12"));
+		validFragmentServerLayers.add(LayerRateManager.getLayerRateAsShort("LR_VT6_and_TU2_VC2"));
+		validFragmentServerLayers.add(LayerRateManager.getLayerRateAsShort("LR_E1_2M"));
+
+
+
+		// validFragmentServerLayers.add(LayerRateManager.getLayerRateAsShort("LR_STS12c_and_VC4_4c"));
+		// validFragmentServerLayers.add(LayerRateManager.getLayerRateAsShort("LR_STS48c_and_VC4_16c"));
+		// validFragmentServerLayers.add(LayerRateManager.getLayerRateAsShort("LR_STS192c_and_VC4_64c"));
+	}
+
+	public TPDataManager(final SBIClientI sbiClient) {
+		this.sbiClient = sbiClient;
+		trailTraceHelper = new TrailTraceHelper(sbiClient);
+		trailTraceHandler = new TrailTraceHandler();
+
+	}
+
+	public void setTPData(final TPData tpInfo, final Holder<TerminationPoint> modifiedTPHolder, final Object... varArgs)
+					throws Exception {
+		dbManager = getSBIClient().getDbManager();
+		LOG.info(String.format("SetTPData for TP <%s>", TmfNameUtilities.toString(tpInfo.getTpName())));
+
+		if (!tpInfo.getIngressTrafficDescriptorName().isNone()) {
+			LOG.error(new DumpInfo(tpInfo, "Invalid ingressTrafficDescriptor:"));
+			throw PlugInExceptionHandler.unableToComply("ingressTrafficDescriptor");
+		}
+
+		if (!tpInfo.getEgressTrafficDescriptorName().isNone()) {
+			LOG.error(new DumpInfo(tpInfo, "Invalid egressTrafficDescriptor:"));
+			throw PlugInExceptionHandler.unableToComply("egressTrafficDescriptor");
+		}
+
+		boolean isSessionOpen = false;
+		try {
+
+			// To check whether the session is already open in write mode
+			if (dbManager.getSession() != null) {
+				isSessionOpen = dbManager.getSession().isWrite();
+			}
+
+			if (!isSessionOpen) {
+				this.session = dbManager.beginSession(true);
+			} else {
+				this.session = dbManager.getSession();
+			}
+
+			DBTp dbTp = null;
+			boolean forceSBI = false;
+			if (varArgs != null && varArgs.length > 0) {
+				if (varArgs[0] != null) {
+					forceSBI = true;
+				}
+			}
+			if (tpInfo.getTpName().isPresentCtp()) {
+				try {
+					dbTp = dbManager.getFP(tpInfo.getTpName());
+				} catch (final Exception ex) {
+					LOG.warn("Exception while fetching FP for this Ctp from DB :" + ex.getMessage()
+									+ " Hence getting CTP from DB");
+					dbTp = dbManager.getConnectionTerminationPoint(tpInfo.getTpName());
+				}
+				if (dbTp == null) {
+					dbTp = dbManager.getConnectionTerminationPoint(tpInfo.getTpName());
+				}
+			} else {
+				dbTp = dbManager.getTP(tpInfo.getTpName());
+			}
+			if (dbTp == null) {
+				LOG.error("TP not found in the database.  ");
+				throw PlugInExceptionHandler.entityNotFound("TP not found in the database. ");
+
+			}
+			updateTerminationPoint(tpInfo, modifiedTPHolder, dbTp, forceSBI);
+			if (!isSessionOpen) {
+				this.session.commit();
+				this.session.terminate();
+			} 
+		} catch (final PlugInException exp) {
+			LOG.error(new DumpInfo(exp.getMessage()));
+			throw exp;
+		} finally {
+		}
+	}
+
+	/*
+	 * Added this method to check whether the aiPortType is of wdm port or not.
+	 */
+	private boolean isWDMPort(final AIPortType aiPortType) {
+		if (aiPortType.isPt_aSideRmTransponder() || aiPortType.isPt_bSideRmTransponder() || aiPortType.isPt_genericTransponder()
+						|| aiPortType.isPt_lmTransponder() || aiPortType.isPt_lmTransponderIngress()
+						|| aiPortType.isPt_lmTransponderEgress() || aiPortType.isPt_muxponderAggregated()
+						|| aiPortType.isPt_muxponderClientLM() || aiPortType.isPt_muxponderClientTM() || aiPortType.isPt_stmTransponder()) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * @param tpInfo
+	 * @param modifiedTPHolder
+	 * @param dbTp
+	 * @throws Exception
+	 *             This method updates the TerminationPoint of DBTp with
+	 *             transmissionParams entered through setTPData operation
+	 */
+	private void updateTerminationPoint(final TPData tpInfo, final Holder<TerminationPoint> modifiedTPHolder, final DBTp dbTp,
+					final boolean forceSBI) throws Exception {
+		DBTp dbTp1 = dbTp;
+		final AIPortType aiportType = DBAdditionalInfoUtilities.getAIPortType(dbTp1);
+		/*
+		 * Added condition as part of fix for TR HO91375:
+		 * X36MsgGetPortConfiguration for fast ethernet ports is not supported
+		 * by SO-EM .
+		 */
+		if (!aiportType.isPt_fastEthernet()) {
+			// Added this condition to restrict calling the method
+			// isInterIntraProtectingPort for wdm port type.
+			if (isWDMPort(aiportType)) {
+				if (trailTraceHelper.isInterIntraProtectingPort(dbTp)) {
+					LOG.error("TP is involved in INTER / INTRA card Protection and role is PROTECTION. ");
+					throw PlugInExceptionHandler
+					.unableToComply("Unmanaged TP: TP is involved in INTER / INTRA card Protection and role is PROTECTION. ");
+				}
+			}
+		}
+		if (tpInfo.getTpName().isPresentCtp()) {
+
+			if (dbTp1 instanceof DBCtp) {
+				DBCtp ctp = (DBCtp) dbTp1;
+				final CtpNameComponents components = ctp.getDn().getCtp().getComponents();
+
+				if (I36Utilities.isLagFragmentCTP(dbTp1)) {
+					final LagTPDataManager lagTpMgr = new LagTPDataManager(sbiClient);
+					lagTpMgr.setTPData(tpInfo, dbTp1, modifiedTPHolder);
+					return;
+				}
+
+				if (aiportType.isPt_fastEthernet() || tpInfo.getTransmissionParams().size() != 0) {
+					setTransmissionParams(ctp, tpInfo);
+				}
+
+				validateDBTP(ctp, tpInfo, aiportType, components);
+
+				/**
+				 * If the tpMapping Mode is of the CTP is set to
+				 * 'terminated_and_available_for_mapping' or
+				 * 'neither_terminated_nor_available_for_mapping' then we have
+				 * to form the X36SdhFrameStructureDefinition and send it to
+				 * MV36
+				 */
+				if (components.size() == 1 && CtpNameUtil.isAu4(components)) {
+					updateFrameStructure(tpInfo, modifiedTPHolder, ctp);
+				}
+				ctp = dbManager.getCTP(tpInfo.getTpName());
+				modifiedTPHolder.setTarget(ctp.getInformation());
+			} else if (dbTp1 instanceof DBFp) {
+				final DBFp dbFp = (DBFp) dbTp1;
+				modifyFPProfile(tpInfo, dbFp,forceSBI);
+				setTransmissionParams(dbFp, tpInfo);
+				modifiedTPHolder.setTarget(dbFp.getInformation());
+			}
+
+		} else {
+
+			if (I36Utilities.isLagPort(dbTp1, aiportType)) {
+				final LagTPDataManager lagTpMgr = new LagTPDataManager(sbiClient);
+				lagTpMgr.setTPData(tpInfo, dbTp1, modifiedTPHolder);
+			} else {
+				DBPortTp ptp = (DBPortTp) dbTp1;
+				validateDBTP(tpInfo, ptp);
+
+				if (tpInfo.getTransmissionParams().size() != 0) {
+					// Added as part of implementation of WI 1.12 in Full
+					// support
+					// for MINI-LINK SP210/310 R1.3NE
+					// family
+					final boolean isModifiedBundlingIndicator = setBundlingIndicator(tpInfo, ptp);
+
+					if (!isModifiedBundlingIndicator) {
+						setTransmissionParams(ptp, tpInfo, modifiedTPHolder);
+					}
+				}
+
+				dbTp1 = dbManager.getTP(tpInfo.getTpName());
+				if (dbTp1 instanceof DBPortTp) {
+					ptp = (DBPortTp) dbTp1;
+				}
+				modifiedTPHolder.setTarget(ptp.getInformation());
+			}
+		}
+
+	}
+
+	public void modifyFPProfile(final TPData tpInfo, final DBFp dbFp,final boolean forceSBI) {
+
+		final LayeredParameterList transmissionParamsList = tpInfo.getTransmissionParams();
+
+		if (!LayeredParametersUtils.hasLayerRate(transmissionParamsList, LayerRateManager.getLayerRate(LAYERRATE))) {
+			LOG.error("updateTerminationPoint : Layer Rate should be LR_Ethernet");
+			throw PlugInExceptionHandler.invalidInput("Invalid Input : Layer Rate should be LR_Ethernet");
+		}
+
+		final LayeredParameters layeredParameters = LayeredParametersUtils.findLayeredParameter(transmissionParamsList,
+						LayerRateManager.getLayerRate(LAYERRATE));
+		final TransmissionParameters transParams = layeredParameters.getTransmissionParams();
+		final String tableTcProfile = LayeredParametersUtils.getValue(transParams,
+						LayeredParameterManager.VLANParameterName.TrafficMappingTo_Table_TcProfile.name());
+		if (tableTcProfile == null || tableTcProfile.length() == 0) {
+			LOG.error("Invalid Input :  TrafficMappingTo_Table_TcProfile should be present");
+			throw PlugInExceptionHandler.invalidInput("Invalid Input :  TrafficMappingTo_Table_TcProfile should be present.");
+		}
+		final String trafficClass = LayeredParametersUtils.getValue(transParams,
+						LayeredParameterManager.VLANParameterName.TrafficMappingTo_Table_TrafficClass.name());
+
+		final String tableCountStr = LayeredParametersUtils.getValue(transParams,
+						LayeredParameterManager.VLANParameterName.TrafficMapping_Table_Count.name());
+
+		int dbTableCount = 0;
+		final LayeredParameterList dbTransmissionParamsList = dbFp.getParameterList();
+		final LayeredParameters dbLayeredParameters = LayeredParametersUtils.findLayeredParameter(dbTransmissionParamsList,
+						LayerRateManager.getLayerRate(LAYERRATE));
+		final TransmissionParameters dbTransParams = dbLayeredParameters.getTransmissionParams();
+		if (tableCountStr == null) {
+			dbTableCount = Integer.parseInt(LayeredParametersUtils.getValue(dbTransParams,
+							LayeredParameterManager.VLANParameterName.TrafficMapping_Table_Count.name()));
+		} else {
+			if (!Pattern.matches("[0-9]*[0-9]", tableCountStr)) {
+				LOG.error("Not a valid TableCount. Should be an integer");
+				throw PlugInExceptionHandler.invalidInput("Not a valid TableCount. Should be an integer");
+			}
+			dbTableCount = new Integer(tableCountStr);
+		}
+
+		String tableTcPriority = LayeredParametersUtils.getValue(transParams,
+						LayeredParameterManager.VLANParameterName.TrafficMappingFrom_Table_Priority.name());
+		if (tableTcPriority == null) {
+			tableTcPriority = LayeredParametersUtils.getValue(dbTransParams,
+							LayeredParameterManager.VLANParameterName.TrafficMappingFrom_Table_Priority.name());
+		}
+
+		if (!forceSBI) {
+			final StringTokenizer tcProfilesTokens = new StringTokenizer(tableTcProfile, ",");
+
+			if (tcProfilesTokens.countTokens() != dbTableCount) {
+				LOG.error("Invalid Input :  Number of TrafficMappingTo_Table_TcProfile values doest not match with TrafficMapping_Table_Count.");
+				throw PlugInExceptionHandler
+				.invalidInput("Invalid Input :  Number of TrafficMappingTo_Table_TcProfile values doest not match with TrafficMapping_Table_Count.");
+			} else if (tcProfilesTokens.countTokens() == 0) {
+				LOG.error("Invalid Input :  Please specify values to TrafficMappingTo_Table_TcProfile, TrafficMapping_Table_Count.");
+				throw PlugInExceptionHandler
+				.invalidInput("Invalid Input :  Please specify values to TrafficMappingTo_Table_TcProfile, TrafficMapping_Table_Count.");
+			}
+		}
+
+		// check whether NE is connected or not
+		final MEDn meDn = new MEDn();
+		meDn.setMe(tpInfo.getTpName().getMe());
+		final X36NeId neId = sbiClient.getNaming().getNeId(meDn);
+
+		if (!(sbiClient.getMeInfos().getState(MEState.linkup, meDn))) {
+			LOG.error(" Communication with NE  " + neId.getValue() + " does not exist");
+			throw PlugInExceptionHandler.neCommLoss(" Communication with the NE " + neId.getValue()
+							+ " is lost. Cannot perform the requested operation..");
+		}
+
+		// Get TCProfiles for the FP from database and
+		// 1. Check whether the input TCProfiles are assigned to the FP (in DB)
+		// or not.
+		// If YES then check the TCProfile is present in the database are not.
+		// If YES then ignore else throw exception
+		// 2. If Not assigned then add list of TCProfiles to a list
+
+		//If forceSBI is false,check whether TCProfiles of FlowPoint
+		// already matches with TCProfiles of FlowPoint present in DB
+		// forceSBI will be true when modifyTCProfile operation is performed
+		String tcProfileModifed = null;
+		if (!forceSBI) {
+
+			boolean checkPriority = true;
+			List<String> dbPriorityList = null;
+			List<String> priorityList = null;
+			List<String> dbTCProfileList = null;
+
+			if (checkPriority) {
+				final String dbTcProfile = LayeredParametersUtils.getValue(dbTransParams,
+								LayeredParameterManager.VLANParameterName.TrafficMappingTo_Table_TcProfile.name());
+				final String dbPriority = LayeredParametersUtils.getValue(dbTransParams,
+								LayeredParameterManager.VLANParameterName.TrafficMappingFrom_Table_Priority.name());
+				final FDFrUtilities fdfrUtils = new FDFrUtilities(sbiClient);
+
+				if (dbPriority != null && dbPriority.length() > 0) {
+					dbPriorityList = fdfrUtils.getTablePriority(dbPriority);
+				}
+				dbTCProfileList = Arrays.asList(dbTcProfile.split(","));
+				if (tableTcPriority != null && tableTcPriority.length() > 0) {
+					priorityList = fdfrUtils.getTablePriority(tableTcPriority);
+				}
+				if ((priorityList.get(0).equals("all") && !dbPriorityList.get(0).equals("all"))
+								|| (!priorityList.get(0).equals("all") && dbPriorityList.get(0).equals("all"))) {
+					checkPriority = false;
+				}
+			}
+			final List<String> tCProfileList = Arrays.asList(tableTcProfile.split(","));
+
+			boolean notExists = false;
+			for (final String tcProfileName : tCProfileList) {
+				final TCProfileDn tcProfileDn = new TCProfileDn();
+				tcProfileDn.setTcProfile(tcProfileName);
+				final DBTCProfile dbtcProfile2 = dbManager.getObject(DBTCProfile.class, tcProfileDn);
+				if (dbtcProfile2 == null) {
+					LOG.error("Invalid TCProfiles are provided.");
+					throw PlugInExceptionHandler.unableToComply("Invalid TCProfiles are provided.");
+				} else if (checkPriority) {
+					if (dbTCProfileList.contains(tcProfileName)) {
+						final int dbPriorityFirstIdx = dbTCProfileList.indexOf(tcProfileName);
+						final int dbPriorityLastIdx = dbTCProfileList.lastIndexOf(tcProfileName);
+						final int priorityFirstIdx = tCProfileList.indexOf(tcProfileName);
+						final int priorityLastIdx = tCProfileList.lastIndexOf(tcProfileName);
+						if (!dbPriorityList.get(dbPriorityFirstIdx).equals(priorityList.get(priorityFirstIdx))
+										|| !dbPriorityList.get(dbPriorityLastIdx).equals(priorityList.get(priorityLastIdx))) {
+							notExists = true;
+						}
+
+					} else {
+						notExists = true;
+					}
+				} else {
+					notExists = true;
+				}
+			}
+			if (!notExists) {
+				return;
+			}
+		} else {
+			tcProfileModifed = LayeredParametersUtils.getValue(transParams, "TCProfileModified");
+		}
+
+		final FDFrManager fdFrManager = new FDFrManager(sbiClient);
+		fdFrManager.modifyFPProfile(dbFp, tableTcProfile, tcProfileModifed, tableTcPriority, trafficClass, forceSBI);
+
+	}
+
+	/**
+	 * @param tpInfo
+	 * @param ptp
+	 */
+	private void validateDBTP(final TPData tpInfo, final DBPortTp ptp) {
+		if (ptp == null) {
+			LOG.error(new DumpInfo(tpInfo.getTpName(), "Cannot find PTP:"));
+			throw PlugInExceptionHandler.entityNotFound("tpInfo.tpName");
+		}
+		if (!tpInfo.getTpMappingMode().isTm_na()) {
+			LOG.error(new DumpInfo(tpInfo.getTpName(), "Unmanaged TP type:"));
+			throw PlugInExceptionHandler.unableToComply("tpInfo.tpMappingMode");
+		}
+	}
+
+	/**
+	 * @param ctp
+	 * @param tpInfo
+	 * @param aiportType
+	 *            This method checks whether CTP is Dummy CTP contained in FTP
+	 *            of Muxponder. This method also checks whether
+	 *            'terminated_and_available_for_mapping' or
+	 *            'neither_terminated_nor_available_for_mapping' is given for
+	 *            other than Au4 CTP
+	 * @param components
+	 */
+	private void validateDBTP(final DBCtp ctp, final TPData tpInfo, final AIPortType aiportType,
+					final CtpNameComponents components) {
+		/*
+		 * Checking whether ctp is Muxponder wrapped TM ctp of FTP. If it true,
+		 * it returns exception because ctp of FTP is dummy for Muxponder
+		 * wrapped TM
+		 */
+		if (trailTraceHelper.isMuxDummyCTP(ctp)) {
+			LOG.error("Muxponder TM mode ctp of FTP is dummy");
+			throw PlugInExceptionHandler.unableToComply("Muxponder TM mode ctp of FTP is dummy");
+		}
+		if (components.size() != 1 && !CtpNameUtil.isAu4(components)) {
+			if (!tpInfo.getTpMappingMode().isTm_na()) {
+				throw PlugInExceptionHandler.unableToComply("Invalid tpMappingMode: " + tpInfo.getTpMappingMode().toString());
+			}
+		}
+	}
+
+	/**
+	 * @param tpInfo
+	 * @param modifiedTPHolder
+	 * @param ctp
+	 *            This method updates the Frame Structure of SDH Frame
+	 */
+	private void updateFrameStructure(final TPData tpInfo, final Holder<TerminationPoint> modifiedTPHolder, final DBCtp ctp) {
+		DBCtp ctp1 = ctp;
+		if (!tpInfo.getTransmissionParams().isEmpty()) {
+			for (final LayeredParameters layeredParameters : tpInfo.getTransmissionParams()) {
+				if (!layeredParameters.getTransmissionParams().isEmpty()) {
+					throw PlugInExceptionHandler
+					.unableToComply("Cannot modify Layered parameters with layer rate : LR_STS3c_and_AU4_VC4 (15)");
+				}
+			}
+		}
+		// code changes to fix TR HM38850
+		final TerminationPoint terminationPoint = new TerminationPoint(ctp1.getInformation());
+		final TerminationMode oldTermMode = terminationPoint.getTpMappingMode();
+		final TerminationMode newTermMode = tpInfo.getTpMappingMode();
+		final CtpNameComponent au4Component = new CtpNameComponent();
+		CtpNameUtil.getAu4(ctp1.getDn().getCtp().getComponents(), au4Component);
+		final X36SdhFrameStructureDefinition sdhFrameStructDefinition = new X36SdhFrameStructureDefinition();
+		final X36FrameStructureDefineAction frameStructDefinition = new X36FrameStructureDefineAction();
+		final X36KLM klm = new X36KLM();
+		klm.setAu4(au4Component.getSts3c_au4().getAu4().getJ());
+		klm.setTu3(0);
+		klm.setTu2(0);
+		klm.setTu12(0);
+
+		setFrameStructure(oldTermMode, frameStructDefinition, newTermMode, klm);
+		sdhFrameStructDefinition.add(frameStructDefinition);
+		/*
+		 * TR HM51720 Checks whether available parameter is present on AU4 CTP
+		 * or not for sdhFrameStructuringSupport . Ne doesnot support
+		 * sdhFrameStructuring when 'sdhFrameStructuringSupport' is "False" . ex
+		 * : SMA OMS1240
+		 */
+		if (ctp1.getAdditionalInformation(NVAvailable.NAME) != null) {
+			setSdhFramestructuring(ctp1, sdhFrameStructDefinition);
+		}
+		terminationPoint.setTpMappingMode(newTermMode);
+		ctp1.setInformation(terminationPoint);
+		setMappingMode(ctp1, newTermMode);
+		this.session.checkpoint();
+		// TR HM38850
+		// Setting values on TP before return statement so that it could be
+		// displayed properly in Result window
+		ctp1 = dbManager.getCTP(tpInfo.getTpName());
+		modifiedTPHolder.setTarget(ctp1.getInformation());
+
+	}
+
+	/**
+	 * @param ctp
+	 * @param newTermMode
+	 *            This method sets the mapping mode
+	 */
+	public void setMappingMode(final DBCtp ctp, final TerminationMode newTermMode) {
+		// Setting AdditionalInformation MappingModeInfo on au4Ctp when
+		// sdhFrameStructuringSupport is false
+		if (ctp.getAdditionalInformation(NVAvailable.NAME) == null) {
+			final MappingModeInfo mappingModeInfo = new MappingModeInfo(new TerminationMode(newTermMode));
+			if (ctp.getAdditionalInformation(MappingModeInfo.NAME) != null) {
+				ctp.setAdditionalInformation(mappingModeInfo);
+			} else {
+				ctp.addAdditionalInformation(mappingModeInfo);
+			}
+		}
+	}
+
+	/**
+	 * @param oldTermMode
+	 * @param frameStructDefinition
+	 * @param newTermMode
+	 * @param klm
+	 *            This method sets the updates the SDH Frame Strcuture.
+	 */
+	public void setFrameStructure(final TerminationMode oldTermMode, final X36FrameStructureDefineAction frameStructDefinition,
+					final TerminationMode newTermMode, final X36KLM klm) {
+		if (oldTermMode.isTm_neither_terminated_nor_available_for_mapping()
+						&& newTermMode.isTm_terminated_and_available_for_mapping()) {
+			frameStructDefinition.setCreateVC4(klm);
+		} else if (oldTermMode.isTm_terminated_and_available_for_mapping()
+						&& newTermMode.isTm_neither_terminated_nor_available_for_mapping()) {
+			frameStructDefinition.setDeleteVC4(klm);
+		} else if (oldTermMode.equals(newTermMode)) {
+			throw PlugInExceptionHandler.invalidInput("Tp's mappingmode is same as the selected mappingmode");
+		} else if (newTermMode.isTm_na()) {
+			// TR 54265
+			// TM_NA mapping mode cannot be set to au4CTP
+			throw PlugInExceptionHandler.unableToComply("Cannot set TM_NA as mapping mode for au4CTP");
+		}
+	}
+
+	// =========================================================================
+
+	/**
+	 * This method is to set layer param BundlingIndicator at LR_Ethernet to
+	 * CPTP
+	 * 
+	 * @param tpInfo
+	 * @param ptp
+	 * @return
+	 */
+	private boolean setBundlingIndicator(final TPData tpInfo, final DBPortTp ptp) {
+		boolean isModifiedBundlingIndicator = false;
+		if (LayeredParametersUtils.hasLayerRate(tpInfo.getTransmissionParams(), LayerRateManager.getLayerRate("LR_Ethernet"))) {
+			final LayeredParameters layerParams = LayeredParametersUtils.findLayeredParameter(tpInfo.getTransmissionParams(),
+							LayerRateManager.getLayerRate("LR_Ethernet"));
+			final String allToOneIndicValue = LayeredParametersUtils.getValue(layerParams.getTransmissionParams(),
+							"AllToOneIndicator");
+			final String bundlingIndicValue = LayeredParametersUtils.getValue(layerParams.getTransmissionParams(),
+							"BundlingIndicator");
+			if (allToOneIndicValue != null) {
+				LOG.error("AllToOneIndicator can not be modified");
+				throw PlugInExceptionHandler.unableToComply("AllToOneIndicator can not be modified");
+			}
+			if (bundlingIndicValue != null) {
+				final TerminationPoint tp = ptp.getInformation();
+				final String bundlingIndicValueOfDBTp = LayeredParametersUtils.getValue(tp,
+								LayerRateManager.getLayerRate("LR_Ethernet"), "BundlingIndicator");
+				if (bundlingIndicValueOfDBTp == null) {
+					LOG.error("BundlingIndicator is not already set to the TP. So, SetTpData to modify BundlingIndicator's value is not supported");
+					throw PlugInExceptionHandler
+					.unableToComply("BundlingIndicator is not already set to the TP. So, SetTpData to modify BundlingIndicator's value is not supported");
+				}
+				if (bundlingIndicValue.equalsIgnoreCase("true")) {
+					final String allToOneIndicValueOfDBTp = LayeredParametersUtils.getValue(tp,
+									LayerRateManager.getLayerRate("LR_Ethernet"), "AllToOneIndicator");
+					if (allToOneIndicValueOfDBTp != null && allToOneIndicValueOfDBTp.equalsIgnoreCase("true")) {
+						LOG.error("BundlingIndicator can not be set to true when AllToOneIndicator of the TP is true");
+						throw PlugInExceptionHandler
+						.unableToComply("BundlingIndicator can not be set to true when AllToOneIndicator of the TP is true");
+					}
+					if (bundlingIndicValueOfDBTp.equalsIgnoreCase("true")) {
+						LOG.error("BundlingIndicator is already set to true");
+						throw PlugInExceptionHandler.unableToComply("BundlingIndicator is already set to true");
+					}
+				}
+				LayeredParametersUtils.put(layerParams.getTransmissionParams(), "BundlingIndicator", bundlingIndicValue);
+				ptp.setInformation(tp);
+				isModifiedBundlingIndicator = true;
+			}
+		}
+		return isModifiedBundlingIndicator;
+	}
+
+	protected SBIClientI getSBIClient() {
+		return this.sbiClient;
+	}
+
+	// =========================================================================
+
+	/**
+	 * @param ptp
+	 * @param transmissionParams
+	 * @throws Exception
+	 *             This method updates TransmissionParams present in
+	 *             TerminationPoint of PTP/FTP
+	 */
+	public void setTransmissionParams(final DBPortTp ptp, final TPData tpInfo, final Holder<TerminationPoint> modifiedTPHolder)
+					throws Exception {
+		final LayeredParameterList transmissionParams = tpInfo.getTransmissionParams();
+		final LayeredParameterList newLPL = new LayeredParameterList();
+		final TerminationPoint tp = ptp.getInformation();
+		// checking layer rate selected against actual layer rates.
+		final ArrayList<Integer> layerRates = new ArrayList<Integer>();
+		final LayeredParameterList dpLpList = tp.getTransmissionParams();
+		for (final LayeredParameters layeredParameters : dpLpList) {
+			final LayerRate rate = layeredParameters.getLayer();
+			layerRates.add(rate.getValue());
+		}
+		final NameAndStringValue overHeadNSV = new NameAndStringValue();
+
+		for (final LayeredParameters layeredParameters : transmissionParams) {
+			final LayeredParameters returnLP = new LayeredParameters();
+			returnLP.set(layeredParameters);
+			final LayerRate rate = layeredParameters.getLayer();
+
+			if (isValidRate(layeredParameters.getLayer()) && layerRates.contains(rate.getValue())) {
+				setParameters(layeredParameters, returnLP, tp);
+				setTrailTraceParams(tp, returnLP);
+				layerRate = layeredParameters.getLayer();
+				final String layerRateName = LayerRateManager.toString(layeredParameters.getLayer());
+				if (validJRates.contains(LayerRateManager.getLayerRateAsShort(layerRateName))) {
+					setJPTP(ptp, layerRateName);
+				} else {
+					setJ0PTP(ptp);
+				}
+				setSupportsMonitorParam(layerRateName, returnLP, false, false);
+			}
+			// validate the layer rate to create fragment CTPs and set the
+			// parameters allocatedNumber and fragment serverLayer on
+			// the ptp/ftp
+			else if (LayeredParametersUtils.hasLayerRate(transmissionParams, LayerRateManager.getLayerRate("LR_Fragment"))) {
+				validateAndSetFragmentServerLRAndAllocatedNumber(ptp, layeredParameters, returnLP);
+			} else if (LayeredParametersUtils.hasLayerRate(transmissionParams, LayerRateManager.getLayerRate("LR_Ethernet"))) {
+				// The layered parameters applicable for Ethernet ports of
+				// SPO14xx are only processed here.
+				// For other NEs the operation might fail.
+				final LagTPDataManager lagTpMgr = new LagTPDataManager(sbiClient);
+				lagTpMgr.setTPData(tpInfo, ptp, modifiedTPHolder);
+				// returnLP = new LayeredParameters();
+				return;
+			} else if (LayeredParametersUtils.hasLayerRate(transmissionParams, LayerRateManager.getLayerRate("LR_MPLS_TP"))) {
+				updateMplsTpLayeredParameters(ptp, tpInfo, modifiedTPHolder);
+				return;
+			} else {
+				LOG.error(new DumpInfo(LayerRateManager.toString(rate), "Invalid LayerRate %s"));
+				throw PlugInExceptionHandler
+				.unableToComply(String.format("Invalid LayerRate %s", LayerRateManager.toString(rate)));
+			}
+
+			newLPL.add(returnLP);
+		}
+		/*
+		 * code changed for TR HM72382 -- fillTransmissionParams() is called
+		 * instead of fillTransmission() because if new parameters which are
+		 * specified in GUI not existed in TP, new parameters are added to TP
+		 * transmission parameters. if new parameters existed in TP, upadtes the
+		 * TP transmission parameters with new parameters.
+		 */
+		ptp.setInformation(trailTraceHelper.fillTransmission(tp, newLPL, overHeadNSV));
+		this.session.checkpoint();
+
+	}
+
+	/**
+	 * @param terminationPoint
+	 * @param returnLP
+	 * @throws Exception
+	 *             This method updates LayeredParameters present in
+	 *             TerminationPoint with LayeredParameters present in returnLP
+	 */
+	public void setTrailTraceParams(final TerminationPoint terminationPoint, final LayeredParameters returnLP) throws Exception {
+		String paramValue = null;
+		if (paramMap.containsKey(ParameterName.TrailTraceExpectedRx) && !paramMap.containsKey(ParameterName.TrailTraceMonitor)) {
+			// get value from NE or from TMF DB
+			paramValue = LayeredParametersUtils.getValue(terminationPoint, returnLP.getLayer(), ParameterName.TrailTraceMonitor);
+			if (paramValue == null) {
+				LOG.error(new DumpInfo(ParameterName.TrailTraceMonitor, " TrailTraceMonitor value is not present in DB: '%s'"));
+				throw PlugInExceptionHandler.unableToComply(String.format("TrailTraceMonitor value is not present in DB: '%s'",
+								ParameterName.TrailTraceMonitor));
+			} else if (paramValue.equals(TRAIL_TRACE_MONITOR_OFF)) {
+				LOG.info("**retreived trailtracemonitor from db is off.setting trailtraceexpectedrx as nulljtrace");
+				setTrailTraceMonitor(terminationPoint, returnLP, paramValue);
+				paramMap.remove(ParameterName.TrailTraceExpectedRx);
+			} else if (paramValue.equals(TRAIL_TRACE_MONITOR_ON)) {
+				LOG.info("**retreived trailtracemonitor from db is ON and trailtraceexpectedrx is present");
+				setTrailTraceMonitor(terminationPoint, returnLP, paramValue);
+			}
+
+		} // only trailtrace monitor
+		else if (!paramMap.containsKey(ParameterName.TrailTraceExpectedRx)
+						&& paramMap.containsKey(ParameterName.TrailTraceMonitor)
+						&& paramMap.get(ParameterName.TrailTraceMonitor).equals(TRAIL_TRACE_MONITOR_ON)) {
+
+			// get value from NE or from TMFDB
+			paramValue = LayeredParametersUtils.getValue(terminationPoint, returnLP.getLayer(),
+							ParameterName.TrailTraceExpectedRx);
+			if (paramValue == null) {
+				LOG.error(new DumpInfo(ParameterName.TrailTraceExpectedRx,
+								"TrailTraceExpectedRx value is not present in DB: '%s'"));
+				throw PlugInExceptionHandler.unableToComply(String.format(
+								"TrailTraceExpectedRx value is not present in DB: '%s'", ParameterName.TrailTraceExpectedRx));
+			}
+			setTrailTraceExpectedRx(terminationPoint, returnLP, paramValue);
+
+		}
+	}
+
+	/**
+	 * @param ctp
+	 * @param tpInfo
+	 * @throws Exception
+	 *             This method updates TransmissionParams present in
+	 *             TerminationPoint of CTP
+	 */
+	public void setTransmissionParams(final DBCtp ctp, final TPData tpInfo) throws Exception {
+		if (LayeredParametersUtils.isMuxOTMCTP(ctp)) {
+			isMuxOtmClient = true;
+			final TerminationPoint tpTemp = new TerminationPoint();
+			final DBTp dbTP = dbManager.getTP(tpInfo.getTpName());
+			tpTemp.set(dbTP.getInformation());
+			otmCTPClientPort = AdditionalInfoUtils.findInteger(tpTemp.getAdditionalInfo(),
+							ProprietaryAdditionalInfo.FTPClientPort);
+		}
+
+		// checking whether transmissionparams are not specified for any layer
+		for (final LayeredParameters layeredParameters : tpInfo.getTransmissionParams()) {
+			if (layeredParameters.getTransmissionParams().size() == 0) {
+				throw PlugInExceptionHandler.invalidInput("No Parameter has been specified for Layer "
+								+ LayerRateManager.toString(layeredParameters.getLayer()));
+			}
+		}
+		final LayeredParameterList newLPL = new LayeredParameterList();
+		final TerminationPoint tp = ctp.getInformation();
+		// checking layer rate selected against actual layer rates.
+		final ArrayList<Integer> layerRates = new ArrayList<Integer>();
+		final LayeredParameterList dpLpList = tp.getTransmissionParams();
+		for (final LayeredParameters layeredParameters : dpLpList) {
+			final LayerRate rate = layeredParameters.getLayer();
+			layerRates.add(rate.getValue());
+		}
+
+		for (final LayeredParameters layeredParameters : tpInfo.getTransmissionParams()) {
+			final LayeredParameters returnLP = new LayeredParameters();
+			returnLP.set(layeredParameters);
+			final LayerRate rate = layeredParameters.getLayer();
+
+			if (isValidRate(layeredParameters.getLayer()) && layerRates.contains(rate.getValue())) {
+				updateCTPLayeredParameters(ctp, layeredParameters, returnLP);
+			}
+			// validate the layer rate to create fragment CTPs and set the
+			// parameters allocatedNumber and fragment serverLayer on
+			// the ptp/ftp
+			else if (LayeredParametersUtils.hasLayerRate(tpInfo.getTransmissionParams(),
+							LayerRateManager.getLayerRate("LR_Fragment"))) {
+				validateAndSetFragmentServerLRAndAllocatedNumber(ctp, layeredParameters, returnLP);
+			} else if (!LayeredParametersUtils.hasLayerRate(tpInfo.getTransmissionParams(),
+							LayerRateManager.getLayerRate("LR_Ethernet"))) {
+				if (LayeredParametersUtils.hasLayerRate(tpInfo.getTransmissionParams(),
+								LayerRateManager.getLayerRate("LR_LAG_Fragment"))) {
+					final LagTPDataManager lagTpMgr = new LagTPDataManager(sbiClient);
+					final Holder<TerminationPoint> modifiedTPHolder = new Holder<TerminationPoint>();
+					lagTpMgr.setTPData(tpInfo, ctp, modifiedTPHolder);
+					return;
+				} else {
+					LOG.error(new DumpInfo(LayerRateManager.toString(rate), "Invalid LayerRate %s"));
+					throw PlugInExceptionHandler.unableToComply(String.format("Invalid LayerRate %s",
+									LayerRateManager.toString(rate)));
+				}
+			}
+
+			newLPL.add(returnLP);
+		}
+
+		ctp.setInformation(trailTraceHelper.fillCtpTransmissionParams(tp, newLPL));
+
+		checkPointDBSession();
+
+	}
+
+	private void checkPointDBSession() throws Exception {
+		boolean isSessionOpen = false;
+		try {
+
+			// To check whether the session is already open in write mode
+			dbManager = getSBIClient().getDbManager();
+			if (dbManager.getSession() != null) {
+				isSessionOpen = dbManager.getSession().isWrite();
+			}
+
+			if (!isSessionOpen) {
+				this.session = dbManager.beginSession(true);
+			} else {
+				this.session = dbManager.getSession();
+			}
+			if (!isSessionOpen) {
+				this.session.commit();
+			} else {
+				this.session.checkpoint();
+			}
+		} catch (final Exception exp) {
+			LOG.error(new DumpInfo(exp.getMessage()));
+			throw exp;
+		} finally {
+			if (!isSessionOpen) {
+				if (this.session != null) {
+					this.session.terminate();
+				}
+			}
+		}
+	}
+
+	/**
+	 * @param ctp
+	 * @param tpInfo
+	 * @throws Exception
+	 *             This method updates TransmissionParams present in
+	 *             TerminationPoint of CTP
+	 */
+	public void setTransmissionParams(final DBFp fp, final TPData tpInfo) throws Exception {
+
+		// checking whether transmissionparams are not specified for any layer
+		for (final LayeredParameters layeredParameters : tpInfo.getTransmissionParams()) {
+			if (layeredParameters.getTransmissionParams().size() == 0) {
+				throw PlugInExceptionHandler.invalidInput("No Parameter has been specified for Layer "
+								+ LayerRateManager.toString(layeredParameters.getLayer()));
+			}
+		}
+		final LayeredParameterList newLPL = new LayeredParameterList();
+		final TerminationPoint tp = fp.getInformation();
+		// checking layer rate selected against actual layer rates.
+		final ArrayList<Integer> layerRates = new ArrayList<Integer>();
+		final LayeredParameterList dpLpList = tp.getTransmissionParams();
+
+		String tableTcProfile = null;
+
+		tableTcProfile = LayeredParametersUtils.getValue(fp.getInformation(),
+						LayerRateManager.getLayerRate(LAYERRATE),
+						LayeredParameterManager.VLANParameterName.TrafficMappingTo_Table_TcProfile.name());
+
+		final StringTokenizer tcProfiletokens = new StringTokenizer(
+						tableTcProfile, ",");
+		final FDFrUtilities fdfrUtils = new FDFrUtilities(sbiClient);
+		while (tcProfiletokens.hasMoreTokens()) {
+			final String tcProfileValue = tcProfiletokens.nextToken();
+			final DBTCProfile dbTcProfile = fdfrUtils.getDBTCProfile(fdfrUtils.getTcProfileID(tcProfileValue));
+			if (dbTcProfile == null) {
+				LOG.error("TCProfile " + tcProfileValue
+								+ " does not exist");
+				throw PlugInExceptionHandler.invalidInput("TCProfile "
+								+ tcProfileValue + " does not exist");
+			} else {
+				// Fix for the TR HP80126 , disassociating the FP to the old TCProfile.
+				if (dbTcProfile.getAssociatedTPs().contains(fp)) {
+					dbTcProfile.getAssociatedTPs().remove(fp);
+				}
+			}
+		}
+
+		for (final LayeredParameters layeredParameters : dpLpList) {
+			final LayerRate rate = layeredParameters.getLayer();
+			layerRates.add(rate.getValue());
+		}
+
+		for (final LayeredParameters layeredParameters : tpInfo.getTransmissionParams()) {
+			final LayeredParameters returnLP = new LayeredParameters();
+			returnLP.set(layeredParameters);
+			final LayerRate rate = layeredParameters.getLayer();
+			if (!LayeredParametersUtils
+							.hasLayerRate(tpInfo.getTransmissionParams(), LayerRateManager.getLayerRate("LR_Ethernet"))) {
+				LOG.error(new DumpInfo(LayerRateManager.toString(rate), "Invalid LayerRate %s"));
+				throw PlugInExceptionHandler
+				.unableToComply(String.format("Invalid LayerRate %s", LayerRateManager.toString(rate)));
+			}
+
+			newLPL.add(returnLP);
+		}
+
+		fp.setInformation(trailTraceHelper.fillCtpTransmissionParams(tp, newLPL));
+		this.session.checkpoint();
+
+	}
+
+	/**
+	 * @param ctp
+	 * @param layeredParameters
+	 * @param returnLP
+	 * @throws Exception
+	 *             This method updates CTP LayeredParameters present in
+	 *             layeredParameters with LayeredParameters present in returnLP
+	 */
+	private void updateCTPLayeredParameters(final DBCtp ctp, final LayeredParameters layeredParameters,
+					final LayeredParameters returnLP) throws Exception {
+
+		final TerminationPoint tp = ctp.getInformation();
+		paramMap.clear();
+		boolean isPresentTTActualTx = false;
+		boolean isPresentTTExpected = false;
+		boolean isPresentTTMonitor = false;
+		boolean isPresentOverheadMonitor = false;
+
+		final AIPortType aiPortType = DBAdditionalInfoUtilities.getPortInfo(ctp).getType();
+		/*
+		 * ctpParamswithoverheadFlag variable is used to differentiate between
+		 * X36G709CTPParameters and X36G709Parameters. if
+		 * ctpParamswithoverheadFlag = true then it refers to
+		 * X36G709CTPParameters. Otherwise if cctpFlag = false then it refers to
+		 * X36G709Parameters.
+		 */
+		boolean ctpParamswithoverheadFlag = false;
+		final String actualTxDb = LayeredParametersUtils.getValue(tp, layeredParameters.getLayer(),
+						ParameterName.TrailTraceActualTx);
+		// As per CR 58,when TrailTraceACtualTx is not present in DB,then it
+		// comes under CR 58,TR HM72425
+		if (actualTxDb == null) {
+			ctpParamswithoverheadFlag = true;
+		} else {
+			ctpParamswithoverheadFlag = false;
+		}
+		setParameters(layeredParameters, returnLP, tp);
+		if (paramMap.containsKey(ParameterName.TrailTraceActualTx)) {
+			// For CBR Port,TrailTraceActualTx is not present
+			if (aiPortType.isPt_cbr()) {
+				throw PlugInExceptionHandler.unableToComply("TrailTraceActualTx not supported on tp");
+			}
+			// condition for checking trailtraceactualtx is supported and
+			// present in db for RS and ODU layer
+			// according to CR58.if not present throw exception,(TR HM72425)
+			if (ctpParamswithoverheadFlag) {
+				throw PlugInExceptionHandler.unableToComply(String.format("Trail Trace ActualTx cannot be set: '%s'",
+								paramMap.get(ParameterName.TrailTraceActualTx)));
+			}
+			isPresentTTActualTx = true;
+
+		}
+		if (paramMap.containsKey(ParameterName.TrailTraceExpectedRx)) {
+			isPresentTTExpected = true;
+		}
+		if (paramMap.containsKey(ParameterName.TrailTraceMonitor)) {
+			isPresentTTMonitor = true;
+		}
+		/*
+		 * Fix for TR HO79879,when overheadMonitoringEnabled parameters is
+		 * entered by user during setTPData operation,updating
+		 * isPresentOverheadMonitor with true in order to not retreieve the
+		 * parameter again from TMF DB.If overheadMonitoringEnabled parameter is
+		 * not entered by user,retreive the parameter value from TMF DB
+		 */
+		isPresentOverheadMonitor = ovrHdMonProf.containsKey(ProprietaryParameterName.overheadMonitoringEnabled.toString());
+
+		// Write condition to apply only for Transponders/Muxponders CR-58
+		if (validJ0Rates.contains(LayerRateManager.getLayerRate(layeredParameters.getLayer()))
+						&& aiPortType.isPt_stmTransponder() && aiPortType.isPt_muxponderClientTM() && isPresentTTActualTx) {
+			LOG.error(new DumpInfo(ParameterName.TrailTraceActualTx.name(), "Unmanaged LayeredParameter: '%s'"));
+			throw PlugInExceptionHandler.unableToComply(String.format("Unmanaged LayeredParameter: '%s'",
+							ParameterName.TrailTraceActualTx.name()));
+		}
+
+		if (isOtuOrOdu(LayerRateManager.toString(layeredParameters.getLayer())) == ODU_LAYER
+						|| validJ0Rates.contains(LayerRateManager.getLayerRate(layeredParameters.getLayer()))) {
+
+			validateOverHeadMonitoringEnabled(ctpParamswithoverheadFlag, isPresentOverheadMonitor, ctp, returnLP);
+		}
+		/*
+		 * if checkCCTPFlag is true and any of the parameters
+		 * (trailtraceexpectedrx,trailtracemonitor) is present then control goes
+		 * inside to get the other parameter from db. if checkCCTPFlag is
+		 * false,i.e where overheadMonitoringEnabled is not required and any of
+		 * the parameters (trailtraceexpectedrx,trailtracemonitor) is present
+		 * then control goes inside to get the other parameter from db.
+		 */
+		if (!(ctpParamswithoverheadFlag && !isPresentTTMonitor && !isPresentTTExpected)) {
+			setTrailTraceParams(tp, returnLP);
+		}
+
+		final String layerRateName = LayerRateManager.toString(layeredParameters.getLayer());
+		if (validJRates.contains(LayerRateManager.getLayerRateAsShort(layerRateName))) {
+			setJCTP(ctp, layerRateName);
+		} else {
+			setJ0CTP(ctp);
+		}
+
+		setSupportsMonitorParam(layerRateName, returnLP, true, ctpParamswithoverheadFlag);
+		if (ctpParamswithoverheadFlag) {
+
+			final String overheadValue = (String) ovrHdMonProf.get(ProprietaryParameterName.overheadMonitoringEnabled.toString());
+			for (final NameAndStringValue trailtraceParam : returnLP.getTransmissionParams().getAll()) {
+				if (trailtraceParam.getName().getValue().equals(ProprietaryParameterName.overheadMonitoringEnabled.toString())) {
+					returnLP.getTransmissionParams().remove(trailtraceParam);
+				}
+			}
+			returnLP.getTransmissionParams().add(
+							trailTraceHelper.addLayeredParams(ProprietaryParameterName.overheadMonitoringEnabled.toString(),
+											overheadValue));
+
+		}
+
+	}
+
+	/**
+	 * @param ctpParamswithoverheadFlag
+	 * @param isPresentOverheadMonitor
+	 * @param ctp
+	 * @param returnLP
+	 * @throws Exception
+	 *             This method validates overHeadMonitoringEnabled parameters
+	 *             present in LayeredParameters entered through setTPData
+	 *             operation
+	 */
+	private void validateOverHeadMonitoringEnabled(final boolean ctpParamswithoverheadFlag,
+					final boolean isPresentOverheadMonitor, final DBCtp ctp, final LayeredParameters returnLP) throws Exception {
+		final TerminationPoint tp = ctp.getInformation();
+		if ((ctpParamswithoverheadFlag && !isPresentOverheadMonitor)) {
+
+			// If CTP is of LM or RM or OTMclient and not specified the
+			// OverheadMonitoringEnabled
+			// get value from NE or from TMFDB
+			final String overheadValue = LayeredParametersUtils.getValue(tp, returnLP.getLayer(),
+							ProprietaryParameterName.overheadMonitoringEnabled.toString());
+			if (overheadValue == null || overheadValue.length() <= 0) {
+				LOG.error(new DumpInfo(ProprietaryParameterName.overheadMonitoringEnabled.toString(),
+								"OverheadMonitoringEnabled value must be present: '%s'"));
+				throw PlugInExceptionHandler.unableToComply(String.format(
+								"OverheadMonitoringEnabled value must be present: '%s'",
+								ProprietaryParameterName.overheadMonitoringEnabled.toString()));
+			} else {
+				setTrailTraceOverheadMonitor(tp, returnLP, overheadValue);
+				return;
+			}
+		}
+
+		if (!ctpParamswithoverheadFlag && isPresentOverheadMonitor) {
+			// If CTP is not of LM or RM or OTMclient and specified the
+			// OverheadMonitoringEnabled
+			LOG.error(new DumpInfo(ProprietaryParameterName.overheadMonitoringEnabled.toString(),
+							"Unmanaged LayeredParameter: '%s'"));
+			throw PlugInExceptionHandler.unableToComply(String.format("Unmanaged LayeredParameter: '%s'",
+							ProprietaryParameterName.overheadMonitoringEnabled.toString()));
+		}
+	}
+
+	/**
+	 * @param layeredParameters
+	 * @param returnLP
+	 * @param terminationPoint
+	 * @throws Exception
+	 *             This method sets Trail Trace
+	 *             Parameters,TrailTraceActualTx,TrailTraceExpectedRx
+	 *             ,TrailTraceMonitor, overHeadMonitoringEnabled in global
+	 *             variable paramMap which are retrevied while sending
+	 *             setPortParameter I36 request to set TrailTrace
+	 */
+	private void setParameters(final LayeredParameters layeredParameters, final LayeredParameters returnLP,
+					final TerminationPoint terminationPoint) throws Exception {
+		/*
+		 * note: TrailTraceActualTx and TrailTraceExpectedRx must have one
+		 * character (upto 64) and only spaces in parameters are not accepted.
+		 * spaces of string at left or right end are trimmed and if string
+		 * length greater than 1 , we add spaces at end of string to send
+		 * request to Plugin
+		 *
+		 * Trimming the value of traiTraceActualTx and traiTraceExpectedRx and
+		 * settting the value of SupportsMonitoring based on traiTraceExpectedRx
+		 */
+		/*
+		 * note: TrailTraceActualTx and TrailTraceExpectedRx must have
+		 * characters (upto 64). if string length greater than 1 , we add null
+		 * characters at end of string to send request to Plugin
+		 */
+		String paramValue = null;
+		for (final NameAndStringValue transmissionParamNSV : layeredParameters.getTransmissionParams()) {
+			LayeredParametersUtils.getValue(terminationPoint, layeredParameters.getLayer(), ParameterName.TrailTraceExpectedRx);
+
+			/*
+			 * note: TrailTraceActualTx and TrailTraceExpectedRx must have
+			 * characters (upto 64). if string length greater than 1 , we add
+			 * null characters at end of string to send request to Plugin
+			 */
+			paramValue = transmissionParamNSV.getValue().getValue();
+			trailTraceHelper.validateTransmissionParamsValue(transmissionParamNSV.getName().getValue(), paramValue);
+			if (transmissionParamNSV.getName().getValue().compareTo(ParameterName.TrailTraceActualTx.name()) == 0) {
+				setTrailTraceActualTx(terminationPoint, returnLP, paramValue);
+
+			} else if (transmissionParamNSV.getName().getValue().compareTo(ParameterName.TrailTraceExpectedRx.name()) == 0) {
+
+				setTrailTraceExpectedRx(terminationPoint, returnLP, paramValue);
+
+			} else if (transmissionParamNSV.getName().getValue().compareTo(ParameterName.TrailTraceMonitor.name()) == 0) {
+				setTrailTraceMonitor(terminationPoint, returnLP, paramValue);
+
+			} else if (transmissionParamNSV.getName().getValue()
+							.compareTo(ProprietaryParameterName.overheadMonitoringEnabled.toString()) == 0) {
+				setTrailTraceOverheadMonitor(terminationPoint, returnLP, paramValue);
+			}
+
+		}
+	}
+
+	/**
+	 * @param tp
+	 *            on which the CTPs shall be created
+	 * @param layeredParameters
+	 * @param returnLP
+	 * @throws Exception
+	 *             this method get the FragmentServerLayer and allocatedNumber
+	 *             from db and compares with the current FragmentServerLayer and
+	 *             current allocatedNumber given in input, and creates the CTPs
+	 *             or deletes the excss CTPs.
+	 */
+
+	private void validateAndSetFragmentServerLRAndAllocatedNumber(final DBTp tp, final LayeredParameters layeredParameters,
+					final LayeredParameters returnLP) throws Exception {
+
+		// checking if input TP has encapsulation layer rate
+		if (!LayeredParametersUtils.hasLayerRate(tp.getParameterList(), LayerRateManager.getLayerRate("LR_Encapsulation"))) {
+			final String errReason = String.format("Input transmission parameters not applicable for Termination Point: <%s>",
+							TmfNameUtilities.toString(tp.getDn()));
+			LOG.error(errReason);
+			throw PlugInExceptionHandler.invalidInput(errReason);
+		}
+		validateRadioPort(tp);
+
+		// reading AllocatedNumber and FragmentServerLayer from input
+		String allocatedNumber = null;
+		String fragmentServerLayer = null;
+
+		allocatedNumber = LayeredParametersUtils.getValue(layeredParameters.getTransmissionParams(),
+						ParameterName.AllocatedNumber);
+
+		fragmentServerLayer = LayeredParametersUtils.getValue(layeredParameters.getTransmissionParams(),
+						ParameterName.FragmentServerLayer);
+
+		if (fragmentServerLayer != null && !isValidFragmentServerLayerRate(Short.parseShort(fragmentServerLayer))) {
+			final String errReason = String.format("Invalid FragmentServerLayer: <%s>", fragmentServerLayer);
+			LOG.error(errReason);
+			throw PlugInExceptionHandler.invalidInput(errReason);
+		}
+
+		validateFragmentServerLRAndAllocatedNumber(tp, allocatedNumber, fragmentServerLayer, layeredParameters, returnLP);
+	}
+
+	/**
+	 * @param dbPtp
+	 * @param allocatedNumber
+	 * @param fragmentServerLayer
+	 * @param layeredParameters
+	 * @param returnLP
+	 * @throws Exception
+	 *             This method validates FragmentServerLayer and AllocatedNumber
+	 *             entered in LayeredParameters while performing setTPData
+	 *             operation
+	 */
+	public void validateFragmentServerLRAndAllocatedNumber(final DBTp tp, final String allocatedNumber,
+					final String fragmentServerLayer, final LayeredParameters layeredParameters, final LayeredParameters returnLP)
+									throws Exception {
+
+		int dbAllocatedNumber = 0;
+		// get current allocatedNumber
+		final String strAlldNumber = LayeredParametersUtils.getValue(tp.getInformation(), layeredParameters.getLayer(),
+						ParameterName.AllocatedNumber);
+		if (strAlldNumber != null) {
+			dbAllocatedNumber = Integer.parseInt(strAlldNumber);
+		}
+		final String dbFragmentServerLayer = LayeredParametersUtils.getValue(tp.getInformation(), layeredParameters.getLayer(),
+						ParameterName.FragmentServerLayer);
+		/*
+		 * Added condition as part of fix for TR HO91375: FragmentServerLayer
+		 * will not be added in the layer params, if TrafficType of the TP is
+		 * invalid. FragmentServerLayer and/or AllocatedNumber cannot be
+		 * modified in this case.
+		 */
+		if (dbFragmentServerLayer == null) {
+			LOG.error(new DumpInfo(
+							"Modification of FragmentServerLayer and/or AllocatedNumber is not supported for this TP, since its traffic type is invalid"));
+			throw PlugInExceptionHandler
+			.unableToComply(String
+							.format("Modification of FragmentServerLayer and/or AllocatedNumber is not supported for this TP, since its traffic type is invalid"));
+		}
+
+		// get TP where new params need to be set
+		DBPortTp dbPtp = null;
+
+		if (tp instanceof DBFtp) {
+			dbPtp = (DBPortTp) tp;
+		} else if (tp instanceof DBCtp) {
+			dbPtp = ((DBCtp) tp).getPtp().get();
+		} else {
+			final String errReason = String.format("Input transmission parameters not supported on TP <%s>",
+							TmfNameUtilities.toString(tp.getDn()));
+			LOG.error(errReason);
+			throw PlugInExceptionHandler.invalidInput(errReason);
+		}
+		// if both allocatedNumber and fragmentSererLayer are given in input
+		if (fragmentServerLayer != null) {
+			/*
+			 * If fragmentServerLayer present in DB is 5(ie. EOPDH ports),then
+			 * fragmentServerLayer parameter cannot be changed
+			 */
+			if (Integer.parseInt(dbFragmentServerLayer) == 5 && !fragmentServerLayer.equalsIgnoreCase(dbFragmentServerLayer)) {
+				LOG.error(new DumpInfo("FragmentServerLayer should be 5 for EoPDH port"));
+				throw PlugInExceptionHandler.unableToComply(String.format("FragmentServerLayer should be 5 for EoPDH port"));
+			} else if (allocatedNumber != null) {
+				// check whether the given layer is valid or not to perform
+				// setTPData opration
+				// if input given fragmentServerLayer and dbFragment serverLayer
+				// both are same
+				if (fragmentServerLayer.equalsIgnoreCase(dbFragmentServerLayer)) {
+					setAllocatedNumber(dbPtp, strAlldNumber, dbFragmentServerLayer, allocatedNumber, layeredParameters);
+				}
+				// if input given fragmentServerLayer and dbFragment serverLayer
+				// are different
+				else if (!(allocatedNumber == null && dbAllocatedNumber == 0)) {
+
+					setFragmentServerLayer(dbPtp, fragmentServerLayer, dbFragmentServerLayer, allocatedNumber, returnLP,
+									layeredParameters, dbAllocatedNumber);
+				}
+			}
+
+			// if only fragment serverLayer is given in input
+			else if (allocatedNumber == null) {
+				if (fragmentServerLayer.equalsIgnoreCase(dbFragmentServerLayer)) {
+					return;
+				} else if (!(allocatedNumber == null && dbAllocatedNumber == 0)) {
+					final LayerRate lR = new LayerRate(Integer.parseInt(fragmentServerLayer));
+					LOG.debug("FragmentServerLayer " + lR.toString());
+
+					setFragmentServerLayer(dbPtp, fragmentServerLayer, dbFragmentServerLayer, allocatedNumber, returnLP,
+									layeredParameters, dbAllocatedNumber);
+				}
+
+			}
+		}
+		// if only allocatedNumber is given in input
+		else if (allocatedNumber != null) {
+			if (Integer.parseInt(allocatedNumber) == dbAllocatedNumber) {
+				return;
+			} else {
+				setAllocatedNumber(dbPtp, strAlldNumber, dbFragmentServerLayer, allocatedNumber, layeredParameters);
+			}
+		}
+
+		// when any of the parameter are empty or null, then throw below
+		// exception
+		else {
+			LOG.error(new DumpInfo("FragmentServerLayer and/or AllocatedNumber cannot be empty, values should present "));
+			throw PlugInExceptionHandler.unableToComply(String
+							.format("FragmentServerLayer and AllocatedNumber cannot be empty values should present"));
+		}
+	}
+
+	/**
+	 * @param tp
+	 *            This method checks whether porttype of DBTp belongs to Radio
+	 *            Port.
+	 */
+	public void validateRadioPort(final DBTp tp) {
+		/*
+		 * Added as part of MTOSI R2.0 over EM implementation: If setTpData
+		 * operation is performed on FTP, which is configured as RL/IME in NPU3
+		 * B card, that operation should be rejected
+		 */
+		if (tp instanceof DBFtp) {
+			final DBFtp dbFtp = (DBFtp) tp;
+			if (LayeredParametersUtils.hasLayerRate(dbFtp.getTransmissionParamsList(),
+							LayerRateManager.getLayerRate("LR_Ethernet"))
+							&& LayeredParametersUtils.hasLayerRate(dbFtp.getTransmissionParamsList(),
+											LayerRateManager.getLayerRate("LR_Fragment"))) {
+				if (dbFtp.getAdditionalInformation(ChannelInformation.NAME) != null) {
+					final ChannelInformation chanInfo = (ChannelInformation) dbFtp
+									.getAdditionalInformation(ChannelInformation.NAME);
+					if (chanInfo != null) {
+						final AIPortType aiPortType = chanInfo.getSyntax().getPortInfo().getType();
+						if (aiPortType.isPt_radioPort()) {
+							final String errReason = String
+											.format("These transmission params should not be modified for FTP <%s> , which is configured as RL/IME ",
+															TmfNameUtilities.toString(tp.getDn()));
+							LOG.error(errReason);
+							throw PlugInExceptionHandler.invalidInput(errReason);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * @param dbPtp
+	 * @param dbLayer
+	 * @return method calculate the all possible CTPs at given Layer
+	 */
+	private int calculatePotentialCTPs(final DBPortTp dbPtp, final LayerRate dbLayer) {
+		int possibleCTPs = 0;
+		if (dbPtp != null) {
+			final DBAdditionalInformation maxAllocation = dbPtp.getAdditionalInformation(AllocationMaximum.NAME);
+			final int max = Integer.parseInt(maxAllocation.getValue().toString());
+			// If layerRate is "LR_E1_2M",then return the maxAllocation value.
+			if (dbLayer.getValue() == 5) {
+				return max;
+			}
+			possibleCTPs = I36Utilities.getMaxNumberOfCTPs(dbLayer, max, true);
+		}
+		return possibleCTPs;
+	}
+
+	/**
+	 * method compares with the current allocated number and the dbAllocated
+	 * number, if both are same returns, if current allocated number is greater
+	 * then the DB then create the extra CTPs, if current allocatedNumber is
+	 * less than the DBAllocated Number then deletes the CTPs if the CTPs are
+	 * not in InUse state
+	 * 
+	 * @param dbPtp
+	 * @param fragmentServerLayer
+	 *            - current fragmentServerLayer
+	 * @param dbAllocatedNum
+	 *            - allocatedNumber from the DB
+	 * @param dbFragmentServerLayer
+	 *            - fragmentServerLayer from the DB
+	 * @param allocatedNumber
+	 *            - current allocatedNumber
+	 * @param returnLP
+	 * @param layeredParameters
+	 */
+	private void setAllocatedNumber(final DBPortTp dbPtp, final String dbAllocatedNum, final String dbFragmentServerLayer,
+					final String allocatedNumber, final LayeredParameters layeredParameters) throws Exception {
+		int dbAllocatedNumber = 0;
+		if (dbAllocatedNum != null) {
+			dbAllocatedNumber = Integer.parseInt(dbAllocatedNum);
+		}
+		int alldNumber = 0;
+		if (allocatedNumber != null) {
+			alldNumber = Integer.parseInt(allocatedNumber);
+		}
+		LayerRate dbLayer = null;
+		if (dbFragmentServerLayer != null) {
+			dbLayer = new LayerRate(Integer.parseInt(dbFragmentServerLayer));
+
+			// input given allocatednumber and dballocatedumber both are same
+			// return with success
+			if (dbAllocatedNumber == alldNumber) {
+				LOG.info(String.format("AllocatdNumber on the TP <%s> is already set to %d",
+								TmfNameUtilities.toString(dbPtp.getDn()), dbAllocatedNumber));
+				return;
+			}
+			// input given allocatedNumber is greater then the
+			// dbAllocatedNumber, then create extra fragment CTPs if possible.
+			else if (alldNumber > dbAllocatedNumber) {
+				final int potentialCtps = calculatePotentialCTPs(dbPtp, dbLayer);
+				if (alldNumber <= potentialCtps) {
+					if (dbLayer.getValue() == 5) {
+						I36Utilities.createE1FragmentCTPs(dbPtp.getDn(), new LayerRate(Integer.parseInt(dbFragmentServerLayer)),
+										alldNumber, getSBIClient(), dbPtp, true);
+					} else {
+						I36Utilities.createVCGFragmentCTPs(dbPtp.getDn(), new LayerRate(Integer.parseInt(dbFragmentServerLayer)),
+										alldNumber, getSBIClient(), dbPtp, true, createVC2EquipmentInfoProperties(dbLayer));
+					}
+				} else {
+					LOG.error(new DumpInfo(
+									String.format(
+													"Allocated number %d is exceeding max potential ctps %d , So cannot create the TPs as bandwidth limit crossed",
+													alldNumber, potentialCtps)));
+					throw PlugInExceptionHandler.unableToComply(String.format("Cannot create the TPs, bandwidth limit crossed"));
+				}
+			}
+			// current allocatedNumber is less than the dbAllocatedNumber then
+			// delete the excess CTP, if those are not in InUse
+			// state.
+			else if (alldNumber < dbAllocatedNumber) {
+				deleteFragments(dbPtp, dbLayer, dbAllocatedNumber, alldNumber);
+			} else {
+				LOG.error(new DumpInfo("cannot perform setTPData operation with the FragmentserverLayer and AllocatatedNumber"));
+				throw PlugInExceptionHandler.unableToComply(String
+								.format("cannot perform setTPData operation with the FragmentserverLayer and AllocatatedNumber"));
+			}
+		} else {
+			LOG.error(new DumpInfo("No FragmentServerLayer, cannot create the fragment CTPs"));
+			throw PlugInExceptionHandler.unableToComply(String.format("No FragmentServerLayer, cannot create the fragment CTPs"));
+
+		}
+
+	}
+
+	/**
+	 * @param dbPtp
+	 * @param dbLayer
+	 * @param dbAllocatedNumber
+	 * @param alldNumber
+	 *            This method deletes Fragment CTP's under FTP of Ethernet Port
+	 */
+	public void deleteFragments(final DBPortTp dbPtp, final LayerRate dbLayer, final int dbAllocatedNumber,
+					final int inputAllocatedNumber) {
+
+		final short dbLayerValue = (short) dbLayer.getValue();
+		if (!isValidFragmentServerLayerRate(dbLayerValue)) {
+			LOG.error(String.format("FragmentServerLayer [%s] is not valid", LayerRateManager.toString(dbLayerValue)));
+			return;
+		}
+
+		// LR_Encapsulation
+		final LayerRate encapsLR = new LayerRate(98);
+
+		/*
+		 * List that contains all the fragments (Which are not connected and not
+		 * involved in any local SNC) that are eligible for deletion
+		 */
+		final List<DBConnectionTerminationPoint> eligibleFragmentList = new ArrayList<DBConnectionTerminationPoint>();
+
+		/*
+		 * List of fragments which are in use
+		 */
+		final List<DBConnectionTerminationPoint> inUseFragmentList = new ArrayList<DBConnectionTerminationPoint>();
+
+		final Predicate<DBConnectionTerminationPoint> fpPredicate = new AdditionalInfoPredicate<DBConnectionTerminationPoint>(
+						"FP", "False", true);
+
+		final DBIterator<DBConnectionTerminationPoint> ctps = dbPtp.getCTPs().iterator(fpPredicate);
+		while (ctps.hasNext()) {
+			final DBConnectionTerminationPoint ctp = ctps.next();
+			// If the CTP is an encapsulation CTP, it is not eligible for
+			// deletion
+			if (ctp.getLayerRateList().contains(encapsLR)) {
+				continue;
+			}
+			// Check if the CTP is a fragment and eligible for deletion
+			isFragmentEligibleForDeletion(ctp, eligibleFragmentList, inUseFragmentList);
+		}
+		ctps.close();
+
+		// No of fragments in use
+		final int inUseFragmentCount = inUseFragmentList.size();
+
+		// No of fragments that are eligible for deletion
+		final int eligibleDeletionCount = eligibleFragmentList.size();
+
+		// No of fragments to delete as per the user input
+		int inputDeletionCount = dbAllocatedNumber - inputAllocatedNumber;
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("Total no of fragments : " + (inUseFragmentCount + eligibleDeletionCount));
+			LOG.debug("No of fragments in use : " + inUseFragmentCount);
+			LOG.debug("No of fragments free : " + eligibleDeletionCount);
+			LOG.debug("No of fragments to be deleted as per input AllocatedNumber : " + inputDeletionCount);
+		}
+
+		if (eligibleDeletionCount < inputDeletionCount) {
+			final String errorReason = String
+							.format("Cannot set AllocatedNumber to %d  as some of the fragments are still in use. AllocatedNumber can be set to %d or above. ",
+											inputAllocatedNumber, inUseFragmentCount);
+			LOG.error(errorReason);
+			throw PlugInExceptionHandler.unableToComply(errorReason);
+		}
+
+		for (int deletionIndex = eligibleDeletionCount - 1; inputDeletionCount > 0; deletionIndex--) {
+
+			final DBConnectionTerminationPoint dbCtp = eligibleFragmentList.remove(deletionIndex);
+
+			final String tpName = TmfNameUtilities.toString(dbCtp.getDn());
+
+			// Delete the Fragment from the database
+			dbManager.delete(dbCtp);
+
+			if (LOG.isDebugEnabled()) {
+				LOG.debug(String.format("Deleted the fragment [%s]", tpName));
+			}
+
+			inputDeletionCount--;
+		}
+
+	}
+
+	/**
+	 * @param ctp
+	 * @param removeTPList
+	 *            This method deletes Fragment CTP's under FTP of Ethernet Port
+	 */
+	public void isFragmentEligibleForDeletion(final DBConnectionTerminationPoint ctp,
+					final List<DBConnectionTerminationPoint> fragmentList, final List<DBConnectionTerminationPoint> inUseFragmentList) {
+
+		// If the TP is involed in any SNC
+		if (ctp instanceof DBSncConnectableTp<?, ?>) {
+			final DBSncConnectableTp<?, ?> sncTp = (DBSncConnectableTp<?, ?>) ctp;
+			final int snConnections = sncTp.getSncConnections().size();
+			if (snConnections > 0) {
+
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(String.format("Fragment [%s] is having %d SNC connections", TmfNameUtilities.toString(ctp.getDn()),
+									snConnections));
+				}
+
+				inUseFragmentList.add(ctp);
+				return;
+			}
+		}
+
+		final CtpNameComponents ctpNameComps = ctp.getDn().getCtp().getComponents();
+
+		// If CTP is a VC4,VC2,VC3 or VC12 fragment (or) an E1 fragment
+		if (CtpNameUtil.isVc4(ctpNameComps) || CtpNameUtil.isVc3(ctpNameComps) || CtpNameUtil.isVc2(ctpNameComps)
+						|| CtpNameUtil.isVc12(ctpNameComps) || CtpNameUtil.isE1(ctpNameComps)) {
+
+			final TPConnectionState connState = ctp.getInformation().getConnectionState();
+			// If TP is not connected
+			if (connState.isTpcs_not_connected()) {
+				// Fragment eligible for deletion
+				fragmentList.add(ctp);
+
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(String.format("Fragment [%s] is free and eligible for deletion",
+									TmfNameUtilities.toString(ctp.getDn())));
+				}
+
+			} else if (connState.isTpcs_na()) {
+				LOG.error(String.format(
+								"Fragment [%s] is having connection state set to NotApplicable. It is expected to be NotConnected",
+								TmfNameUtilities.toString(ctp.getDn())));
+				// Fragment eligible for deletion
+				fragmentList.add(ctp);
+
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(String.format("Fragment [%s] is free and eligible for deletion",
+									TmfNameUtilities.toString(ctp.getDn())));
+				}
+
+			} else if (connState.isTpcs_bi_connected() || connState.isTpcs_sink_connected()
+							|| connState.isTpcs_source_connected()) {
+				if (LOG.isDebugEnabled()) {
+					LOG.debug(String.format("Fragment [%s] is involved in cross connection ",
+									TmfNameUtilities.toString(ctp.getDn())));
+				}
+				inUseFragmentList.add(ctp);
+			}
+		}
+
+	}
+
+	/**
+	 * method compares with the current fragmentserverLayer and
+	 * DBFragmentServerLayer, if both are same then returns, if current
+	 * FragmentServetLayer is not same as dbFragmentServerLayer then deletes all
+	 * the CTPs present on that dbFragmentServerLayer if CTPs are not in InUse
+	 * sate and creates the new CTPs at new fragmentServerLayer, if any of the
+	 * CTP is in InUse sate then return.
+	 * 
+	 * @param dbPtp
+	 * @param fragmentServerLayer
+	 *            - current FragmentSeverLayer
+	 * @param dbFragmentServerLayer
+	 *            - dbFragmentServerLayer
+	 * @param allocatedNumber
+	 *            - current allocatedNumber
+	 * @param returnLP
+	 * @param layeredParameters
+	 */
+	private void setFragmentServerLayer(final DBPortTp dbPtp, final String fragmentServerLayer,
+					final String dbFragmentServerLayer, final String allocatedNumber, final LayeredParameters returnLP,
+					final LayeredParameters layeredParameters, final int dbAllocatedNumber) throws Exception {
+		String allocatedNumber1 = allocatedNumber;
+		final List<DBConnectionTerminationPoint> removeTPList = new ArrayList<DBConnectionTerminationPoint>();
+		final List<DBConnectionTerminationPoint> inUseFragmentList = new ArrayList<DBConnectionTerminationPoint>();
+		if (allocatedNumber1 == null) {
+			allocatedNumber1 = dbAllocatedNumber + "";
+		}
+
+		final Predicate<DBConnectionTerminationPoint> fpPredicate = new AdditionalInfoPredicate<DBConnectionTerminationPoint>(
+						"FP", "False", true);
+		final DBIterator<DBConnectionTerminationPoint> ctps = dbPtp.getCTPs().iterator(fpPredicate);
+		boolean isEncpCtp = false;
+		int ctpCount = 0;
+		while (ctps.hasNext()) {
+			final DBConnectionTerminationPoint dbPt = ctps.next();
+			// if a TP layer list contains the LR_Ethernet then continue, and
+			// discarding all TPs that contains LR_Ethernet along
+			// with
+			// LR_Fragment
+			if (dbPt.getLayerRateList().contains(new LayerRate(98))) {
+				isEncpCtp = true;
+				continue;
+			}
+			// consider only the TPs contains LR_Fragment layer
+			if (dbPt.getLayerRateList().contains(new LayerRate(99))) {
+				// consider only Fragment CTPs discard FP(CPTPs)
+				ctpCount++;
+			}
+			isFragmentEligibleForDeletion(dbPt, removeTPList, inUseFragmentList);
+		}
+		ctps.close();
+
+		validateAndDeleteFragments(isEncpCtp, ctpCount, dbPtp, fragmentServerLayer, allocatedNumber1, removeTPList,
+						dbFragmentServerLayer, returnLP);
+
+	}
+
+	/**
+	 * @param isEncpCtp
+	 * @param ctpCount
+	 * @param dbPtp
+	 * @param fragmentServerLayer
+	 * @param allocatedNumber
+	 * @param removeTPList
+	 * @param dbFragmentServerLayer
+	 * @param returnLP
+	 *            This method validates and deletes Fragment CTP's under FTP of
+	 *            Ethernet Port
+	 */
+	private void validateAndDeleteFragments(final boolean isEncpCtp, final int ctpCount, final DBPortTp dbPtp,
+					final String fragmentServerLayer, final String allocatedNumber,
+					final List<DBConnectionTerminationPoint> removeTPList, final String dbFragmentServerLayer,
+					final LayeredParameters returnLP) {
+		LayerRate dbLayer = null;
+		if (dbFragmentServerLayer != null) {
+			dbLayer = new LayerRate(Integer.parseInt(dbFragmentServerLayer));
+		}
+		// when only encapsulated CTP is present
+		if (isEncpCtp && ctpCount == 0 && removeTPList.isEmpty()) {
+			checkBandwidth(dbPtp, allocatedNumber, fragmentServerLayer);
+			I36Utilities.createVCGFragmentCTPs(dbPtp.getDn(), new LayerRate(Integer.parseInt(fragmentServerLayer)),
+							Integer.parseInt(allocatedNumber), getSBIClient(), dbPtp, true,
+							createVC2EquipmentInfoProperties(new LayerRate(Integer.parseInt(fragmentServerLayer))));
+
+		} else if (ctpCount != 0 && dbLayer != null) {
+			if (ctpCount == removeTPList.size()) {
+				checkBandwidth(dbPtp, allocatedNumber, fragmentServerLayer);
+
+				for (final DBConnectionTerminationPoint dbctp : removeTPList) {
+					dbManager.delete(dbctp);
+				}
+				I36Utilities.createVCGFragmentCTPs(dbPtp.getDn(), new LayerRate(Integer.parseInt(fragmentServerLayer)),
+								Integer.parseInt(allocatedNumber), getSBIClient(), dbPtp, true,
+								createVC2EquipmentInfoProperties(new LayerRate(Integer.parseInt(fragmentServerLayer))));
+
+				LOG.debug("Transmission params for tp : " + returnLP);
+
+			}
+			// when any of the deleted CTP is in In Use state then throw
+			// exception
+			else {
+				LOG.error(new DumpInfo(fragmentServerLayer, "cannot delete the Xconnected TPS"));
+				throw PlugInExceptionHandler.unableToComply(String.format(
+								"TPs are involved in XConnection... cannot delete the TPs on Layer %s", dbFragmentServerLayer));
+			}
+		} else {
+			checkBandwidth(dbPtp, allocatedNumber, fragmentServerLayer);
+			I36Utilities.createVCGFragmentCTPs(dbPtp.getDn(), new LayerRate(Integer.parseInt(fragmentServerLayer)),
+							Integer.parseInt(allocatedNumber), getSBIClient(), dbPtp, true,
+							createVC2EquipmentInfoProperties(new LayerRate(Integer.parseInt(fragmentServerLayer))));
+
+			LOG.debug("Transmission params for tp : " + returnLP);
+		}
+	}
+
+	/**
+	 * @param dbPtp
+	 * @param allocatedNumber
+	 * @param fragmentServerLayer
+	 *            This method checks bandwidth of Ethernet port to check whether
+	 *            fragment CTP's can be created
+	 */
+	private void checkBandwidth(final DBPortTp dbPtp, final String allocatedNumber, final String fragmentServerLayer) {
+		if (Integer.parseInt(allocatedNumber) > calculatePotentialCTPs(dbPtp,
+						new LayerRate(Integer.parseInt(fragmentServerLayer)))) {
+			LOG.error(new DumpInfo("cannot create the TPs, bandwidth limit crossed"));
+			throw PlugInExceptionHandler.unableToComply(String.format("cannot create the TPs, bandwidth limit crossed"));
+		}
+
+	}
+
+	/**
+	 * @param tp
+	 * @param lP
+	 * @param value
+	 * @throws Exception
+	 *             This method sets TrailTraceActualTx in paramMap
+	 */
+	private void setTrailTraceActualTx(final TerminationPoint tp, final LayeredParameters lP, final String value)
+					throws Exception {
+		final LayeredParameters params = LayeredParametersUtils.findLayeredParameter(tp.getTransmissionParams(), lP.getLayer());
+
+		if (params == null) {
+			LOG.error(new DumpInfo(tp, "Cannot find LayeredParameters:"));
+			return;
+		}
+
+		LayeredParametersUtils.put(lP.getTransmissionParams(), ParameterName.TrailTraceActualTx, value);
+
+		if (paramMap.containsKey(ParameterName.TrailTraceActualTx)) {
+			paramMap.remove(ParameterName.TrailTraceActualTx);
+		}
+
+		paramMap.put(ParameterName.TrailTraceActualTx, value);
+	}
+
+	/**
+	 * @param tp
+	 * @param lP
+	 * @param value
+	 * @throws Exception
+	 *             This method sets TrailTraceExpectedRx in paramMap
+	 */
+	private void setTrailTraceExpectedRx(final TerminationPoint tp, final LayeredParameters lP, final String value)
+					throws Exception {
+		final LayeredParameters params = LayeredParametersUtils.findLayeredParameter(tp.getTransmissionParams(), lP.getLayer());
+		if (params == null) {
+			LOG.error(new DumpInfo(tp, "Cannot find LayeredParameters:"));
+			return;
+		}
+
+		LayeredParametersUtils.put(lP.getTransmissionParams(), ParameterName.TrailTraceExpectedRx, value);
+
+		if (paramMap.containsKey(ParameterName.TrailTraceExpectedRx)) {
+			paramMap.remove(ParameterName.TrailTraceExpectedRx);
+		}
+
+		paramMap.put(ParameterName.TrailTraceExpectedRx, value);
+
+	}
+
+	/**
+	 * @param tp
+	 * @param lP
+	 * @param value
+	 * @throws Exception
+	 *             This method sets overheadMonitoringEnabled in ovrHdMonProf
+	 */
+	private void setTrailTraceOverheadMonitor(final TerminationPoint tp, final LayeredParameters lP, final String value)
+					throws Exception {
+		final LayeredParameters params = LayeredParametersUtils.findLayeredParameter(tp.getTransmissionParams(), lP.getLayer());
+		if (params == null) {
+			LOG.error(new DumpInfo(tp, "Cannot find LayeredParameters:"));
+			return;
+		}
+
+		LayeredParametersUtils.put(lP.getTransmissionParams(), ProprietaryParameterName.overheadMonitoringEnabled.toString(),
+						value);
+		if (ovrHdMonProf.containsKey(ProprietaryParameterName.overheadMonitoringEnabled.toString())) {
+			ovrHdMonProf.remove(ProprietaryParameterName.overheadMonitoringEnabled.toString());
+		}
+		ovrHdMonProf.setProperty(ProprietaryParameterName.overheadMonitoringEnabled.toString(), value);
+	}
+
+	/**
+	 * @param tp
+	 * @param lP
+	 * @param value
+	 * @throws Exception
+	 *             This method sets TrailTraceMonitor in paramMap
+	 */
+	private void setTrailTraceMonitor(final TerminationPoint tp, final LayeredParameters lP, final String value) throws Exception {
+
+		final LayerRate rate = lP.getLayer();
+		final LayeredParameters params = LayeredParametersUtils.findLayeredParameter(tp.getTransmissionParams(), rate);
+
+		if (params == null) {
+			LOG.error(new DumpInfo(tp, "Cannot find LayeredParameters:"));
+			return;
+		}
+
+		LayeredParametersUtils.put(lP.getTransmissionParams(), ParameterName.TrailTraceMonitor, value);
+		if (paramMap.containsKey(ParameterName.TrailTraceMonitor)) {
+			paramMap.remove(ParameterName.TrailTraceMonitor);
+		}
+
+		paramMap.put(ParameterName.TrailTraceMonitor, value);
+	}
+
+	/**
+	 * @param ctp
+	 * @throws ASN1Exception
+	 *             This method sends setPortParameter I36 request for setting
+	 *             TrailTraceParams on CTP
+	 */
+	private void setJ0CTP(final DBCtp ctp) throws ASN1Exception {
+		boolean isClientCtp = false;
+		final AIPortType aiPortType = DBAdditionalInfoUtilities.getPortInfo(ctp).getType();
+		// isClientCtp is used to distinguish between client side and line side
+		// ctp on G709 stm transponder
+
+		/*
+		 * Checking whether CTP is contained in PTP of CBR Port or STM
+		 * Transponder
+		 */
+		if (aiPortType.isPt_stmTransponder() || aiPortType.isPt_cbr()) {
+			final DBPortTp dbPtp = ctp.getPtp().get();
+			if (dbPtp.getType().equals(TMFObject.PTP)) {
+				isClientCtp = true;
+			}
+		}
+		setJ0(ctp.getPtp().get(), true, isClientCtp);
+	}
+
+	private void setJ0PTP(final DBPortTp ptp) throws ASN1Exception {
+		setJ0(ptp, false, false);
+	}
+
+	/**
+	 * @param ctp
+	 * @param layerratename
+	 *            This method handles the trail trace parameters for odu and otu
+	 *            layers
+	 */
+	private void setJCTP(final DBCtp ctp, final String layerratename) throws ASN1Exception {
+		setJ(ctp, layerratename, true);
+	}
+
+	/**
+	 * @param ctp
+	 * @param layerratename
+	 *            This method handles the trail trace parameters for odu and otu
+	 *            layers
+	 */
+	private void setJPTP(final DBPortTp ptp, final String layerratename) throws ASN1Exception {
+		setJ(ptp, layerratename, false);
+	}
+
+	/**
+	 * @param ptp
+	 * @param isACTP
+	 * @param isClientCtp
+	 * @throws ASN1Exception
+	 *             This method sends setPortParameter I36 request for setting
+	 *             TrailTraceParams on DBTp
+	 */
+	private void setJ0(final DBPortTp ptp, final boolean isACTP, final boolean isClientCtp) throws ASN1Exception {
+
+		String trailTraceActualTx = null;
+		String trailTraceExpectedRx = null;
+		String trailTraceMonitor = null;
+		String overheadMonitoringEnabled = null;
+
+		if (paramMap.containsKey(ParameterName.TrailTraceActualTx)) {
+			trailTraceActualTx = paramMap.get(ParameterName.TrailTraceActualTx);
+		}
+		if (paramMap.containsKey(ParameterName.TrailTraceExpectedRx)) {
+			trailTraceExpectedRx = paramMap.get(ParameterName.TrailTraceExpectedRx);
+		}
+		if (paramMap.containsKey(ParameterName.TrailTraceMonitor)) {
+			trailTraceMonitor = paramMap.get(ParameterName.TrailTraceMonitor);
+		}
+		/*
+		 * cr58 changes to handle pathtracemonitor flag and TrailTraceExpectedRx
+		 * and TrailTraceMonitor based on overheadMonitoringEnabled parameter
+		 */
+		if (isACTP && overheadMonitoringEnabled == null) {
+			overheadMonitoringEnabled = ovrHdMonProf.getProperty(ProprietaryParameterName.overheadMonitoringEnabled);
+		}
+
+		if (trailTraceExpectedRx == null && !isACTP) {
+			trailTraceExpectedRx = trailTraceHelper.getTrailTraceExpectedRx(ptp.getInformation(), layerRate);
+		}
+
+		// cr58 changes
+		if ((trailTraceActualTx == null) && (trailTraceExpectedRx == null) && (trailTraceMonitor == null)
+						&& (overheadMonitoringEnabled == null)) {
+			throw PlugInExceptionHandler.invalidInput("No Parameter has been specified.");
+		}
+		setRSTrailTrace(ptp, trailTraceActualTx, trailTraceExpectedRx, trailTraceMonitor, overheadMonitoringEnabled, isACTP,
+						isClientCtp);
+
+	}
+
+	/**
+	 * @param ptp
+	 * @param trailTraceActualTx
+	 * @param trailTraceExpectedRx
+	 * @param trailTraceMonitor
+	 * @param overheadMonitoringEnabled
+	 * @param isACTP
+	 * @param isClientCtp
+	 *            This method sends setPortParameter I36 request for setting
+	 *            TrailTraceParams on RS Layer of DBTp
+	 */
+	private void setRSTrailTrace(final DBPortTp ptp, final String trailTraceActualTx, final String trailTraceExpectedRx,
+					final String trailTraceMonitor, final String overheadMonitoringEnabled, final boolean isACTP,
+					final boolean isClientCtp) {
+
+		AIPortType aiPortType = DBAdditionalInfoUtilities.getAIPortType(ptp);
+		if (ptp instanceof DBPtp) {
+			final DBPtp dbPtp = (DBPtp) ptp;
+			final PortInformation portInfo = (PortInformation) dbPtp.getAdditionalInformation(PortInformation.NAME);
+			final TpType ptpTpType = TpType.valueOf(portInfo.getSyntax().getDescriptor().getValue());
+			if (ptpTpType.value() == TpType.cbrStm.value()) {
+				aiPortType = AIPortType.PT_CBR;
+			}
+		}
+		final X36UnitIdentification i36Tp = trailTraceHelper.getUnitIdentification(ptp);
+		final X36NeId neId = getSBIClient().getNaming().getNeId(ptp.getInformation().getName());
+		final int shelfID = i36Tp.getShelfId().getValue();
+		final int cardID = i36Tp.getCardId().getValue();
+		int portID = i36Tp.getPortId().getValue();
+		final List<X36Parameters> trailTraceParams = new ArrayList<X36Parameters>();
+		switch (aiPortType.getValue()) {
+		case AIPortType.pt_stmTransponder: {
+			trailTraceHandler.setJOSTMTransponder(trailTraceActualTx, trailTraceExpectedRx, trailTraceMonitor,
+							overheadMonitoringEnabled, isACTP, isClientCtp, trailTraceParams);
+			break;
+		}
+		case AIPortType.pt_muxponderAggregated:
+			trailTraceHandler.setJOMuxponderAggregated(ptp, trailTraceActualTx, trailTraceExpectedRx, trailTraceMonitor,
+							overheadMonitoringEnabled, isACTP, isClientCtp, trailTraceParams);
+			break;
+		case AIPortType.pt_stm:
+			trailTraceHandler.setJOSTM(trailTraceActualTx, trailTraceExpectedRx, trailTraceMonitor, trailTraceParams);
+			break;
+		case AIPortType.pt_wdm: {
+			trailTraceHandler.setJOWDM(trailTraceActualTx, trailTraceExpectedRx, trailTraceMonitor, trailTraceParams);
+			break;
+		}
+		case AIPortType.pt_sdhBackplane: {
+			trailTraceHandler.setJOSDHBackPlane(trailTraceActualTx, trailTraceExpectedRx, ptp, trailTraceParams,
+							trailTraceMonitor);
+			break;
+		}
+		case AIPortType.pt_cbr: {
+			trailTraceHandler.setJOCBR(trailTraceActualTx, trailTraceExpectedRx, trailTraceMonitor, isClientCtp, isACTP,
+							trailTraceParams);
+			break;
+		}
+		case AIPortType.pt_muxponderClientTM:
+			trailTraceHandler.setJOMuxponderClientTM(ptp, trailTraceActualTx, trailTraceExpectedRx, trailTraceMonitor,
+							overheadMonitoringEnabled, isACTP, trailTraceParams);
+			/*
+			 * TR 79819,when trailtrace is performed on ctp of linesideftp with
+			 * rs layer rate sending client portid in request
+			 */
+			if (isMuxOtmClient && otmCTPClientPort > 0) {
+				portID = otmCTPClientPort;
+			}
+			break;
+
+		}
+
+		/*
+		 * removing compliance checking functionality if it is not ok as
+		 * X36Compliance is checked in setPortParameter method of
+		 * I36MessageHandler if compliance is not ok,corresponding excpetion
+		 * will thrown from setPortParameter Method.class TR HM51472
+		 */
+		final MEDn meDn = new MEDn();
+		meDn.setMe(ptp.getDn().getMe());
+		final String hostName = sbiClient.getHostName(meDn, false);
+		for (final X36Parameters x36Param : trailTraceParams) {
+			final long timeout = getSBIClient().getProfile().getTimeProperty(EmSBIPluginProperty.sbiTimeout, 180000);
+			getSBIClient().getMessageHandler().setTimeout(timeout);
+			getSBIClient().getMessageHandler().setPortParameter(neId, shelfID, cardID, portID, x36Param, hostName);
+
+		}
+	}
+
+	/**
+	 * @param ptp
+	 * @param layerratename
+	 * @param isACTP
+	 *            This method handles the trail trace parameters for odu and otu
+	 *            layers. Changed the method arguments to DBTp.Previously
+	 *            method's first argument is of type DBPortTp which is either
+	 *            PTP or FTP.For obtaining the DBCtp object if trail trace is to
+	 *            be set on CTP, argument is changed to DBTp which is either PTP
+	 *            or FTP or CTP.
+	 */
+	private void setJ(final DBTp dbTp, final String layerratename, final boolean isACTP) throws ASN1Exception {
+
+		DBPortTp ptp = null;
+		if (dbTp instanceof DBCtp) {
+			ptp = ((DBCtp) dbTp).getPtp().get();
+		} else {
+			ptp = (DBPortTp) dbTp;
+		}
+		String trailTraceActualTx = null;
+		String trailTraceExpectedRx = null;
+		String trailTraceMonitor = null;
+		String trailTraceOverheadMonitor = null;
+
+		if (paramMap.containsKey(ParameterName.TrailTraceActualTx)) {
+			trailTraceActualTx = paramMap.get(ParameterName.TrailTraceActualTx);
+		}
+		if (paramMap.containsKey(ParameterName.TrailTraceExpectedRx)) {
+			trailTraceExpectedRx = paramMap.get(ParameterName.TrailTraceExpectedRx);
+		}
+		if (paramMap.containsKey(ParameterName.TrailTraceMonitor)) {
+			trailTraceMonitor = paramMap.get(ParameterName.TrailTraceMonitor);
+		}
+		if (ovrHdMonProf.containsKey(ProprietaryParameterName.overheadMonitoringEnabled.toString())) {
+			trailTraceOverheadMonitor = ovrHdMonProf.getProperty(ProprietaryParameterName.overheadMonitoringEnabled.toString());
+		}
+		/* getting the trail trace actual value */
+
+		if ((trailTraceActualTx == null) && (trailTraceExpectedRx == null) && trailTraceMonitor == null
+						&& trailTraceOverheadMonitor == null) {
+			throw PlugInExceptionHandler.invalidInput("No Parameter has been specified.");
+		}
+		final String[] values = { trailTraceActualTx, trailTraceExpectedRx, trailTraceMonitor, trailTraceOverheadMonitor };
+		TpType tpType = null;
+		if (dbTp instanceof DBCtp) {
+			final TimeSlotInformation ts = (TimeSlotInformation) dbTp.getAdditionalInformation(TimeSlotInformation.NAME);
+			final AITimeSlotInfo aiTsInfo = ts.getSyntax();
+			tpType = TpType.valueOf(aiTsInfo.getDescriptor().getValue());
+		} else if (dbTp instanceof DBFtp) {
+			final ChannelInformation chInfo = (ChannelInformation) ptp.getAdditionalInformation(ChannelInformation.NAME);
+			final AIPortInfo aiPortInfo = chInfo.getSyntax().getPortInfo();
+			tpType = TpType.valueOf(aiPortInfo.getDescriptor().getValue());
+		}
+
+		setODUOTUTrailTrace(dbTp, layerratename, isACTP, values, tpType);
+
+	}
+
+	/**
+	 * @param dbTp
+	 * @param layerratename
+	 * @param isACTP
+	 * @param values
+	 * @param tpType
+	 * @throws ASN1Exception
+	 *             This method sends setPortParameter I36 request for setting
+	 *             TrailTraceParams on ODU/OTU Layer of DBTp
+	 */
+	private void setODUOTUTrailTrace(final DBTp dbTp, final String layerratename, final boolean isACTP, final String[] values,
+					final TpType tpType) throws ASN1Exception {
+		DBPortTp ptp = null;
+		if (dbTp instanceof DBCtp) {
+			ptp = ((DBCtp) dbTp).getPtp().get();
+		} else {
+			ptp = (DBPortTp) dbTp;
+		}
+		final X36UnitIdentification i36Tp = trailTraceHelper.getUnitIdentification(ptp);
+		final X36NeId neId = getSBIClient().getNaming().getNeId(ptp.getInformation().getName());
+
+		int shelf = i36Tp.getShelfId().getValue();
+		int card = i36Tp.getCardId().getValue();
+		int port = i36Tp.getPortId().getValue();
+		int oduid = 0;
+		if (i36Tp.getOduId() != null && i36Tp.getOduId().getOdu1() != null) {
+			oduid = i36Tp.getOduId().getOdu1().getValue();
+		}
+		final AIPortType aiPortType = DBAdditionalInfoUtilities.getAIPortType(ptp);
+		LOG.debug("*********aiPortType:::" + aiPortType.toString());
+		/* Getting integer depend on layerrate */
+		final int layerFlag = isOtuOrOdu(layerratename);
+		/*
+		 * Calling setter methods of trail trace depends on transponder type
+		 */
+		List<X36Parameters> x36TrailTraceParamsLS = null;
+		switch (aiPortType.getValue()) {
+		case AIPortType.pt_stmTransponder:
+			x36TrailTraceParamsLS = trailTraceHandler.setJSTMTransponder(layerFlag, values);
+			break;
+		case AIPortType.pt_lmTransponder:
+			x36TrailTraceParamsLS = trailTraceHandler.setJLMTransponder(layerFlag, values, ptp.getType().equals(TMFObject.PTP),
+							ptp.getType().equals(TMFObject.FTP), isACTP);
+			break;
+		case AIPortType.pt_lmTransponderIngress:
+			x36TrailTraceParamsLS = trailTraceHandler.setJLMTransponderIngress(layerFlag, values, isACTP);
+			break;
+		case AIPortType.pt_lmTransponderEgress:
+			x36TrailTraceParamsLS = trailTraceHandler.setJLMTransponderEgress(layerFlag, values, isACTP);
+			break;
+		case AIPortType.pt_genericTransponder:
+			x36TrailTraceParamsLS = trailTraceHandler.setJGenericTransponder(layerFlag, values);
+			break;
+		case AIPortType.pt_muxponderAggregated:
+			if (isMuxOtmClient && isACTP) {
+				if (otmCTPClientPort > 0) {
+					port = otmCTPClientPort;
+				}
+				x36TrailTraceParamsLS = trailTraceHandler.setJMuxponderAggregated(layerFlag, values, isACTP);
+			} else {
+				x36TrailTraceParamsLS = trailTraceHandler.setJMuxponderAggregated(layerFlag, values, false);
+			}
+			break;
+		case AIPortType.pt_muxponderClientTM:
+			x36TrailTraceParamsLS = trailTraceHandler.setJMuxponderClientTM(layerFlag, values);
+			break;
+		case AIPortType.pt_muxponderClientLM:
+			if (ptp.getType().equals(TMFObject.PTP) && oduid == 1) {
+				x36TrailTraceParamsLS = trailTraceHandler.setJMuxponderClientLM(layerFlag, values, false, isACTP);
+			} else if (ptp.getType().equals(TMFObject.PTP)) {
+				x36TrailTraceParamsLS = trailTraceHandler.setJMuxponderClientLM(layerFlag, values, true, isACTP);
+			}
+			break;
+		case AIPortType.pt_aSideRmTransponder:
+			x36TrailTraceParamsLS = trailTraceHandler.setJAsideRMTransponder(layerFlag, values, isACTP);
+			break;
+		case AIPortType.pt_bSideRmTransponder:
+			x36TrailTraceParamsLS = trailTraceHandler.setJBsideRMTransponder(layerFlag, values, isACTP);
+			break;
+		case AIPortType.pt_internalODU:
+			final NextLongIdAdditionalInfo internalODUId = (NextLongIdAdditionalInfo) (ptp
+							.getAdditionalInformation(NextLongIdAdditionalInfo.NAME));
+			if (internalODUId != null) {
+				oduid = internalODUId.getSyntax().getValue();
+			}
+			if (!isACTP) {
+
+				if (tpType == TpType.internalOdu0Ftp || tpType == TpType.internalOdu1Ftp || tpType == TpType.internalOdu2Ftp
+								|| tpType == TpType.internalOdu3Ftp) {
+
+					x36TrailTraceParamsLS = trailTraceHandler.setInternalODUPort(layerratename, values, oduid, true);
+				} else if (tpType == TpType.internalOdu0OSFtp || tpType == TpType.internalOdu1OSFtp
+								|| tpType == TpType.internalOdu2OSFtp || tpType == TpType.internalOdu3OSFtp) {
+
+					x36TrailTraceParamsLS = trailTraceHandler.setInternalODUPort(layerratename, values, oduid, false);
+				}
+			} else if (isACTP
+							&& (tpType == TpType.internalOduOpu0_nvCtp || tpType == TpType.internalOduOpu1_nvCtp
+							|| tpType == TpType.internalOduOpu2_nvCtp || tpType == TpType.internalOduOpu3_nvCtp)) {
+				final ChannelInformation channelInformation = (ChannelInformation) (dbTp
+								.getAdditionalInformation(ChannelInformation.NAME));
+				if (channelInformation != null) {
+					shelf = channelInformation.getSyntax().getPortInfo().getCoord().getShelfId().getValue();
+					card = channelInformation.getSyntax().getPortInfo().getCoord().getCardId().getValue();
+					port = channelInformation.getSyntax().getPortInfo().getCoord().getPortId().getValue();
+				}
+				x36TrailTraceParamsLS = trailTraceHandler.setInternalODUPort(layerratename, values, oduid, false);
+			}
+			break;
+		case AIPortType.pt_otm:
+			x36TrailTraceParamsLS = trailTraceHandler.setOTMPort(layerratename, values);
+			break;
+		case AIPortType.pt_backplaneOdu:
+			X36ODUId x36OduId = null;
+			if (isACTP) {
+				final TimeSlotInformation ts = (TimeSlotInformation) dbTp.getAdditionalInformation(TimeSlotInformation.NAME);
+				if (ts.getSyntax().getCoord().isOduTimeSlot()) {
+					final X36ODUTimeSlot oduTimeSlot = AIHelper.buildTimeSlot(ts.getSyntax().getCoord().getOduTimeSlot());
+					x36OduId = oduTimeSlot.getOduId();
+				}
+
+			}
+			if (tpType == TpType.odu1AggregateCtps || tpType == TpType.odu2AggregateCtps) {
+				x36TrailTraceParamsLS = trailTraceHandler.setBackPlanePort(layerratename, values, true, x36OduId);
+			} else {
+				x36TrailTraceParamsLS = trailTraceHandler.setBackPlanePort(layerratename, values, false, x36OduId);
+			}
+			break;
+		case AIPortType.pt_cbr:
+			x36TrailTraceParamsLS = trailTraceHandler.setJCBR(layerratename, values);
+			break;
+
+		}
+		/*
+		 * removing compliance checking functionality if it is not ok as
+		 * X36Compliance is checked in setPortParameter method of
+		 * I36MessageHandler if compliance is not ok,corresponding excpetion
+		 * will thrown from setPortParameter Method.class TR HM51472
+		 */
+		final MEDn meDn = new MEDn();
+		meDn.setMe(ptp.getDn().getMe());
+		final String hostName = sbiClient.getHostName(meDn, false);
+		for (final X36Parameters x36Param : x36TrailTraceParamsLS) {
+			final long timeout = sbiClient.getProfile().getTimeProperty(EmSBIPluginProperty.sbiTimeout, 180000);
+			sbiClient.getMessageHandler().setTimeout(timeout);
+			getSBIClient().getMessageHandler().setPortParameter(neId, shelf, card, port, x36Param, hostName);
+
+		}
+	}
+
+	/*
+	 * method returns 1 if layerrate is LR_OCH_Data_Unit , 2 if layerrate is
+	 * LR_OCH_Transport_Unit else 0
+	 */
+	public int isOtuOrOdu(final String layerratename) {
+		if (layerratename.equals("LR_OCH_Data_Unit_0") || layerratename.equals("LR_OCH_Data_Unit_1")
+						|| layerratename.equals("LR_OCH_Data_Unit_2") || layerratename.equals("LR_OCH_Data_Unit_3")) {
+			return ODU_LAYER;
+		} else if (layerratename.equals("LR_OCH_Transport_Unit_1") || layerratename.equals("LR_OCH_Transport_Unit_2")
+						|| layerratename.equals("LR_OCH_Transport_Unit_3")) {
+			return OTU_LAYER;
+		} else {
+			return 0;
+		}
+	}
+
+	/**
+	 * @param values
+	 * @return X36G709Parameters This method sets the trail trace values to
+	 *         X36G709Parameters object
+	 */
+	@Deprecated
+	public X36G709Parameters setTrailTraceParams(final String[] values) {
+		final String trailTraceExpectedRx = values[1];
+		final String trailTraceMonitor = values[2];
+
+		X36JTrace x36JTrace = new X36JTrace();
+		if (trailTraceMonitor.equalsIgnoreCase(TRAIL_TRACE_MONITOR_ON)) {
+			x36JTrace.setE164(trailTraceHelper.getConstraintOctStringType(trailTraceExpectedRx, 15));
+		} else if (trailTraceMonitor.equalsIgnoreCase(TRAIL_TRACE_MONITOR_OFF)) {
+			x36JTrace.setNullJTrace(null);
+		}
+
+		final X36G709Parameters x36g709Parameters = new X36G709Parameters();
+		x36g709Parameters.setSapiExpected(x36JTrace);
+
+		x36JTrace = new X36JTrace();
+		final String trailTraceActualTx = values[0];
+		if (trailTraceActualTx != null) {
+			x36JTrace.setE164(trailTraceHelper.getConstraintOctStringType(trailTraceActualTx, 15));
+		}
+
+		x36g709Parameters.setSapiSend(x36JTrace);
+		return x36g709Parameters;
+	}
+
+	/**
+	 * @param values
+	 * @return X36G709Parameters This method sets the trail trace values to
+	 *         X36G709Parameters object
+	 */
+	public List<X36G709Parameters> setTrailTraceParamLS(final String[] values) {
+		X36G709Parameters x36g709Parameters = null;
+
+		X36JTrace x36JTrace = new X36JTrace();
+		final String trailTraceActualTx = values[0];
+		final List<X36G709Parameters> trailParamsLS = new ArrayList<X36G709Parameters>();
+		if (trailTraceActualTx != null) {
+			x36g709Parameters = new X36G709Parameters();
+			x36JTrace.setE164(trailTraceHelper.getConstraintOctStringType(trailTraceActualTx, 15));
+			x36g709Parameters.setSapiSend(x36JTrace);
+			trailParamsLS.add(x36g709Parameters);
+		}
+
+		x36JTrace = new X36JTrace();
+		x36g709Parameters = new X36G709Parameters();
+		final String trailTraceExpectedRx = values[1];
+		final String trailTraceMonitor = values[2];
+
+		if (trailTraceMonitor != null && trailTraceMonitor.equalsIgnoreCase(TRAIL_TRACE_MONITOR_OFF)) {
+			x36JTrace.setNullJTrace(null);
+			x36g709Parameters.setSapiExpected(x36JTrace);
+			trailParamsLS.add(x36g709Parameters);
+		} else if (trailTraceMonitor != null && trailTraceExpectedRx != null) {
+			x36JTrace.setE164(trailTraceHelper.getConstraintOctStringType(trailTraceExpectedRx, 15));
+			x36g709Parameters.setSapiExpected(x36JTrace);
+			trailParamsLS.add(x36g709Parameters);
+		}
+
+		return trailParamsLS;
+	}
+
+	// =========================================================================
+
+	private static boolean isValidRate(final LayerRate rate) {
+		if (validJ0Rates.contains(LayerRateManager.getLayerRate(rate))
+						|| validJRates.contains(LayerRateManager.getLayerRate(rate))) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * @param layerRate
+	 * @return
+	 */
+	private static Boolean isValidFragmentServerLayerRate(final short layerRate) {
+		if (validFragmentServerLayers.contains(layerRate)) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	/**
+	 * @param ctp
+	 * @param sdhFrameStructDefinition
+	 *            This method sets SDH Frame Strcuture
+	 */
+	public void setSdhFramestructuring(final DBCtp ctp, final X36SdhFrameStructureDefinition sdhFrameStructDefinition) {
+		Session session = null;
+		DBManagedElement dbME = null;
+		final MEDn meDn = new MEDn();
+		final MEId meId = ctp.getDn().getMe();
+		meDn.setMe(meId);
+		String sbiHost = null;
+		try {
+			session = sbiClient.getDbManager().beginSession(false);
+			dbME = sbiClient.getDbManager().getManagedElement(meDn);
+			final EmSystemProfile emSystemProfile = sbiClient.getEmSystemProfile(dbME);
+			if (emSystemProfile != null) {
+				sbiHost = emSystemProfile.getSyntax().getHostId().getValue();
+			} else {
+				sbiHost = sbiClient.getHostName();
+			}
+		} catch (final Exception e) {
+
+		} finally {
+			if (session != null) {
+				session.terminate();
+				session = null;
+			}
+		}
+		final X36NeId neId = getSBIClient().getNaming().getNeId(meId);
+		final AIPortCoord pc = DBAdditionalInfoUtilities.getPortCoord(ctp);
+		final int shelfId = pc.getShelfId().getValue();
+		final int cardId = pc.getCardId().getValue();
+		final int portId = pc.getPortId().getValue();
+
+		final long timeout = sbiClient.getProfile().getTimeProperty(EmSBIPluginProperty.sbiTimeout, 180000);
+		sbiClient.getMessageHandler().setTimeout(timeout);
+		final X36Compliance compliance = getSBIClient().getMessageHandler().setSdhFrameStructure(neId, shelfId, cardId, portId,
+						sdhFrameStructDefinition, sbiHost);
+		if (!compliance.isResOk()) {
+			LOG.error(new DumpInfo(compliance, String.format("Compliance NOT OK in setSdhFrameStructure for <%s>...",
+							getSBIClient().getNeLocator(meDn))));
+		}
+	}
+
+	/**
+	 * @param layerRateName
+	 * @param returnLP
+	 * @param isCR58CCTPFlag
+	 * @param ctpParamswithoverheadFlag
+	 *            This method set SupportsMonitoring parameter in
+	 *            LayeredParameters of DBTp
+	 */
+	private void setSupportsMonitorParam(final String layerRateName, final LayeredParameters returnLP,
+					final boolean isCR58CCTPFlag, final boolean ctpParamswithoverheadFlag) {
+		if (paramMap.containsKey(ParameterName.TrailTraceMonitor) && paramMap.get(ParameterName.TrailTraceMonitor) != null) {
+			final boolean trailTraceMonitorBool = (paramMap.get(ParameterName.TrailTraceMonitor).equalsIgnoreCase(
+							TRAIL_TRACE_MONITOR_ON) ? true : false);
+			// when trailtrace monitor is off and TrailTraceExpectedRx is
+			// specified,
+			// updating the TMF DB with TrailtraceExpected given from TMF GUI.
+			if (!trailTraceMonitorBool) {
+				trailTraceHelper.setOTUODUSupportmonitorParam(layerRateName, returnLP, "Off", false);
+			}// if only TrailTraceMonitor is true & TrailTraceExpectedRx is
+			// specified
+			else if (trailTraceMonitorBool && paramMap.containsKey(ParameterName.TrailTraceExpectedRx)) {
+				/*
+				 * cr58 --- When trail trace information is retrieved from
+				 * X36G709CTPParameters OR X36G709Parameters, TrailTraceMonitor
+				 * depends on value of TrailTraceExpected
+				 */
+				if (isCR58CCTPFlag) {
+					trailTraceHelper.setOTUODUSupportmonitorParam(layerRateName, returnLP, "On", ctpParamswithoverheadFlag);
+				} else {
+					trailTraceHelper.setOTUODUSupportmonitorParam(layerRateName, returnLP, "On", false);
+				}
+			}
+		}
+		// TrailTraceExpectedRx is specified
+		else if (paramMap.containsKey(ParameterName.TrailTraceExpectedRx)) {
+			/*
+			 * cr58 --- When trail trace information is retrieved from
+			 * X36G709CTPParameters OR X36G709Parameters, TrailTraceMonitor
+			 * depends on value of TrailTraceExpected
+			 */
+			trailTraceHelper.setOTUODUSupportmonitorParam(layerRateName, returnLP, "On", false);
+		}
+	}
+
+	private boolean createVC2EquipmentInfoProperties(final LayerRate lr) {
+		final String fileName = sbiClient.getPlugIn().getProfile()
+						.getProperty(PluginProperty.equipmentInfo, "./EquipmentInfo.properties");
+		final Properties equipmentProperties = Utility.getProperties(fileName);
+		final String createVC2 = equipmentProperties.getProperty("flatBackplane.createVC2", "false");
+		boolean booleancreateVC2 = false;
+		if (createVC2.trim().toUpperCase().compareTo("TRUE") == 0) {
+			booleancreateVC2 = true;
+		} else {
+			booleancreateVC2 = false;
+		}
+
+		final LayerRate lrVc2 = new LayerRate(12); // LR_VT6_and_TU2_VC2
+		if (lr.equals(lrVc2)) {
+			if (booleancreateVC2) {
+				return booleancreateVC2;
+			} else {
+				LOG.error(new DumpInfo("Cannot create the Fragments TPs, layer LR_VT6_and_TU2_VC2 is not supported by this TP"));
+				throw PlugInExceptionHandler.unableToComply(String
+								.format("Cannot create the Fragments TPs, layer LR_VT6_and_TU2_VC2 is not supported by this TP"));
+			}
+		} else {
+			return booleancreateVC2;
+		}
+	}
+
+	/**
+	 * This method is for calling either setMplsMonitoring or
+	 * modifyMplsTunnelsLspAndCrossConnection depending upon the BFD parameter
+	 * values. If it is requested the update of the "BFDSessionSendingControl"
+	 * parameter then setMplsMonitoring message need to be sent. For all other
+	 * BFD parameters the PDM message ModifyMplsTunnelsLspAndCrossConnection
+	 * message need to be sent.
+	 * 
+	 * @param tpInfo
+	 *            TPData
+	 * @param transParams
+	 *            TransmissionParameters
+	 * @param modifiedTPHolder
+	 *            Holder<TerminationPoint>
+	 * @param dbTp
+	 *            DBTp
+	 */
+	private void updateMplsTpLayeredParameters(final DBTp ftp, final TPData tpInfo,
+					final Holder<TerminationPoint> modifiedTPHolder) {
+
+		// If nothing is to be updated, whatever already present in db shall be
+		// returned
+		modifiedTPHolder.setTarget(ftp.getInformation());
+
+		/**
+		 * Check which determines if the request needs to be sent even though
+		 * the value in the input is same as previous value in db
+		 **/
+		final boolean force = true;
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug("force is " + force);
+		}
+
+		// Map which contains all the input parameters
+		final Map<String, String> inputBFDParamMap = new HashMap<String, String>();
+
+		// Map which contains all the db parameters
+		final Map<String, String> existingTPBFDParamMap = new HashMap<String, String>();
+
+		// Validate all the inputs
+		validateInputParameters(ftp, tpInfo, inputBFDParamMap, existingTPBFDParamMap);
+
+		final String bfdSessSendingCtlName = ProprietaryParameterName.BFDSesssSendingControl.name();
+
+		// Check if mpls monitoring message needs to be sent to update the BFD
+		// Session Sending Control
+		final String inputBFDSessionCtrlValue = inputBFDParamMap.get(bfdSessSendingCtlName);
+
+		if (inputBFDSessionCtrlValue != null) {
+			final String previousVal = existingTPBFDParamMap.get(bfdSessSendingCtlName);
+			if (!inputBFDSessionCtrlValue.equals(previousVal) || force) {
+				existingTPBFDParamMap.put(bfdSessSendingCtlName, inputBFDSessionCtrlValue);
+				sendOAMMonitoringMsg(inputBFDParamMap.get(bfdSessSendingCtlName), ftp, modifiedTPHolder);
+			}
+			inputBFDParamMap.remove(bfdSessSendingCtlName);
+		}
+
+		if (inputBFDParamMap.isEmpty()) {
+			return;
+		}
+
+		boolean anyValueUpdated = false;
+
+		final Set<Entry<String, String>> inputMap = inputBFDParamMap.entrySet();
+
+		// Check if any other BFD parameters are updated (or) same as the values
+		// already present in db
+		for (final Entry<String, String> inputNasv : inputMap) {
+			final String existingBFDParam = existingTPBFDParamMap.get(inputNasv.getKey());
+			if (existingBFDParam != null && existingBFDParam.equals(inputNasv.getValue())) {
+				continue;
+			} else {
+				anyValueUpdated = true;
+				break;
+			}
+		}
+
+		// If any value is to be updated (or) to force the update of the same
+		// values
+		if (anyValueUpdated || force) {
+			// Update the db map with the values provided in the input
+			for (final Entry<String, String> inputNasv : inputMap) {
+				final String key = inputNasv.getKey();
+				existingTPBFDParamMap.put(key, inputNasv.getValue());
+			}
+			sendRequestForModifyingBFDInfo(existingTPBFDParamMap, ftp, modifiedTPHolder);
+		}
+
+	}
+
+	/**
+	 * This method is used to validate the input BFD parameters provided.
+	 * 
+	 * @param ftp
+	 * @param tpInfo
+	 * @param inputBFDParamMap
+	 * @param existingTPBFDParamMap
+	 */
+	private void validateInputParameters(final DBTp ftp, final TPData tpInfo, final Map<String, String> inputBFDParamMap,
+					final Map<String, String> existingTPBFDParamMap) {
+
+		final LayeredParameterList inputTransmissionParams = tpInfo.getTransmissionParams();
+
+		final LayerRate mplsTpLayer = LayerRateManager.getLayerRate("LR_MPLS_TP");
+
+		// Parameters which are already existing in db for MPLS TP
+		final LayeredParameters inputMplsLRParams = LayeredParametersUtils.findLayeredParameter(inputTransmissionParams,
+						mplsTpLayer);
+
+		// Parameters which are settable from NMS
+		final List<String> nmsSettableBFDParams = new ArrayList<String>();
+		nmsSettableBFDParams.add(ProprietaryParameterName.BFDSesssSendingControl.name());
+		nmsSettableBFDParams.add(ProprietaryParameterName.BFDSessDetectMult.name());
+		nmsSettableBFDParams.add(ProprietaryParameterName.BFDSendInterval.name());
+		nmsSettableBFDParams.add(ProprietaryParameterName.BFDSessDiscriminator.name());
+		nmsSettableBFDParams.add(ProprietaryParameterName.BFDSessionType.name());
+		nmsSettableBFDParams.add(ProprietaryParameterName.BFDSessionStyle.name());
+
+		// Parameters which are settable only from EMS
+		final List<String> emsOnlySettableBFDParams = new ArrayList<String>();
+		emsOnlySettableBFDParams.add(ProprietaryParameterName.BFDReceiveInterval.name());
+		emsOnlySettableBFDParams.add(ProprietaryParameterName.BFDSessRemoteDiscr.name());
+		emsOnlySettableBFDParams.add(ProprietaryParameterName.BFDSessionState.name());
+
+		// Check if all the parameters provided in the input at LR_MPLS_TP layer
+		// are valid
+		for (final NameAndStringValue inputMPLSLRParam : inputMplsLRParams.getTransmissionParams()) {
+			final String paramName = inputMPLSLRParam.getName().getValue();
+			if (!nmsSettableBFDParams.contains(paramName)) {
+				final String error = String.format("Parameter <%s> is not a valid NMS Settable BFD parameter", paramName);
+				LOG.error(error);
+				throw PlugInExceptionHandler.invalidInput(error);
+			}
+		}
+
+		// Check if all the optional BFD parameters are already present in the
+		// db
+		for (final String optinalBFDParams : emsOnlySettableBFDParams) {
+			final String existingBFDParamValue = LayeredParametersUtils.getValue(ftp.getInformation(), mplsTpLayer,
+							optinalBFDParams);
+			if (existingBFDParamValue != null && existingBFDParamValue.trim().length() > 0) {
+				existingTPBFDParamMap.put(optinalBFDParams, existingBFDParamValue);
+			} else if (LOG.isDebugEnabled()) {
+				final String debugInfo = String.format(
+								"BFD parameter <%s> is not already present at LR_MPLS_TP layer for TP <%s>", optinalBFDParams,
+								TmfNameUtilities.toString(ftp.getDn()));
+				LOG.debug(debugInfo);
+			}
+		}
+
+		// Check if any mandatory BFD parameter is not already present in
+		// db
+		for (final String mandatoryBFDParams : nmsSettableBFDParams) {
+			final String existingBFDParamValue = LayeredParametersUtils.getValue(ftp.getInformation(), mplsTpLayer,
+							mandatoryBFDParams);
+			if (existingBFDParamValue != null && existingBFDParamValue.trim().length() > 0) {
+				existingTPBFDParamMap.put(mandatoryBFDParams, existingBFDParamValue);
+			} else {
+				final String error = String.format("BFD parameter <%s> is not already present at LR_MPLS_TP layer for TP <%s>",
+								mandatoryBFDParams, TmfNameUtilities.toString(ftp.getDn()));
+				LOG.error(error);
+				throw PlugInExceptionHandler.unableToComply(error);
+			}
+		}
+
+		final Profile bfdProfile = LayeredParameterManager.getManager().getProfile();
+		// Check if all the values provided are legal values
+		for (final NameAndStringValue inputBFDParam : inputMplsLRParams.getTransmissionParams()) {
+			final String inputBFDParamName = inputBFDParam.getName().getValue();
+			bfdProfile.setProperty(inputBFDParamName, inputBFDParam.getValue().getValue());
+			final String profileLegalValue = bfdProfile.getProperty(inputBFDParamName);
+			if (profileLegalValue != null && profileLegalValue.trim().length() > 0) {
+				inputBFDParamMap.put(inputBFDParamName, profileLegalValue);
+			} else {
+				final String error = String.format(
+								"The value provided for the BFD parameter <%s> is <%s>. It is not a legal value", inputBFDParamName,
+								profileLegalValue.trim());
+				LOG.error(error);
+				throw PlugInExceptionHandler.invalidInput(error);
+			}
+		}
+	}
+
+	/**
+	 * This method is called for sending the
+	 * ModifyMplsTunnelsAndLspCrossConnections when the request is for changing
+	 * the any other BFD Parameters apart from BFDSessSendingControl.
+	 * 
+	 * @param bfdParamMap
+	 * @param ftp
+	 * @param modifiedTPHolder
+	 */
+	private void sendRequestForModifyingBFDInfo(final Map<String, String> bfdParamMap, final DBTp ftp,
+					final Holder<TerminationPoint> modifiedTPHolder) {
+
+		final MEId meId = ftp.getDn().getMe();
+		final X36NeId neId = sbiClient.getNaming().getNeId(meId);
+
+		final AILSPLogicalIndex lspLogicalIndex = getLogicaIndex(ftp);
+
+		final X36TunnelDetails tunnelDetails = new X36TunnelDetails();
+		tunnelDetails.setTunnelId(lspLogicalIndex.getTunnelId());
+		tunnelDetails.setRole(getNodeRole(ftp));
+		final X36OptionalTunnelInfo tunnelInfo = new X36OptionalTunnelInfo();
+		setTunnelInfo(neId, ftp, tunnelInfo);
+		tunnelDetails.setTunnelInfo(tunnelInfo);
+		final X36SetOfLSPDetails setOfLspDetails = tunnelDetails.getLspList();
+		final X36LSPDetails lspDetails = new X36LSPDetails();
+		lspDetails.setLspId(lspLogicalIndex.getLspId().getValue());
+		lspDetails.setLspDirection(X36LSPDirection.lsp_bidir);
+		final X36BFDConfiguration bfdConfiguration = lspDetails.getLspInfo().getOamInfo().getParameters().getBfd();
+		final X36BFDInfo bfdInfo = new X36BFDInfo();
+
+		fillBfdInfo(bfdParamMap, bfdInfo);
+
+		bfdConfiguration.setBfdInfo(bfdInfo);
+		setOfLspDetails.add(lspDetails);
+
+		final long timeout = sbiClient.getProfile().getTimeProperty(EmSBIPluginProperty.sbiTimeout, 180000);
+		sbiClient.getMessageHandler().setTimeout(timeout);
+
+		final X36CrossConnectionCmd connectionCmd = new X36CrossConnectionCmd();
+		connectionCmd.setCommandType(X36CommandType.MOD_TRAFFIC_PAR);
+		connectionCmd.getCrossConnection().getSpecificCrossConnection().setMplsTunnelsLspConnection(tunnelDetails);
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(connectionCmd, "Request for setting BFD Params on the NE:"));
+		}
+
+		final X36SetReportCrossConnections response = sbiClient.getMessageHandler().setCrossConnections(neId,
+						new X36ReqId(NumberGenerator.getReqId()), connectionCmd, sbiClient.getHostName());
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(response, "Response after setting BFD Params on the NE:"));
+		}
+
+		if (response.getCompliance().isResOk()) {
+			setBFDInfo(ftp, bfdParamMap);
+			modifiedTPHolder.setTarget(ftp.getInformation());
+		} else {
+			final String errorReason = String.format(
+							"Invalid compliance from plug-in : <%s>. Can't update the BFD parameters on the NE", response.getCompliance()
+							.getEnum());
+			LOG.error(new DumpInfo(response, errorReason));
+			throw PlugInExceptionHandler.unableToComply(errorReason);
+		}
+
+	}
+
+	/**
+	 * This method is called for sending the SetOAMMonitoring when the request
+	 * is for changing the BFD Parameter BFDSessSendingControl.
+	 * 
+	 * @param bfdSessSendCtrlVal
+	 * @param ftp
+	 * @param modifiedTPHolder
+	 */
+	private void sendOAMMonitoringMsg(final String bfdSessSendCtrlVal, final DBTp ftp,
+					final Holder<TerminationPoint> modifiedTPHolder) {
+		/*
+		 * If it is requested the update of the "BFDSessionSendingControl"
+		 * parameter, then SetMplsMonitoring message need to be sent.
+		 */
+		final X36MsgSetOAMMonitoring x36MsgSetOAMMonitoring = new X36MsgSetOAMMonitoring();
+
+		x36MsgSetOAMMonitoring.getBody().setJobId(NumberGenerator.getReqId());
+
+		final MEId meId = ftp.getDn().getMe();
+		final X36NeId neId = sbiClient.getNaming().getNeId(meId);
+		x36MsgSetOAMMonitoring.getBody().setNeId(neId);
+
+		final X36SetOfMplsMonitoringCommands x36SetOfMplsMonitoringCommands = new X36SetOfMplsMonitoringCommands();
+
+		final X36MplsMonitoringCommand x36MplsMonitoringCommand = new X36MplsMonitoringCommand();
+		final X36LspOamBfdCommand x36LspOamBfdCommand = new X36LspOamBfdCommand();
+
+		if (bfdSessSendCtrlVal.equalsIgnoreCase("start")) {
+			x36LspOamBfdCommand.setStart_monitoring();
+		} else if (bfdSessSendCtrlVal.equalsIgnoreCase("stop")) {
+			x36LspOamBfdCommand.setStop_monitoring();
+		}
+
+		final AILSPLogicalIndex lspLogicalIndex = getLogicaIndex(ftp);
+		x36MplsMonitoringCommand.setTunnelId(lspLogicalIndex.getTunnelId());
+		final X36OptionalTunnelInfo tunnelInfo = new X36OptionalTunnelInfo();
+		setTunnelInfo(neId, ftp, tunnelInfo);
+		x36MplsMonitoringCommand.setTunnelInfo(tunnelInfo);
+		x36MplsMonitoringCommand.setLspOamBfdCommand(x36LspOamBfdCommand);
+		x36MplsMonitoringCommand.setRole(getNodeRole(ftp));
+		x36SetOfMplsMonitoringCommands.add(x36MplsMonitoringCommand);
+		x36MsgSetOAMMonitoring.getBody().getSpecificOAMInfo().setMplsoperatorCommandList(x36SetOfMplsMonitoringCommands);
+		final long timeout = sbiClient.getProfile().getTimeProperty(EmSBIPluginProperty.sbiTimeout, 180000);
+		sbiClient.getMessageHandler().setTimeout(timeout);
+
+		if (LOG.isDebugEnabled()) {
+			LOG.debug(new DumpInfo(x36MsgSetOAMMonitoring, "Request for BFD Session Sending Control on the NE:"));
+		}
+
+		final X36MsgReportSetOAMMonitoring response = sbiClient.getMessageHandler().setOAMMonitoring(x36MsgSetOAMMonitoring,
+						sbiClient.getHostName());
+
+		if (response.getBody().getCompliance().isResOk()) {
+			LayeredParametersUtils.setLayeredParameter(ftp, LayerRateManager.getLayerRate("LR_MPLS_TP"),
+							ProprietaryParameterName.BFDSesssSendingControl.name(), bfdSessSendCtrlVal);
+			modifiedTPHolder.setTarget(ftp.getInformation());
+		}
+	}
+
+	private void setTunnelInfo(final X36NeId neId, final DBTp ftp, final X36OptionalTunnelInfo optionalTunnelInfo) {
+
+		final MEDn meDn = new MEDn();
+		meDn.setMe(ftp.getDn().getMe());
+		final DBManagedElement dbMe = dbManager.getManagedElement(meDn);
+		final AdditionalInfo addInfo = dbMe.getAdditionalInfo();
+		String ingressLsrId = null;
+		final String value = AdditionalInfoUtils.find(addInfo, ProprietaryAdditionalInfo.LayeredParameters.name());
+		if (value != null && value != "") {
+			final String[] additionInfoVal = value.split(",");
+			for (int i = 0; i < additionInfoVal.length; i++) {
+				if (additionInfoVal[i].equals(ProprietaryParameterName.MplsLsrIdentifier.name())) {
+					ingressLsrId = additionInfoVal[i + 1];
+					break;
+				}
+			}
+		}
+
+		final X36TunnelInfo tunnelInfo = new X36TunnelInfo();
+		tunnelInfo.setIngressLsrId(changeIpFormatToLong(ingressLsrId));
+
+		final LayeredParameterList lPList = ftp.getInformation().getTransmissionParams();
+		final LayeredParameters mplsLRParams = LayeredParametersUtils.findLayeredParameter(lPList,
+						LayerRateManager.getLayerRate("LR_MPLS_TP"));
+
+		final X36NodeRole role = getNodeRole(ftp);
+		String egressLsrId = null;
+		if (role.isHead()) {
+			egressLsrId = LayeredParametersUtils.getValue(mplsLRParams.getTransmissionParams(),
+							ProprietaryParameterName.MplsTunnelEgressLSRId.name());
+		} else {
+			egressLsrId = LayeredParametersUtils.getValue(mplsLRParams.getTransmissionParams(),
+							ProprietaryParameterName.MplsTunnelIngressLSRId.name());
+		}
+		if (egressLsrId != null) {
+			tunnelInfo.setEgressLsrId(changeIpFormatToLong(egressLsrId));
+		}
+
+		tunnelInfo.setTunnelName(ftp.getInformation().getNativeEMSName());
+		optionalTunnelInfo.setTunnelInfo();
+		optionalTunnelInfo.getTunnelInfo().set(tunnelInfo);
+	}
+
+	private long changeIpFormatToLong(final String ipAddress) {
+		long lsrId = 0;
+		try {
+			final String[] addrArray = ipAddress.split("\\.");
+
+			for (int i = 0; i < addrArray.length; i++) {
+				final int power = 3 - i;
+				lsrId += ((Integer.parseInt(addrArray[i]) % 256 * Math.pow(256, power)));
+			}
+		} catch (final Exception e) {
+			LOG.error(new DumpInfo(lsrId, "Problem occur while converting  lsrId value to IPV4 format"));
+		}
+		return lsrId;
+	}
+
+	/**
+	 * Retrieves the LSP logical Index
+	 * 
+	 * @param dbTp
+	 * @return
+	 */
+	private AILSPLogicalIndex getLogicaIndex(final DBTp dbTp) {
+
+		final DBAdditionalInformation dbAdditionalInfo = dbTp.getAdditionalInformation(ChannelInformation.NAME);
+
+		if (dbAdditionalInfo == null) {
+			LOG.error(new DumpInfo(dbTp.getName(), "ChannelInformation is not set on this TP: "));
+			throw PlugInExceptionHandler.internalError("ChannelInformation is not set on this TP");
+		}
+
+		final ChannelInformation chInfo = (ChannelInformation) dbAdditionalInfo;
+		final AIChannelInfo aiChInfo = chInfo.getSyntax();
+		return aiChInfo.getCoord().getLsp().getLogical().getLspIndex();
+
+	}
+
+	/**
+	 * Retrieves the node role
+	 * 
+	 * @param dbTp
+	 * @return
+	 */
+	private X36NodeRole getNodeRole(final DBTp dbTp) {
+		/*
+		 * The tunnelRole shall be determined by fetching the associated LSP
+		 * Cross Connection object (either protected or protecting) from the
+		 * database and checking whether the associated FTP is set as the A-End
+		 * or Z-End of the cross connection.
+		 */
+
+		final DBCrossConnectableTp<?, ?> dbXCTp = (DBCrossConnectableTp<?, ?>) dbTp;
+		final Map<EndPoint, DBCrossConnectableTp<? extends SetType, ? extends SetType>[]> endPoints = CrossConnectionHelper
+						.getLSPEndPoints(dbXCTp);
+		final X36NodeRole role = new X36NodeRole();
+		if (I36Utilities.containsTp(endPoints.get(EndPoint.AEND), dbXCTp)) {
+			role.setHead();
+		} else if (I36Utilities.containsTp(endPoints.get(EndPoint.ZEND), dbXCTp)) {
+			role.setTail();
+		} else {
+			LOG.error(new DumpInfo(dbTp.getName(), "TP is not associated to any LSP: "));
+			throw PlugInExceptionHandler.entityNotFound("TP is not associated to any LSP");
+		}
+		return role;
+	}
+
+	/**
+	 * Updates the BFD parameters to the TP.
+	 * 
+	 * @param dbTp
+	 *            - input db tp
+	 * @param tpBfdParamMap
+	 *            - map which contains all the latest values
+	 */
+	private void setBFDInfo(final DBTp dbTp, final Map<String, String> tpBfdParamMap) {
+
+		final LayerRate mplsLayer = LayerRateManager.getLayerRate("LR_MPLS_TP");
+
+		final List<String> nmsAndEmsSettableBFDParams = new ArrayList<String>();
+		nmsAndEmsSettableBFDParams.add(ProprietaryParameterName.BFDSesssSendingControl.name());
+		nmsAndEmsSettableBFDParams.add(ProprietaryParameterName.BFDSessDetectMult.name());
+		nmsAndEmsSettableBFDParams.add(ProprietaryParameterName.BFDSendInterval.name());
+		nmsAndEmsSettableBFDParams.add(ProprietaryParameterName.BFDReceiveInterval.name());
+		nmsAndEmsSettableBFDParams.add(ProprietaryParameterName.BFDSessDiscriminator.name());
+		nmsAndEmsSettableBFDParams.add(ProprietaryParameterName.BFDSessRemoteDiscr.name());
+		nmsAndEmsSettableBFDParams.add(ProprietaryParameterName.BFDSessionType.name());
+		nmsAndEmsSettableBFDParams.add(ProprietaryParameterName.BFDSessionStyle.name());
+		nmsAndEmsSettableBFDParams.add(ProprietaryParameterName.BFDSessionState.name());
+
+		for (final String bfdParamName : nmsAndEmsSettableBFDParams) {
+			final String bfdParamValue = tpBfdParamMap.get(bfdParamName);
+			if (bfdParamValue != null) {
+				LayeredParametersUtils.setLayeredParameter(dbTp, mplsLayer, bfdParamName, bfdParamValue);
+			}
+		}
+
+	}
+
+	/**
+	 * Building the BFDInfo object
+	 * 
+	 * @param bfdParamMap
+	 * @param bfdInfo
+	 */
+	private void fillBfdInfo(final Map<String, String> bfdParamMap, final X36BFDInfo bfdInfo) {
+
+		if (bfdParamMap.containsKey(ProprietaryParameterName.BFDSessDetectMult.name())) {
+			final String detMultiples = bfdParamMap.get(ProprietaryParameterName.BFDSessDetectMult.name());
+			bfdInfo.setDetectMultiples(Integer.valueOf(detMultiples.trim()));
+		}
+
+		if (bfdParamMap.containsKey(ProprietaryParameterName.BFDSendInterval.name())) {
+			final String sendInterval = bfdParamMap.get(ProprietaryParameterName.BFDSendInterval.name());
+			final X36OAMPeriod x36OamPeriod = I36Utilities.convertStringToOAMPeriod(sendInterval.trim());
+			bfdInfo.setSendInterval(x36OamPeriod);
+		}
+
+		if (bfdParamMap.containsKey(ProprietaryParameterName.BFDReceiveInterval.name())) {
+			final String recvInterval = bfdParamMap.get(ProprietaryParameterName.BFDReceiveInterval.name());
+			final X36OAMPeriod x36OamPeriod = I36Utilities.convertStringToOAMPeriod(recvInterval.trim());
+			final X36OptionalOAMPeriod x36OptOAMPeriod = new X36OptionalOAMPeriod();
+			x36OptOAMPeriod.setOamPeriod(x36OamPeriod);
+			bfdInfo.setReceiveInterval(x36OptOAMPeriod);
+		}
+
+		if (bfdParamMap.containsKey(ProprietaryParameterName.BFDSessDiscriminator.name())) {
+			final String sessDiscr = bfdParamMap.get(ProprietaryParameterName.BFDSessDiscriminator.name());
+			final long myDescrVal = Long.valueOf(sessDiscr.trim());
+			bfdInfo.setMyDiscrimnator(myDescrVal);
+		}
+
+		if (bfdParamMap.containsKey(ProprietaryParameterName.BFDSessRemoteDiscr.name())) {
+			final String sessRemoteDiscr = bfdParamMap.get(ProprietaryParameterName.BFDSessRemoteDiscr.name());
+			final long yourDescrVal = Long.valueOf(sessRemoteDiscr.trim());
+			bfdInfo.setYourDiscrimnator(yourDescrVal);
+		}
+
+		if (bfdParamMap.containsKey(ProprietaryParameterName.BFDSessionType.name())) {
+			final String sessionType = bfdParamMap.get(ProprietaryParameterName.BFDSessionType.name());
+			if (sessionType.equalsIgnoreCase("coordinated")) {
+				bfdInfo.setSessionType(X36BfdSessionType.coordinated);
+			}
+		}
+
+		if (bfdParamMap.containsKey(ProprietaryParameterName.BFDSessionType.name())) {
+			final String sessionStyle = bfdParamMap.get(ProprietaryParameterName.BFDSessionType.name());
+
+			if (sessionStyle.equalsIgnoreCase("tp")) {
+				bfdInfo.setSessionStyle(X36BfdSessionStyle.tp);
+			} else if (sessionStyle.equalsIgnoreCase("tp_fixed")) {
+				bfdInfo.setSessionStyle(X36BfdSessionStyle.tp_fixed);
+			}
+
+		}
+		if (bfdParamMap.containsKey(ProprietaryParameterName.BFDSessionState.name())) {
+			final String sessionState = bfdParamMap.get(ProprietaryParameterName.BFDSessionState.name());
+			final X36SessionState x36SessionState = I36Utilities.convertStringToSessionState(sessionState);
+			final X36OptionalSessionState optionalSessState = new X36OptionalSessionState();
+			optionalSessState.setSessionStateValue(x36SessionState);
+			bfdInfo.setSessionState(optionalSessState);
+		}
+
+	}
+
+}

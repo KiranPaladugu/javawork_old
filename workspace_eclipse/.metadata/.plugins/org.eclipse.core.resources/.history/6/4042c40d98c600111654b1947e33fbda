@@ -1,0 +1,638 @@
+package com.marconi.tmp.tools;
+
+
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Random;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.tmf.db.Session;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEDnList;
+import com.marconi.fusion.tmf.plugIn.types.MEId;
+
+/**
+ * @author guarguag
+ */
+public class BERConvertionManager {
+
+	static public final int DEFAULT_LIVING_THREAD             = 1;
+	static public final int DEFAULT_MAX_NUMBER_OF_REALIGNMENT = 10;
+	static public final long DEFAULT_REALIGNMENT_DELAY = 10000;
+
+	static private Log log = LogFactory.getLog(BERConvertionManager.class);
+
+
+	List<String> suspendedList = new ArrayList<String>();
+	List<String> shuttedDownList = new ArrayList<String>();
+
+	private boolean startUpGetNodePossibleConfiguration = false ;
+
+	private final X36NeIdComparator comparator = new X36NeIdComparator();
+	private final Set<MEDn> misalignedNe = new HashSet<MEDn>();
+	private final Map<MEDn, Long> runningNe = new HashMap<MEDn, Long>();
+	private final List<MEDn> postedNe = new LinkedList<MEDn>();
+	private PropertyChangeSupport pcSupport = null;
+	private BERConversiontEventSupport reSupport = null;
+	static private int           maxNumberOfRealignment = 10;
+	static private int           livingThread = 10;
+	static private List<BERConvertionManager> managers = new LinkedList<BERConvertionManager>();
+	static private Map<String, BERConversionJob> runningTasks = new TreeMap<String, BERConversionJob>(); // gli ne running
+	static private Map<String, NEStats> neStats = new TreeMap<String, NEStats>(); // contatori (stats)
+	static private List<BERConversionJob> queuedTask = new ArrayList<BERConversionJob>();
+	static private ThreadPoolExecutor executor = null;
+	static private boolean initialized = false;
+
+
+	/* ***************************************************************************/
+	public BERConvertionManager() {
+		pcSupport = new PropertyChangeSupport(this);
+		reSupport = new BERConversiontEventSupport(this);
+
+		synchronized (BERConvertionManager.class) {
+			managers.add(this);
+		}
+
+		init();
+	}
+
+
+	/* ***************************************************************************/
+	private void init() {
+		synchronized (BERConvertionManager.class) {
+			if (initialized) {
+				return;
+			}
+			maxNumberOfRealignment = sbiClient.getProfile().getIntProperty(I36PlugIn.PluginProperty.realignmentConcurrentRealignment, DEFAULT_MAX_NUMBER_OF_REALIGNMENT);
+			livingThread = sbiClient.getProfile().getIntProperty(I36PlugIn.PluginProperty.realignmentLivingThread, DEFAULT_LIVING_THREAD);
+			if (livingThread < 1) {
+				livingThread = DEFAULT_LIVING_THREAD;
+			}
+			if (maxNumberOfRealignment < livingThread) {
+				maxNumberOfRealignment = livingThread+1;
+			}
+
+			executor = new ThreadPoolExecutor(livingThread, maxNumberOfRealignment, 10000, TimeUnit.MILLISECONDS, new SynchronousQueue<Runnable>());
+			final ThreadFactory factory = new DispatcherThreadFactory("RealignmentManager");
+			executor.setThreadFactory(factory);
+			initialized = true;
+		}
+	}
+
+	/* (non-Javadoc)
+	 * @see com.marconi.fusion.base.application.TimerListener#timerExpired(java.lang.Object, java.lang.Object)
+	 */
+	public synchronized void timerExpired(final Object timerId, final Object userData) {
+		// final X36NeId neId = (X36NeId)userData;
+		final MEDn neId = (MEDn) userData;
+
+		enqueue(neId);
+	}
+
+	/* (non-Javadoc)
+	 * @see java.beans.PropertyChangeSupport#addPropertyChangeListener(java.beans.PropertyChangeListener)
+	 */
+	public void addPropertyChangeListener(final PropertyChangeListener arg0) {
+		pcSupport.addPropertyChangeListener(arg0);
+	}
+
+	/* (non-Javadoc)
+	 * @see java.beans.PropertyChangeSupport#addPropertyChangeListener(java.lang.String, java.beans.PropertyChangeListener)
+	 */
+	public void addPropertyChangeListener(final String arg0, final PropertyChangeListener arg1) {
+		pcSupport.addPropertyChangeListener(arg0, arg1);
+	}
+
+	/* (non-Javadoc)
+	 * @see java.beans.PropertyChangeSupport#removePropertyChangeListener(java.beans.PropertyChangeListener)
+	 */
+	public void removePropertyChangeListener(final PropertyChangeListener arg0) {
+		pcSupport.removePropertyChangeListener(arg0);
+	}
+
+	/* (non-Javadoc)
+	 * @see java.beans.PropertyChangeSupport#addPropertyChangeListener(java.beans.PropertyChangeListener)
+	 */
+	public void addRealignmentEventListener(final BERConversionEventListener arg0) {
+		reSupport.addListener(arg0);
+	}
+
+	/* (non-Javadoc)
+	 * @see java.beans.PropertyChangeSupport#removePropertyChangeListener(java.beans.PropertyChangeListener)
+	 */
+	public void removeRealignmentEventListener(final BERConversionEventListener arg0) {
+		reSupport.removeListener(arg0);
+	}
+
+	/* (non-Javadoc)
+	 * @see java.beans.PropertyChangeSupport#removePropertyChangeListener(java.lang.String, java.beans.PropertyChangeListener)
+	 */
+	public void removePropertyChangeListener(final String arg0, final PropertyChangeListener arg1) {
+		pcSupport.removePropertyChangeListener(arg0, arg1);
+	}
+
+	/* ***************************************************************************/
+	public synchronized void shutdown() {
+
+		final Map<String, EmDetails> neMap = sbiClient.getPlugIn().gethostIds();
+
+		for (final String hostName : neMap.keySet()) {
+
+			shuttedDownList.add(hostName);
+			suspendedList.add(hostName);
+		}
+		misalignedNe.clear();
+	}
+
+	/**
+	 * @return Returns the sbiClient.
+	 */
+	/* ***************************************************************************/
+	public SBIClientI getSBIClient() {
+		return sbiClient;
+	}
+
+	/* ***************************************************************************/
+	public synchronized boolean isShuttedDown(final String hostName) {
+		return shuttedDownList.contains(hostName);
+	}
+
+	/* ***************************************************************************/
+	public synchronized boolean isSuspended(final String hostName) {
+		return suspendedList.contains(hostName);
+	}
+	/* ***************************************************************************/
+	public synchronized int getPostedNes() {
+		return postedNe.size();
+	}
+
+	/* ***************************************************************************/
+	public synchronized int getInRealignmentNes() {
+		return runningNe.size();
+	}
+
+	/* ***************************************************************************/
+	public synchronized void suspend(final String hostName) {
+		suspendedList.add(hostName);
+		misalignedNe.clear();
+	}
+
+	/* ***************************************************************************/
+	public synchronized void resume(final String hostName) {
+		suspendedList.remove(hostName);
+	}
+	public synchronized void realignNe(final MEDnList neIds) {
+		enqueue(neIds);
+		schedule();
+		report();
+	}
+
+	/* ***************************************************************************/
+	public synchronized void realignNe(final MEDn neId) {
+		enqueue(neId);
+		schedule();
+		report();
+	}
+
+	public int getRealignmentCount(final MEDn meDn) {
+		int count = 0;
+		final String neLocator = sbiClient.getNeLocator(meDn);
+		synchronized (BERConvertionManager.class) {
+			final NEStats stats = neStats.get(neLocator);
+			if (stats != null) {
+				count = stats.times;
+			}
+		}
+
+		return count;
+	}
+
+	/* ***************************************************************************/
+	protected synchronized void realignStarted(final MEDn meDn) {
+		runningNe.put(meDn, System.currentTimeMillis());
+		final String neLocator = sbiClient.getNeLocator(meDn);
+		log.info(String.format("ME <%s> realignment started.", neLocator));
+		reSupport.fireBeginRealignmentEvent(meDn, null);// Making NEId as null because it need not be used anymore.
+	}
+
+	/* ***************************************************************************/
+	protected synchronized void realignEnded(final MEDn meDn, final boolean completed, final String cause) {
+		final Long startedAt = runningNe.remove(meDn);
+		final String neLocator = sbiClient.getNeLocator(meDn);
+		log.info(String.format("ME <%s> realignment ended.", neLocator));
+		postedNe.remove(meDn);
+
+		synchronized (BERConvertionManager.class) {
+			NEStats stats = neStats.get(neLocator);
+			if (stats == null) {
+				stats = new NEStats();
+				neStats.put(neLocator, stats);
+			}
+
+			stats.times++;
+			if (startedAt != null) {
+				final long endedAt = System.currentTimeMillis();
+				stats.millis += (endedAt - startedAt.longValue());
+			}
+
+			runningTasks.remove(neLocator);
+		}
+
+		report();
+		if (misalignedNe.contains(meDn)) {
+			misalignedNe.remove(meDn);
+			realignNe(meDn);
+		}
+
+		final X36NeId neId = sbiClient.getNaming().getNeId(meDn);
+		reSupport.fireEndRealignmentEvent(meDn, neId, completed, cause);// neId
+																		// need
+																		// not
+																		// be
+																		// used
+																		// anymore
+
+		schedule();
+	}
+
+	/* ***************************************************************************/
+	private void enqueue(final MEDn neId) {
+		synchronized (BERConvertionManager.class) {
+			doEnqueue(neId);
+		}
+	}
+
+	/* ***************************************************************************/
+	private void enqueue(final MEDnList setOf) {
+		synchronized (BERConvertionManager.class) {
+			for (final Iterator<MEDn> itr = setOf.iterator(); itr.hasNext();) {
+				doEnqueue(itr.next());
+			}
+		}
+	}
+
+	// tocheck to remove
+	/* ***************************************************************************/
+	private void doEnqueue(final MEDn meDn) {
+
+		String neLocator = null;
+		final Session session = null;
+		String neHostName = null;
+
+		try {
+			if(sbiClient.isStandAlone()){
+				neHostName = sbiClient.getHostName();
+				neLocator = sbiClient.getNeLocator(meDn);
+
+			}else{
+				neLocator = sbiClient.getNeLocator(meDn);
+			}
+
+			if (shuttedDownList.contains(neHostName)
+					|| suspendedList.contains(neHostName)) {
+				log.info(String
+						.format("Realign manager is down: unable to schedule realignment for ME <%s>",
+								neLocator));
+				final X36NeId neId1 = null;
+				reSupport.fireEndRealignmentEvent(meDn, neId1, false,
+						"Manager suspended or shutted down");
+				return;
+			}
+
+			final BERConversionJob running = runningTasks.get(neLocator);
+			if (running != null)  {
+				log.info(String
+						.format("ME <%s> realignment already running. Wait for completation...",
+								neLocator));
+				misalignedNe.add(meDn);
+				return;
+			}
+
+			final long timeout = sbiClient.getProfile().getTimeProperty(
+					I36PlugIn.PluginProperty.realignmentMsgTimeout, 120000);
+
+			final BERConversionJob job = new BERConversionJob(this);
+			job.setEmId(sbiClient.getPlugIn().getEMId(meDn));
+			job.setMeDn(meDn);
+			job.setTimeout(timeout);
+
+			log.info(String
+					.format("Queued realignement for ME <%s>", neLocator));
+			if (!runningNe.containsKey(meDn)) {
+				queuedTask.add(job);
+			}
+		} catch (final Exception e) {
+			log.error(new DumpInfo(e, "Error is :: "));
+		} finally {
+			if (session != null) {
+
+				session.terminate();
+
+			}
+		}
+	}
+
+	/* ***************************************************************************/
+	private void schedule() {
+		synchronized (BERConvertionManager.class) {
+			BERConversionJob toSchedule = null;
+			while (queuedTask.size() > 0) {
+				toSchedule = queuedTask.remove(0);
+
+				final String neLocator = toSchedule.getNeLocator();
+				final X36NeId neId = toSchedule.getNeId();
+				final MEDn meDn = toSchedule.getMeDn();
+
+				try {
+					if (sbiClient.isStandAlone() && isShuttedDown(sbiClient.getHostName())) {
+						log.info(String.format("Realign manager is down: unable to schedule realignment for ME <%s>", neLocator));
+						reSupport.fireEndRealignmentEvent(meDn, neId, false, "Manager suspended or shutted down");
+						return;
+					}
+
+					executor.execute(toSchedule);
+					runningTasks.put(neLocator, toSchedule);
+
+					log.info(String.format("Scheduled realignement for ME <%s> (%d in queue)",
+							neLocator, queuedTask.size()));
+
+					misalignedNe.remove(neId);
+					postedNe.add(meDn);
+				} catch (final RejectedExecutionException e) {
+					log.info(String.format("ME <%s> rejected: enqueued...", toSchedule.getNeLocator()));
+					queuedTask.add(0, toSchedule);
+					break;
+				} catch (final Throwable e) {
+					/**
+					 * non dovrebbe mai succedere, ma siccome e' successo e non si sa perche'
+					 * becchiamo tutte le possibili eccezione per chiuder il rillinemento
+					 */
+					log.error(new DumpInfo(String.format("Unable to schedule realignment for ME <%s>", neLocator), e));
+					reSupport.fireEndRealignmentEvent(meDn, neId, false, "Manager unable to schedule the job");
+				}
+			}
+		}
+	}
+
+
+	/* ***************************************************************************/
+	static private void report() {
+		if (!log.isInfoEnabled()) {
+			return;
+		}
+		synchronized (BERConvertionManager.class) {
+			final StringBuilder buffer = new StringBuilder(1024);
+			final StringBuilder tmpBuf = new StringBuilder(1024);
+			final DateFormat   df = new SimpleDateFormat("yyyy/MM/dd-HH:mm:ss.SSS");
+
+			buffer.append("Report for realignment manager:\n");
+			buffer.append(String.format("\tmax realignment   = %d\n", maxNumberOfRealignment));
+			buffer.append(String.format("\tliving threads    = %d\n", livingThread));
+
+			buffer.append(String.format("\ttasks             = %d\n", runningTasks.size()));
+			buffer.append(String.format("\twaiting           = %d\n", queuedTask.size()));
+			buffer.append(String.format("\tqueued            = %d\n", executor.getQueue().size()));
+			buffer.append(String.format("\tcorePoolSize      = %d\n", executor.getCorePoolSize()));
+			buffer.append(String.format("\tpoolSize          = %d\n", executor.getPoolSize()));
+			buffer.append(String.format("\tlargestPoolSize   = %d\n", executor.getLargestPoolSize()));
+			if (log.isDebugEnabled()) {
+				updateOutputInDebugMode(buffer,tmpBuf,df);
+			}
+			buffer.append(String.format("\nRealignment stats (%d):\n", neStats.keySet().size()));
+			final Iterator<Entry<String, NEStats>> itr = neStats.entrySet().iterator();
+			long totalTimes = 0;
+			long totalMillis = 0;
+			long average = 0;
+			long maxMillis = 0;
+			long minMillis = Long.MAX_VALUE;
+			String faster = "";
+			String slower = "";
+
+			while (itr.hasNext()) {
+				final Entry<String, NEStats> item = itr.next();
+				final NEStats stats = item.getValue();
+
+				average = (stats.times > 0) ? stats.millis / stats.times : 0;
+
+				if (log.isDebugEnabled()) {
+					buffer.append(String.format("\tNE <%s> realigned %d times (avg = %d mills)\n",
+							item.getKey(), stats.times, average));
+				}
+
+				totalTimes += stats.times;
+				totalMillis += stats.millis;
+
+				if (average > maxMillis) {
+					maxMillis = average;
+					slower = item.getKey();
+				}
+				if (average < minMillis) {
+					minMillis = average;
+					faster = item.getKey();
+				}
+			}
+			average = (totalTimes > 0) ? totalMillis / totalTimes : 0;
+			buffer.append(String.format("\tTotal realignment %d on %d MEs (avg = %d mills)\n",
+					totalTimes,
+					neStats.keySet().size(),
+					average));
+
+			if (faster.length() > 0) {
+				buffer.append(String.format("\tFaster ME <%s>: %d mills\n", faster, minMillis));
+			}
+			if (slower.length() > 0) {
+				buffer.append(String.format("\tSlower ME <%s>: %d mills\n", slower, maxMillis));
+			}
+			log.info(buffer.toString());
+		}
+	}
+
+	/* ***************************************************************************/
+	static public void main(final String []args) {
+		BERConvertionManager manager = new BERConvertionManager(null);
+
+		final int iterate = Integer.parseInt(args[0]);
+		final int count = Integer.parseInt(args[1]);
+
+		final Random random = new Random();
+
+		for (int idx = 0; idx < iterate; idx++) {
+			for (int idy = 0; idy < count; idy++) {
+				final MEDn meDn = new MEDn();
+				final MEId meId = new MEId();
+				meId.setValue(idy + "");
+				meDn.setMe(meId);
+				manager.realignNe(meDn);
+			}
+			final int sleep = random.nextInt(7) * 1000;
+			log.info("Ready to sleep for " + sleep + " millis.");
+			try {
+				Thread.sleep(sleep);
+			} catch (final Exception e) {
+			}
+		}
+
+		log.info("Execution terminated");
+		try {
+			while (true) {
+				Thread.sleep(5000);
+				if ((manager.getInRealignmentNes() == 0) && (manager.getPostedNes() == 0)) {
+					break;
+				}
+
+			}
+		} catch (final Exception e) {
+		}
+
+		BERConvertionManager.report();
+		manager.shutdown();
+		manager = null;
+
+		log.info("Exiting....");
+	}
+
+	static class NEStats {
+		int times = 0;
+		long millis = 0;
+	}
+
+	static class X36NeIdComparator implements Comparator<X36NeId> {
+
+		@Override
+		public int compare(final X36NeId one, final X36NeId two) {
+
+			final int oneValue = one.getValue();
+			final int twoValue = two.getValue();
+
+			if (oneValue < twoValue) {
+				return -1;
+			}
+			if (oneValue > twoValue) {
+				return 1;
+			}
+
+			return 0;
+		}
+
+	}
+
+	static private class DispatcherThreadFactory implements ThreadFactory {
+		static AtomicInteger thId = new AtomicInteger(0);
+
+		private String name = "";
+
+		public DispatcherThreadFactory(final String name) {
+			this.name = name;
+		}
+
+		@Override
+		public Thread newThread(final Runnable r) {
+			final int id = thId.getAndIncrement();
+			final String thName = name + "-Thread(" + id + ")";
+			return new Thread(r, thName);
+		}
+
+	}
+	/**
+	 * Updates the output which will be dumped in log to provide information about realignment .
+	 * @param buffer
+	 * @param tmpBuf
+	 * @param df
+	 */
+	private static void updateOutputInDebugMode(final StringBuilder buffer ,final StringBuilder tmpBuf ,final DateFormat df){
+		buffer.append(String.format("\nManagers (%d):\n", managers.size()));
+		for (final BERConvertionManager item : managers) {
+			buffer.append(String.format("\tmanager for %s\n", item.sbiClient.getName()));
+		}
+
+		final TreeSet<String> running = new TreeSet<String>();
+		tmpBuf.setLength(0);
+		int count = 0;
+		for (final BERConvertionManager mgr : managers) {
+			count += mgr.runningNe.size();
+			final Iterator<Entry<MEDn, Long>> itr = mgr.runningNe.entrySet().iterator();
+			while (itr.hasNext()) {
+				final Entry<MEDn, Long> item = itr.next();
+				final Long startedAt = item.getValue();
+				final Date date = new Date();
+				date.setTime(startedAt.longValue());
+				final String nn = mgr.sbiClient.getNeLocator(item.getKey());
+				running.add(nn);
+				tmpBuf.append(String.format("\tNE <%s> started at %s\n", nn, df.format(date)));
+			}
+		}
+		buffer.append(String.format("\nNE running (%d):\n", count));
+		buffer.append(tmpBuf);
+
+		{
+			tmpBuf.setLength(0);
+			count = 0;
+			final Iterator<Entry<String, BERConversionJob>> itr = runningTasks.entrySet().iterator();
+			while (itr.hasNext()) {
+				final Entry<String, BERConversionJob> item = itr.next();
+				if (running.contains(item.getKey())) {
+					continue;
+				}
+				count++;
+				tmpBuf.append(String.format("\tNE <%s> is running\n", item.getKey()));
+			}
+			buffer.append(String.format("\nNE scheduled (%d/%d):\n", count, runningTasks.size()));
+			buffer.append(tmpBuf);
+		}
+
+		tmpBuf.setLength(0);
+		count = 0;
+		for (final BERConvertionManager mgr : managers) {
+			count += mgr.misalignedNe.size();
+			final Iterator<MEDn> itr = mgr.misalignedNe.iterator();
+			while (itr.hasNext()) {
+				final MEDn item = itr.next();
+				final String nn = mgr.sbiClient.getNeLocator(item);
+				tmpBuf.append(String.format("\tNE <%s> is waiting\n", nn));
+			}
+		}
+		buffer.append(String.format("\nNE waiting (%d):\n", count));
+		buffer.append(tmpBuf);
+	}
+	/**
+	 * @return true if realignment is called during startup
+	 */
+	public boolean isStartUpGetNodePossibleConfiguration() {
+		return startUpGetNodePossibleConfiguration;
+	}
+
+	/**
+	 * enables /disables fetching get node possible configuration
+	 * @param startUpGetNodePossibleConfiguration
+	 */
+	public void setStartUpGetNodePossibleConfiguration(
+			final boolean startUpGetNodePossibleConfiguration) {
+		this.startUpGetNodePossibleConfiguration = startUpGetNodePossibleConfiguration;
+	}
+}
+

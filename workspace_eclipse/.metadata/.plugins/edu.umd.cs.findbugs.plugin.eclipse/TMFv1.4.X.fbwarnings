@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<BugCollection version="2.0.0" sequence="2" timestamp="1340297286862" analysisTimestamp="1340297280081" release="">
+  <Project projectName="TMFv1.4.X">
+    <Jar>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\classes\com\marconi\fusion\tmf\i36PlugIn\sbi\SBIClient$BERRealigmentHandler.class</Jar>
+    <Jar>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\classes\com\marconi\fusion\tmf\i36PlugIn\sbi\SBIClient$FirstConnectionHandler.class</Jar>
+    <Jar>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\classes\com\marconi\fusion\tmf\i36PlugIn\sbi\SBIClient$MEDetails.class</Jar>
+    <Jar>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\classes\com\marconi\fusion\tmf\i36PlugIn\sbi\SBIClient$OtherConnectionHandler.class</Jar>
+    <Jar>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\classes\com\marconi\fusion\tmf\i36PlugIn\sbi\SBIClient$RealigmentHandler.class</Jar>
+    <Jar>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\classes\com\marconi\fusion\tmf\i36PlugIn\sbi\SBIClient.class</Jar>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\classes</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\eclipse-java-indigo-SR2-win32\eclipse\plugins\org.junit_4.8.2.v4_8_2_v20110321-1705\junit.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\eclipse-java-indigo-SR2-win32\eclipse\plugins\org.hamcrest.core_1.1.0.v20090501071000.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-collections-3.2.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-configuration-1.5.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-io-1.4.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-lang-2.4.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-logging-1.1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-net-2.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-pool-1.4.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\jlima.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-base-2.5.005.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-base-logging-2.5.005.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-base-slc-2.5.005.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-base-tools-2.5.005.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-corba-2.2.001.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\avalon-framework-4.1.5.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-logging-adapters-1.1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-logging-api-1.1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\janino.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\junit.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\log4j-1.2.15.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\logkit-1.2.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\omg.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\opencsv-1.6.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\openorb_orb_omg-1.4.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\openorb_orb-1.4.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\piccolo.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\piccolox.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-configuration-2.5.005.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\swing-worker.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\TMF814-3.5.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\tools-1.4.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\xercesImpl-2.7.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\xstream-1.1.2.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\X38.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PDM-3.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PDM-4.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PDM-5.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PDM-5.1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PDM-6.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PEN_1_1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PEN_1_2.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PEN_1_3.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PEN_3.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PEN_1_5.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PEN_2.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PEN_1_7.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PEN_1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\PEN.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\commons-cli-1.1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\antlr-runtime-3.0.1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\bcprov-jdk15-141.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\castor-1.2-commons.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\castor-1.2-xml.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\colt.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\jcalendar.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\js-1.6.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\jung-1.7.6.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\junit-4.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\kunststoff.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\looks-1.3.1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\metouia.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\lib\TMF814Client-3.2.022.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-814Manager-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-logging-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-login-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-mtnm-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-mtosi-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-orchestrator-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-orchestrator-rule-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-remote-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-remote-client-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-realignmentHandler-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-SBIContainer-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-userManagement-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\sirius-fort-db-objy-5.1.014.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\TMF-4.5.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\lib\TMF854-2.0.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\X36.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\X36_1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\X36_2.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\X36_3.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\X36_4.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\dist\X36_5.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I36\14.1.4\I36.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I36\13.4.11\I36_1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I36\13.3.3\I36_2.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I36\13.2.3\I36_3.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I36\12.1.3\I36_4.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I36\11.6.5\I36_5.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\X36\X36_14.1.4\14.1.4\X36Support.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\X36\X36_13.4.11\13.4.11\X36Support_1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\X36\X36_13.3.3\13.3.3\X36Support_2.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\X36\X36_13.2.3\13.2.3\X36Support_3.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\X36\X36_12.1.3\12.1.3\X36Support_4.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\X36\X36_11.6.5\11.6.5\X36Support_5.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\X38\15.1.1.G\X38Support.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I38\15.1.1.G\I38.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I38\14.2.1.G\I38_1.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I38\14.1.1.B\I38_2.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I38\13.3.1.C\I38_3.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I38\13.2.1.M\I38_4.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I38\13.1.1.B\I38_5.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I38\12.1.1.C\I38_6.jar</AuxClasspathEntry>
+    <AuxClasspathEntry>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\I38\11.6.2.J2\I38_7.jar</AuxClasspathEntry>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\unitTests\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\tmfI36PlugIn\test</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\sbiAdapter\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\tmfAsyncManager\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\crossInformation\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\adapter\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\exportimport\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\tmfI36PlugIn\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\tmfSBI\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\tmfI38PlugIn\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\startup\src</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\X36\X36_14.1.4\PDM_6_0\test</SrcDir>
+    <SrcDir>C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\PDM\pdm-5_1\test</SrcDir>
+    <Cloud id="edu.umd.cs.findbugs.cloud.doNothingCloud" online="false"></Cloud>
+  </Project>
+  <BugInstance type="DLS_DEAD_LOCAL_STORE" priority="2" abbrev="DLS" category="STYLE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="onFirstConnection" signature="(Ljava/lang/String;)V" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="1343" end="1498" startBytecode="0" endBytecode="365" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <LocalVariable name="nodeList" register="2" pc="73" role="LOCAL_VARIABLE_NAMED"/>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="1352" end="1352" startBytecode="72" endBytecode="72" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    <Property name="edu.umd.cs.findbugs.detect.DeadLocalStoreProperty.DEAD_OBJECT_STORE" value="true"/>
+    <Property name="edu.umd.cs.findbugs.detect.DeadLocalStoreProperty.KILLED_BY_SUBSEQUENT_STORE" value="true"/>
+    <Property name="edu.umd.cs.findbugs.detect.DeadLocalStoreProperty.METHOD_RESULT" value="true"/>
+    <Property name="edu.umd.cs.findbugs.detect.DeadLocalStoreProperty.LOCAL_NAME" value="nodeList"/>
+  </BugInstance>
+  <BugInstance type="GC_UNRELATED_TYPES" priority="1" abbrev="GC" category="CORRECTNESS" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="removeMEDeletionJob" signature="(I)V" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="1700" end="1701" startBytecode="0" endBytecode="6" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <Type descriptor="Ljava/lang/Integer;" role="TYPE_FOUND">
+      <SourceLine classname="java.lang.Integer"/>
+    </Type>
+    <Type descriptor="Lcom/marconi/fusion/tmf/plugIn/types/MEDn;" role="TYPE_EXPECTED">
+      <SourceLine classname="com.marconi.fusion.tmf.plugIn.types.MEDn" start="98" end="228" sourcefile="MEDn.java" sourcepath="com/marconi/fusion/tmf/plugIn/types/MEDn.java"/>
+    </Type>
+    <Method classname="java.util.Map" name="remove" signature="(Ljava/lang/Object;)Ljava/lang/Object;" isStatic="false" role="METHOD_CALLED">
+      <SourceLine classname="java.util.Map"/>
+    </Method>
+    <Field classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="deletionJobMap" signature="Ljava/util/Map;" sourceSignature="Ljava/util/Map&lt;Lcom/marconi/fusion/tmf/plugIn/types/MEDn;Lcom/marconi/fusion/tmf/i36PlugIn/MEDeletionJob;&gt;;" isStatic="false" role="FIELD_INVOKED_ON">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Field>
+    <Method classname="java.lang.Integer" name="equals" signature="(Ljava/lang/Object;)Z" isStatic="false" role="METHOD_EQUALS_USED">
+      <SourceLine classname="java.lang.Integer"/>
+    </Method>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="1700" end="1700" startBytecode="8" endBytecode="8" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+  </BugInstance>
+  <BugInstance type="RCN_REDUNDANT_NULLCHECK_OF_NULL_VALUE" priority="2" abbrev="RCN" category="STYLE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="getNeLocator" signature="(Lcom/marconi/fusion/X36/X36NeId;Ljava/lang/String;)Ljava/lang/String;" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="462" end="483" startBytecode="0" endBytecode="364" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <LocalVariable name="dn" register="3" pc="69" role="LOCAL_VARIABLE_VALUE_OF"/>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="473" end="473" startBytecode="70" endBytecode="70" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java" role="SOURCE_REDUNDANT_NULL_CHECK"/>
+  </BugInstance>
+  <BugInstance type="RCN_REDUNDANT_NULLCHECK_OF_NULL_VALUE" priority="2" abbrev="RCN" category="STYLE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="getNeLocator" signature="(Lcom/marconi/fusion/tmf/plugIn/types/MEDn;)Ljava/lang/String;" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="494" end="523" startBytecode="0" endBytecode="559" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <LocalVariable name="session" register="4" pc="172" role="LOCAL_VARIABLE_VALUE_OF"/>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.I36DatabaseManager" name="beginSession" signature="(Z)Lcom/marconi/fusion/tmf/db/Session;" isStatic="false" role="METHOD_RETURN_VALUE_OF">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.I36DatabaseManager" sourcefile="I36DatabaseManager.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/I36DatabaseManager.java"/>
+    </Method>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="519" end="519" startBytecode="174" endBytecode="174" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java" role="SOURCE_REDUNDANT_NULL_CHECK"/>
+  </BugInstance>
+  <BugInstance type="RCN_REDUNDANT_NULLCHECK_OF_NULL_VALUE" priority="2" abbrev="RCN" category="STYLE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="getNeLocator" signature="(Lcom/marconi/fusion/tmf/plugIn/types/MEDn;)Ljava/lang/String;" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="494" end="523" startBytecode="0" endBytecode="559" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <LocalVariable name="session" register="4" pc="187" role="LOCAL_VARIABLE_VALUE_OF"/>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="519" end="519" startBytecode="189" endBytecode="189" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java" role="SOURCE_REDUNDANT_NULL_CHECK"/>
+  </BugInstance>
+  <BugInstance type="RCN_REDUNDANT_NULLCHECK_WOULD_HAVE_BEEN_A_NPE" priority="1" abbrev="RCN" category="CORRECTNESS" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="getNeLocator" signature="(Lcom/marconi/fusion/tmf/plugIn/types/MEDn;)Ljava/lang/String;" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="494" end="523" startBytecode="0" endBytecode="559" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <LocalVariable name="meDn" register="1" pc="27" role="LOCAL_VARIABLE_VALUE_OF"/>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="494" end="494" startBytecode="1" endBytecode="1" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="500" end="500" startBytecode="28" endBytecode="28" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java" role="SOURCE_REDUNDANT_NULL_CHECK"/>
+  </BugInstance>
+  <BugInstance type="REC_CATCH_EXCEPTION" priority="2" abbrev="REC" category="STYLE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="collectDisabledTmfAlarmResources" signature="()Lcom/marconi/fusion/X36/X36SetOfAlarmResourceDetails;" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="3090" end="3192" startBytecode="0" endBytecode="1342" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="3181" end="3181" startBytecode="486" endBytecode="486" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+  </BugInstance>
+  <BugInstance type="REC_CATCH_EXCEPTION" priority="2" abbrev="REC" category="STYLE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="removeMEs" signature="()V" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="1557" end="1656" startBytecode="0" endBytecode="1766" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="1634" end="1634" startBytecode="561" endBytecode="561" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+  </BugInstance>
+  <BugInstance type="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD" priority="1" abbrev="ST" category="STYLE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="&lt;init&gt;" signature="(Lcom/marconi/fusion/tmf/i36PlugIn/I36PlugIn;)V" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="344" end="347" startBytecode="0" endBytecode="414" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <Field classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="sbiClient" signature="Lcom/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient;" isStatic="true">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Field>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="346" end="346" startBytecode="215" endBytecode="215" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+  </BugInstance>
+  <BugInstance type="VA_FORMAT_STRING_BAD_CONVERSION" priority="1" abbrev="FS" category="CORRECTNESS" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="doProvisioning" signature="(Lcom/marconi/fusion/tmf/plugIn/types/MEDnList;Z)V" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="2260" end="2343" startBytecode="0" endBytecode="1251" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <Method classname="java.lang.String" name="format" signature="(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;" isStatic="true" role="METHOD_CALLED">
+      <SourceLine classname="java.lang.String"/>
+    </Method>
+    <Type descriptor="Lcom/marconi/fusion/tmf/plugIn/types/MEId;" role="TYPE_FOUND">
+      <SourceLine classname="com.marconi.fusion.tmf.plugIn.types.MEId" start="86" end="155" sourcefile="MEId.java" sourcepath="com/marconi/fusion/tmf/plugIn/types/MEId.java"/>
+    </Type>
+    <String value="%d" role="STRING_FORMAT_SPECIFIER"/>
+    <String value="Asynchs Reportin is disbaled on ME:%d" role="STRING_FORMAT_STRING"/>
+    <Method classname="com.marconi.fusion.tmf.plugIn.types.MEDn" name="getMe" signature="()Lcom/marconi/fusion/tmf/plugIn/types/MEId;" isStatic="false" role="METHOD_RETURN_VALUE_OF">
+      <SourceLine classname="com.marconi.fusion.tmf.plugIn.types.MEDn" start="190" end="190" startBytecode="0" endBytecode="51" sourcefile="MEDn.java" sourcepath="com/marconi/fusion/tmf/plugIn/types/MEDn.java"/>
+    </Method>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="2310" end="2310" startBytecode="250" endBytecode="250" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+  </BugInstance>
+  <BugInstance type="VA_FORMAT_STRING_EXTRA_ARGUMENTS_PASSED" priority="1" abbrev="FS" category="CORRECTNESS" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="processEMAlarmResources" signature="(Lcom/marconi/fusion/X36/X36SetOfAlarmResourceDetails;Ljava/lang/String;)V" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="2967" end="3058" startBytecode="0" endBytecode="1645" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <Method classname="java.lang.String" name="format" signature="(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;" isStatic="true" role="METHOD_CALLED">
+      <SourceLine classname="java.lang.String"/>
+    </Method>
+    <String value="Trying to disable alarm reporting on TMF database to align with SO-EM " role="STRING_FORMAT_STRING"/>
+    <Int value="0" role="INT_EXPECTED_ARGUMENTS"/>
+    <Int value="1" role="INT_ACTUAL_ARGUMENTS"/>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="2969" end="2969" startBytecode="19" endBytecode="19" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+  </BugInstance>
+  <BugInstance type="WMI_WRONG_MAP_ITERATOR" priority="2" abbrev="WMI" category="PERFORMANCE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="doDeprovisioning" signature="(Lcom/marconi/fusion/tmf/plugIn/types/MEDnList;)V" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="2353" end="2402" startBytecode="0" endBytecode="1021" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="2387" end="2387" startBytecode="347" endBytecode="347" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+  </BugInstance>
+  <BugInstance type="WMI_WRONG_MAP_ITERATOR" priority="2" abbrev="WMI" category="PERFORMANCE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="getEmHostNameFromMap" signature="(Lcom/marconi/fusion/tmf/plugIn/types/MEDn;)Ljava/lang/String;" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="3363" end="3385" startBytecode="0" endBytecode="394" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="3372" end="3372" startBytecode="61" endBytecode="61" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+  </BugInstance>
+  <BugInstance type="WMI_WRONG_MAP_ITERATOR" priority="2" abbrev="WMI" category="PERFORMANCE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" name="getHostName" signature="(Lcom/marconi/fusion/tmf/plugIn/types/MEDn;Z)Ljava/lang/String;" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="273" end="309" startBytecode="0" endBytecode="640" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" start="294" end="294" startBytecode="125" endBytecode="125" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+  </BugInstance>
+  <BugInstance type="SIC_INNER_SHOULD_BE_STATIC" priority="2" abbrev="SIC" category="PERFORMANCE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$MEDetails">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$MEDetails" start="1180" end="1211" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+  </BugInstance>
+  <BugInstance type="DLS_DEAD_LOCAL_STORE" priority="2" abbrev="DLS" category="STYLE" first="1">
+    <Class classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$RealigmentHandler">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$RealigmentHandler" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Class>
+    <Method classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$RealigmentHandler" name="onRealignmentEvent" signature="(Lcom/marconi/fusion/tmf/i36PlugIn/realignment/RealignmentEvent;)V" isStatic="false">
+      <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$RealigmentHandler" start="2558" end="2575" startBytecode="0" endBytecode="44" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    </Method>
+    <LocalVariable name="neId" register="4" pc="35" role="LOCAL_VARIABLE_NAMED"/>
+    <SourceLine classname="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$RealigmentHandler" start="2565" end="2565" startBytecode="33" endBytecode="33" sourcefile="SBIClient.java" sourcepath="com/marconi/fusion/tmf/i36PlugIn/sbi/SBIClient.java"/>
+    <Property name="edu.umd.cs.findbugs.detect.DeadLocalStoreProperty.METHOD_RESULT" value="true"/>
+    <Property name="edu.umd.cs.findbugs.detect.DeadLocalStoreProperty.NO_LOADS" value="true"/>
+    <Property name="edu.umd.cs.findbugs.detect.DeadLocalStoreProperty.LOCAL_NAME" value="neId"/>
+  </BugInstance>
+  <Errors errors="0" missingClasses="0"></Errors>
+  <FindBugsSummary timestamp="Thu, 21 Jun 2012 18:34:34 +0200" total_classes="6" referenced_classes="208" total_bugs="16" total_size="1644" num_packages="1" vm_version="23.1-b03" cpu_seconds="7.18" clock_seconds="6.86" peak_mbytes="299.31" alloc_mbytes="371.25" gc_seconds="0.52" priority_2="11" priority_1="5">
+    <PackageStats package="com.marconi.fusion.tmf.i36PlugIn.sbi" total_bugs="16" total_types="6" total_size="1644" priority_2="11" priority_1="5">
+      <ClassStats class="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient" sourceFile="SBIClient.java" interface="false" size="1536" bugs="14" priority_2="9" priority_1="5"/>
+      <ClassStats class="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$BERRealigmentHandler" sourceFile="SBIClient.java" interface="false" size="21" bugs="0"/>
+      <ClassStats class="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$FirstConnectionHandler" sourceFile="SBIClient.java" interface="false" size="17" bugs="0"/>
+      <ClassStats class="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$MEDetails" sourceFile="SBIClient.java" interface="false" size="29" bugs="1" priority_2="1"/>
+      <ClassStats class="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$OtherConnectionHandler" sourceFile="SBIClient.java" interface="false" size="16" bugs="0"/>
+      <ClassStats class="com.marconi.fusion.tmf.i36PlugIn.sbi.SBIClient$RealigmentHandler" sourceFile="SBIClient.java" interface="false" size="25" bugs="1" priority_2="1"/>
+    </PackageStats>
+    <FindBugsProfile>
+      <ClassProfile name="edu.umd.cs.findbugs.classfile.engine.ClassDataAnalysisEngine" totalMilliseconds="1951" invocations="1459" avgMicrosecondsPerInvocation="1337" maxMicrosecondsPerInvocation="69077" standardDeviationMircosecondsPerInvocation="2913"/>
+      <ClassProfile name="edu.umd.cs.findbugs.classfile.engine.ClassInfoAnalysisEngine" totalMilliseconds="844" invocations="1458" avgMicrosecondsPerInvocation="578" maxMicrosecondsPerInvocation="99767" standardDeviationMircosecondsPerInvocation="3630"/>
+      <ClassProfile name="edu.umd.cs.findbugs.classfile.engine.bcel.ValueNumberDataflowFactory" totalMilliseconds="278" invocations="129" avgMicrosecondsPerInvocation="2157" maxMicrosecondsPerInvocation="76496" standardDeviationMircosecondsPerInvocation="7188"/>
+      <ClassProfile name="de.tobject.findbugs.builder.FindBugs2Eclipse" totalMilliseconds="276" invocations="2" avgMicrosecondsPerInvocation="138031" maxMicrosecondsPerInvocation="157756" standardDeviationMircosecondsPerInvocation="19722"/>
+      <ClassProfile name="edu.umd.cs.findbugs.classfile.engine.bcel.IsNullValueDataflowFactory" totalMilliseconds="262" invocations="121" avgMicrosecondsPerInvocation="2167" maxMicrosecondsPerInvocation="62334" standardDeviationMircosecondsPerInvocation="6426"/>
+      <ClassProfile name="edu.umd.cs.findbugs.detect.FieldItemSummary" totalMilliseconds="249" invocations="208" avgMicrosecondsPerInvocation="1200" maxMicrosecondsPerInvocation="20444" standardDeviationMircosecondsPerInvocation="2536"/>
+      <ClassProfile name="edu.umd.cs.findbugs.classfile.engine.bcel.TypeDataflowFactory" totalMilliseconds="243" invocations="127" avgMicrosecondsPerInvocation="1913" maxMicrosecondsPerInvocation="55131" standardDeviationMircosecondsPerInvocation="5449"/>
+      <ClassProfile name="edu.umd.cs.findbugs.detect.ExplicitSerialization" totalMilliseconds="193" invocations="208" avgMicrosecondsPerInvocation="929" maxMicrosecondsPerInvocation="18450" standardDeviationMircosecondsPerInvocation="2075"/>
+      <ClassProfile name="edu.umd.cs.findbugs.classfile.engine.bcel.UnconditionalValueDerefDataflowFactory" totalMilliseconds="189" invocations="121" avgMicrosecondsPerInvocation="1568" maxMicrosecondsPerInvocation="14836" standardDeviationMircosecondsPerInvocation="3025"/>
+      <ClassProfile name="edu.umd.cs.findbugs.ba.npe.NullDerefAndRedundantComparisonFinder" totalMilliseconds="167" invocations="121" avgMicrosecondsPerInvocation="1382" maxMicrosecondsPerInvocation="10380" standardDeviationMircosecondsPerInvocation="2204"/>
+      <ClassProfile name="edu.umd.cs.findbugs.detect.NoteDirectlyRelevantTypeQualifiers" totalMilliseconds="154" invocations="208" avgMicrosecondsPerInvocation="740" maxMicrosecondsPerInvocation="18704" standardDeviationMircosecondsPerInvocation="1840"/>
+      <ClassProfile name="edu.umd.cs.findbugs.detect.FindRefComparison$SpecialTypeAnalysis" totalMilliseconds="132" invocations="92" avgMicrosecondsPerInvocation="1444" maxMicrosecondsPerInvocation="9477" standardDeviationMircosecondsPerInvocation="2392"/>
+    </FindBugsProfile>
+  </FindBugsSummary>
+  <ClassFeatures></ClassFeatures>
+  <History>
+    <AppVersion sequence="0" timestamp="1340297256066" release="" codeSize="0" numClasses="0"/>
+    <AppVersion sequence="1" timestamp="1340297256070" release="" codeSize="1644" numClasses="6"/>
+  </History>
+</BugCollection>

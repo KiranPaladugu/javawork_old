@@ -1,0 +1,168 @@
+#!/bin/sh
+
+######## Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then 
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+DBPATH=${AGENT_DIR}/DATA
+DBNAME="SOO_TMF_DB"
+REAL_PATH=${OBJDIR}
+CURR_HOST=""
+#NEWDBNAME=$(grep "^EMS1=" "${AGENT_DIR}"/CONF/TMFFramework.properties | cut -d '=' -f 2)
+#if [ "${NEWDBNAME}" = "" ];
+#then
+#  echo "Cannot read EMS1 entry in file ${AGENT_DIR}/CONF/TMFFramework.properties"
+#  echo "Exiting..."
+#  exit 1
+#fi
+
+NEWDBNAME=$(grep "^com.marconi.fusion.tmf.db.Database.URL" "${AGENT_DIR}"/CONF/TMFFramework.properties | cut -d '=' -f 2 | xargs basename | cut -d '.' -f 1)
+if [ "${NEWDBNAME}" = "" ];
+then
+  echo "Cannot read DB_NAME entry in file ${AGENT_DIR}/CONF/TMFFramework.properties"
+  echo "Exiting..."
+  exit 1
+fi
+
+boot_list=$(find "${AGENT_DIR}/DATA" -type f -name "*.boot" -print)
+for item in ${boot_list};
+do
+  tmp_name=$(basename "${item}")
+  DBNAME=$(basename "${tmp_name}" .boot)
+  if [ "${DBNAME}" != "" ];
+  then
+    break
+  fi
+done
+
+if [ "${DBNAME}" = "" ];
+then
+  echo "Cannot read DBNAME from boot file in dir ${AGENT_DIR}/DATA"
+  echo "Exiting..."
+  exit 1
+fi
+
+#modifica introdotta per evitare ooams
+SG=0
+#fine modifica
+
+if [ "${SG}" = "0" ];
+then
+  CURR_HOST=$(hostname)
+else
+  pack="${SGPACK}"
+  if [ ! -e ${pack}/VAR.d ];
+  then
+    echo "The environment file ${pack}/VAR.d isn't present"
+    echo "Exiting..."
+    exit 1
+  fi
+  CURR_HOST=$(grep "^WHOST" "${pack}"/VAR.d | grep -v grep | cut -d = -f 2 | cut -d '"' -f 2)
+  if [ "${CURR_HOST}" = "" ];
+  then
+    echo "The field WHOST is missing in the environment file ${pack}/VAR.d"
+    echo "Exiting..."
+    exit 1
+  fi
+fi
+
+${REAL_PATH}/bin/ooinstallfd              \
+  -notitle                                \
+  -lockserverhost ${CURR_HOST}            \
+  -fdname         ${DBNAME}.fdb           \
+  -fdnumber       ${RANDOM}               \
+  -fdfilehost     ${CURR_HOST}            \
+  -fdfilepath     ${DBPATH}/${DBNAME}.fdb \
+  -dbdirhost      ${CURR_HOST}            \
+  -dbdirpath      ${DBPATH}               \
+  -jnldirhost     ${CURR_HOST}            \
+  -jnldirpath     ${DBPATH}               \
+  ${DBPATH}/${DBNAME}.boot
+
+result="$?"
+if [ "${result}" != "0" ];
+then
+  exit $result
+fi
+
+if [ "${DBNAME}" != "${NEWDBNAME}" ];
+then
+  ${REAL_PATH}/bin/oochange                     \
+    -notitle                                    \
+    -bootfilehost   ${CURR_HOST}                \
+    -bootfilepath   ${DBPATH}/${NEWDBNAME}.boot \
+    -jnldirhost     ${CURR_HOST}                \
+    -jnldirpath     ${DBPATH}                   \
+    -lockserverhost ${CURR_HOST}                \
+    -sysfilehost    ${CURR_HOST}                \
+    -sysfilepath    ${DBPATH}/${NEWDBNAME}.fdb  \
+    ${DBPATH}/${DBNAME}.boot
+
+  result="$?"
+  if [ "${result}" != "0" ];
+  then
+    if [ -e "${DBPATH}/${NEWDBNAME}.boot" ];
+    then
+      /bin/rm -f "${DBPATH}/${NEWDBNAME}.boot" > /dev/null 2>&1
+    fi
+
+    if [ -e "${DBPATH}/${NEWDBNAME}.fdb" ];
+    then
+      /bin/rm -f "${DBPATH}/${NEWDBNAME}.fdb" > /dev/null 2>&1
+    fi
+    exit $result
+  fi
+
+  if [ -e "${DBPATH}/${DBNAME}.boot" ];
+  then
+    /bin/rm -f "${DBPATH}/${DBNAME}.boot" > /dev/null 2>&1
+  fi
+fi
+
+if [ "${SG}" = "1" ];
+then
+  if [ -e "${DBPATH}/${DBNAME}1.boot" ];
+  then
+    /bin/rm -f "${DBPATH}/${DBNAME}1.boot" > /dev/null 2>&1
+  fi
+
+  $REAL_PATH/bin/oochange \
+  -notitle \
+  -bootfilehost   ${CURR_HOST} \
+  -bootfilepath   ${DBPATH}/${DBNAME}1.boot \
+  -jnldirhost     ${CURR_HOST} \
+  -jnldirpath     ${DBPATH} \
+  -lockserverhost ${CURR_HOST} \
+  -sysfilehost    ${CURR_HOST} \
+  -sysfilepath    ${DBPATH}/${DBNAME}.fdb \
+   ${DBPATH}/${DBNAME}.boot
+   
+  result="$?"
+  if [ "${result}" != "0" ];
+  then
+    if [ -e "${DBPATH}/${DBNAME}1.boot" ];
+    then
+      /bin/rm -f "${DBPATH}/${DBNAME}1.boot" > /dev/null 2>&1
+    fi
+    exit $?
+  fi
+
+  /bin/mv -f ${DBPATH}/${DBNAME}1.boot ${DBPATH}/$DBNAME.boot > /dev/null 2>&1
+fi
+
+chown AGENT_USER:AGENT_GROUP ${AGENT_DIR}/DATA/*.fdb   > /dev/null 2>&1
+chmod 644 ${AGENT_DIR}/DATA/*.fdb                      > /dev/null 2>&1
+chown AGENT_USER:AGENT_GROUP ${AGENT_DIR}/DATA/*.boot  > /dev/null 2>&1
+chmod 644 ${AGENT_DIR}/DATA/*.boot                     > /dev/null 2>&1
+chown AGENT_USER:AGENT_GROUP ${AGENT_DIR}/DATA/*.DB    > /dev/null 2>&1
+chmod 644 ${AGENT_DIR}/DATA/*.DB                       > /dev/null 2>&1
+
+exit $result

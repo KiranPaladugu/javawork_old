@@ -1,0 +1,172 @@
+#!/bin/sh
+
+###############################################################################
+#
+#  Q_BERRealign.sh
+#
+#  This script use to start of application in BerRealignment mode.
+#
+###############################################################################
+
+######## Retrieves AGENT environmental variables
+if [ -e "ENV_FILE" ];
+then
+  . "ENV_FILE"
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+SCRIPT_DIR=$(pwd)
+cd ..
+
+# check for nmsdb
+"${AGENT_DIR}"/SCRIPT/Q_CheckNMSDB
+
+if [ $? -ne 0 ];
+then
+  echo "..application FULLNAME NOT started!"
+  echo "Check your NMSDB configuration!"
+  echo ""
+  exit 2
+fi
+
+if [ "${SG}" = "1" ];
+then
+  "${AGENT_DIR}"/SCRIPT/installfd
+
+  if [ $? -ne 0 ];
+  then
+    echo "..application FULLNAME NOT started!"
+    echo "Check your installfd configuration!"
+    echo ""
+    exit 2
+  fi
+
+  trans=$("${OBJDIR}"/bin/oocleanup -notitle "${AGENT_DIR}"/DATA/"${DBNAME}".boot | {
+    found=0
+    while read line
+    do
+      if [ $found -ne 0 ];
+      then
+        if [ "$line" = "" ];
+        then
+          break
+        else
+          echo $line | cut -d' ' -f1 | grep -E "[0-9]+"
+        fi
+      else
+        echo $line | grep -qE "^---------" && found=1
+      fi
+    done
+  })
+
+  #print "active transaction = \"$trans\""
+
+  id=0
+  for id in $trans
+  do
+    "${OBJDIR}"/bin/oocleanup \
+        -notitle \
+        -force \
+        -transaction $id \
+        -deadowner \
+        "${AGENT_DIR}"/DATA/"${DBNAME}".boot > /dev/null 2>&1 || \
+        exit 2
+  done
+fi
+
+
+ROOT_DIR=$(pwd)
+### ROOT_DIR=AGENT_FULL_PATH
+LIB_DIR="${ROOT_DIR}"/LIB
+CONF_DIR="${ROOT_DIR}"/CONF
+BIN_DIR="${ROOT_DIR}"/BIN
+USERS_DIR="${ROOT_DIR}"/USERS
+
+if [[ -x /usr/bin/whoami ]]; then
+  if [[ $(/usr/bin/whoami) != "AGENT_USER" ]]; then
+    echo ""
+    echo "Sorry, you must be AGENT_USER user to run this script!"
+    echo "${Exiting}"
+    ExitVal="${Success}"
+    exit 1
+  fi
+fi
+
+cur_dir=$(pwd)
+cd "${SCRIPT_DIR}"
+
+JOPTS="-server"
+
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" -o "${curr_os}" = "Linux" ];
+then
+  sep=":"
+else
+  sep=";"
+fi
+
+if [ "${curr_os}" = "HP-UX" ];
+then
+  JOPTS="${JOPTS} -V2"
+fi
+
+JAVA_EXE="/opt/java1.6/jre/bin/java"
+
+if [ -x "${JAVA_HOME}/jre/bin/java" ];
+then
+  JAVA_EXE="${JAVA_HOME}/jre/bin/java"
+elif [ -x "${JAVA_HOME}/bin/java" ];
+then
+  JAVA_EXE="${JAVA_HOME}/bin/java"
+else
+  echo ""
+  echo "Cannot find java on your server!"
+  echo "Please check your installation"
+  echo "Exiting..."
+  echo ""
+  exit 1
+fi
+
+TMF_XP="."
+
+file_list=$(find "${LIB_DIR}" \( -type f -o -type l \) -name "*.jar" -print)
+
+for item in ${file_list};
+do
+  TMF_XP="${TMF_XP}${sep}${item}"
+done
+
+TMF_XP=${TMF_XP}${sep}$(find "${OBJDIR}/java" \( -type f -o -type l \) -name "oojava.jar" -print)
+export TMF_XP
+
+MEM="-server -Xms384m -Xmx1024m -XX:MaxPermSize=256m"
+
+LOG4J="-Dlog4j.configuration=file:${CONF_DIR}/log4j.xml -Dlog4j.configuration.watchEnabled=yes -Dlog4j.configuration.watchDelay=120000 -Dlog4j.configuratorClass=com.marconi.fusion.base.logging.log4j.Configurator"
+
+echo "BER Realignment in Progress. Please wait ….. "
+
+if [ "${curr_os}" = "HP-UX" ];
+then
+ "${JAVA_EXE}" -d64 ${MEM} ${LOG4J} -classpath "${TMF_XP}" com.marconi.fusion.base.application.BaseApplication com.marconi.fusion.tmf.startup.BERRealigner -p ${CONF_DIR}/Application.properties -p ${CONF_DIR}/ORB.properties -p ${CONF_DIR}/TMFFramework.properties -readBer yes
+else
+ "${JAVA_EXE}" ${MEM} ${LOG4J} -classpath "${TMF_XP}" com.marconi.fusion.base.application.BaseApplication com.marconi.fusion.tmf.startup.BERRealigner -p ${CONF_DIR}/Application.properties -p ${CONF_DIR}/ORB.properties -p ${CONF_DIR}/TMFFramework.properties -readBer yes
+fi
+
+res=$?
+
+if [ ${res} -ne 0 ];
+then
+echo " BER Realignment could not be finished succussfully ..."
+echo " Please refer TMFAgent.log for the details..."
+else
+echo " BER Realignment has been completed succussfully"
+fi
+
+exit $?
+
+

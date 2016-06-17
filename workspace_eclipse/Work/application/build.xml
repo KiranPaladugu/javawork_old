@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE project [
+   <!ENTITY common SYSTEM "../common.xml">
+]>
+
+<project name="application" default="build" basedir=".">
+
+	<condition property="dir.project" value="${basedir}/..">
+		<not>
+			<isset property="dir.project" />
+		</not>
+	</condition>
+    &common;
+
+	<property name="project.name" value="application" />
+
+    <property name="dir.src" value="${basedir}/src" />
+    <property name="dir.build" value="${basedir}/classes" />
+    <property name="dir.doc" value="${basedir}/doc" />
+
+    <target name="help">
+        <echo message="Buildfile for building ${project.name}.jar"/>
+        <echo><![CDATA[
+            targets:
+                prepare:
+                clean:
+                build:
+              ]]>
+        </echo>
+    </target>
+
+    <target name="prepare">
+    	<mkdir dir="${dir.project.dist}" />
+
+        <mkdir dir="${dir.build}" />
+    	<!--mkdir dir="${dir.doc}" /-->
+
+    	<tstamp>
+    		<format property="mf.timestamp" pattern="MM/dd/yyyy hh:mm aa"/>
+    	</tstamp>
+
+		<manifest file="${dir.build}/${project.name}.mf">
+			<attribute name="${mf.attribute.jar-name}" value="${project.name}_JAR"/>
+			<attribute name="${mf.attribute.created}" value="${mf.timestamp}"/>
+		</manifest>
+    </target>
+
+    <target name="clean">
+        <delete dir="${dir.build}" />
+        <delete dir="${dir.doc}" />
+
+    	<delete file="${dir.project.dist}/${project.name}.jar"/>
+    </target>
+
+    <path id="build.classpath">
+
+		
+
+	    <fileset dir="${dir.project.lib}">
+			<include name="${jar.sirius-base}"		/>
+	    	<include name="${jar.sirius-logging}"	/>
+			<!-- NON DEVE USARE QUESTO JAR-->
+	    	<!--include name="${jar.TMF814-idl}"/-->
+	    </fileset>
+
+    	<fileset refid="fileset.3rdParties" />
+    </path>
+
+	<target name="build" depends="prepare">
+        <javac srcdir="${dir.src}" destdir="${dir.build}" listfiles="${javac.listfiles}" debug="${javac.debug}">
+            <include name="**/*.java"/>
+	    	<classpath refid="build.classpath"/>
+		</javac>
+
+        <jar manifest="${dir.build}/${project.name}.mf" jarfile="${dir.project.dist}/${project.name}.jar">
+            <fileset dir="${dir.build}" includes="**/*.class"/>
+            <fileset dir="${dir.src}" includes="**/*.properties"/>
+        	<fileset dir="${dir.src}" includes="**/*.xml"/>
+            <fileset dir="${dir.src}" includes="**/*.gif"/>
+        </jar>
+
+    </target>
+
+</project>

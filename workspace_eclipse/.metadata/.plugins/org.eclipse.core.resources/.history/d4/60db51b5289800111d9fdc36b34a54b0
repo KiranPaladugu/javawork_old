@@ -1,0 +1,267 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0xfb000007, pid=992, tid=8072
+#
+# JRE version: 6.0_30-b12
+# Java VM: Java HotSpot(TM) Client VM (20.5-b03 mixed mode windows-x86 )
+# Problematic frame:
+# C  0xfb000007
+#
+# If you would like to submit a bug report, please visit:
+#   http://java.sun.com/webapps/bugreport/crash.jsp
+# The crash happened outside the Java Virtual Machine in native code.
+# See problematic frame for where to report the bug.
+#
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x01aaa800):  JavaThread "RealignmentManager-Thread(2)" [_thread_in_native, id=8072, stack(0x36c70000,0x36cc0000)]
+
+siginfo: ExceptionCode=0xc0000005, reading address 0xfb000007
+
+Registers:
+EAX=0xfb000007, EBX=0x24c61670, ECX=0x35e82a18, EDX=0x716903ed
+ESP=0x36cbf930, EBP=0x36cbf938, ESI=0x24c61670, EDI=0x01aaa800
+EIP=0xfb000007, EFLAGS=0x00010206
+
+Top of Stack: (sp=0x36cbf930)
+0x36cbf930:   657c2e67 00000001 36cbf984 0240e7f2
+0x36cbf940:   01aaa928 36cbf9a0 00000004 35e82a18
+0x36cbf950:   00000000 002ebbbd 36cbf9c4 02519288
+0x36cbf960:   01aaa928 36cbf964 00000000 36cbf9a0
+0x36cbf970:   24cbb620 00000000 24c61670 00000000
+0x36cbf980:   36cbf994 36cbf9c4 02402ea1 00000000
+0x36cbf990:   0240b809 35e82a18 00000000 00000004
+0x36cbf9a0:   0f7c41a8 36cbf9a4 24c69c9a 36cbf9d8 
+
+Instructions: (pc=0xfb000007)
+0xfaffffe7:   
+[error occurred during error reporting (printing registers, top of stack, instructions near pc), id 0xc0000005]
+
+Register to memory mapping:
+
+EAX=0xfb000007 is an unknown value
+EBX=0x24c61670 is an oop
+{method} 
+ - klass: {other class}
+ECX=0x35e82a18 is an unknown value
+EDX=0x716903ed is an unknown value
+ESP=0x36cbf930 is pointing into the stack for thread: 0x01aaa800
+EBP=0x36cbf938 is pointing into the stack for thread: 0x01aaa800
+ESI=0x24c61670 is an oop
+{method} 
+ - klass: {other class}
+EDI=0x01aaa800 is a thread
+
+
+Stack: [0x36c70000,0x36cc0000],  sp=0x36cbf930,  free space=318k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  0xfb000007
+j  com.objy.pm.ExternalInterface.jooCollectionIteratorX_finalize(IJ)V+0
+j  com.objy.pm.ExternalInterface.ooCollectionIteratorX_finalize(J)V+10
+j  com.objy.pm.ooCollectionIteratorX.close()V+17
+j  com.objy.pm.SessionPersistor.closeIterators()V+51
+j  com.objy.pm.SessionPersistor.p_abort()V+6
+j  com.objy.pm.SessionPersistor.abort()V+9
+j  com.objy.db.app.Session.abort()V+4
+j  com.marconi.fusion.db.objectivity.ObjectivitySession.abort()V+113
+j  com.marconi.fusion.db.objectivity.ObjectivitySession.terminate()V+34
+j  com.marconi.fusion.tmf.i36PlugIn.converter.NodeConverter.process(Lcom/marconi/fusion/X36/X36GetReportNodeConfiguration;Lcom/marconi/fusion/X36/X36GetReportNodePossibleConfiguration;Lcom/marconi/fusion/X36/X36SetOfCrossConnection;Lcom/marconi/fusion/X36/X36SetOfProtectionInfo;Lcom/marconi/fusion/X36/X36GetReportBshrProtection;Lcom/marconi/fusion/X36/X36SetOfDataProfiles;)Lcom/marconi/fusion/tmf/utilities/Stats;+534
+j  com.marconi.fusion.tmf.i36PlugIn.realignment.RealignerJob.doWork()Z+184
+j  com.marconi.fusion.tmf.i36PlugIn.realignment.RealignerJob.run()V+61
+j  java.util.concurrent.ThreadPoolExecutor$Worker.runTask(Ljava/lang/Runnable;)V+59
+j  java.util.concurrent.ThreadPoolExecutor$Worker.run()V+28
+j  java.lang.Thread.run()V+11
+v  ~StubRoutines::call_stub
+V  [jvm.dll+0xfac3b]
+V  [jvm.dll+0x18c3a1]
+V  [jvm.dll+0xfade1]
+V  [jvm.dll+0xfae3b]
+V  [jvm.dll+0xb5569]
+V  [jvm.dll+0x118f14]
+V  [jvm.dll+0x140ffc]
+C  [msvcr71.dll+0x9565]  endthreadex+0xa0
+C  [kernel32.dll+0x4d0e9]  BaseThreadInitThunk+0x12
+C  [ntdll.dll+0x41603]  RtlInitializeExceptionChain+0x63
+C  [ntdll.dll+0x415d6]  RtlInitializeExceptionChain+0x36
+
+Java frames: (J=compiled Java code, j=interpreted, Vv=VM code)
+j  com.objy.pm.ExternalInterface.jooCollectionIteratorX_finalize(IJ)V+0
+j  com.objy.pm.ExternalInterface.ooCollectionIteratorX_finalize(J)V+10
+j  com.objy.pm.ooCollectionIteratorX.close()V+17
+j  com.objy.pm.SessionPersistor.closeIterators()V+51
+j  com.objy.pm.SessionPersistor.p_abort()V+6
+j  com.objy.pm.SessionPersistor.abort()V+9
+j  com.objy.db.app.Session.abort()V+4
+j  com.marconi.fusion.db.objectivity.ObjectivitySession.abort()V+113
+j  com.marconi.fusion.db.objectivity.ObjectivitySession.terminate()V+34
+j  com.marconi.fusion.tmf.i36PlugIn.converter.NodeConverter.process(Lcom/marconi/fusion/X36/X36GetReportNodeConfiguration;Lcom/marconi/fusion/X36/X36GetReportNodePossibleConfiguration;Lcom/marconi/fusion/X36/X36SetOfCrossConnection;Lcom/marconi/fusion/X36/X36SetOfProtectionInfo;Lcom/marconi/fusion/X36/X36GetReportBshrProtection;Lcom/marconi/fusion/X36/X36SetOfDataProfiles;)Lcom/marconi/fusion/tmf/utilities/Stats;+534
+j  com.marconi.fusion.tmf.i36PlugIn.realignment.RealignerJob.doWork()Z+184
+j  com.marconi.fusion.tmf.i36PlugIn.realignment.RealignerJob.run()V+61
+j  java.util.concurrent.ThreadPoolExecutor$Worker.runTask(Ljava/lang/Runnable;)V+59
+j  java.util.concurrent.ThreadPoolExecutor$Worker.run()V+28
+j  java.lang.Thread.run()V+11
+v  ~StubRoutines::call_stub
+
+---------------  P R O C E S S  ---------------
+
+Java Threads: ( => current thread )
+=>0x01aaa800 JavaThread "RealignmentManager-Thread(2)" [_thread_in_native, id=8072, stack(0x36c70000,0x36cc0000)]
+  0x01aaa400 JavaThread "RealignmentManager-Thread(1)" [_thread_blocked, id=3952, stack(0x36c20000,0x36c70000)]
+  0x01aa9800 JavaThread "RealignmentManager-Thread(0)" [_thread_in_Java, id=5036, stack(0x36b80000,0x36bd0000)]
+  0x01aa9c00 JavaThread "RealignmentHandler-EM" [_thread_blocked, id=7028, stack(0x36bd0000,0x36c20000)]
+  0x34fbe000 JavaThread "TMFAgent-Dispatcher-Thread(9)" daemon [_thread_blocked, id=4204, stack(0x36b30000,0x36b80000)]
+  0x34fbdc00 JavaThread "TMFAgent-Dispatcher-Thread(8)" daemon [_thread_blocked, id=6792, stack(0x36ae0000,0x36b30000)]
+  0x34fbd400 JavaThread "TMFAgent-Dispatcher-Thread(7)" daemon [_thread_blocked, id=4128, stack(0x36a90000,0x36ae0000)]
+  0x34fbd000 JavaThread "TMFAgent-Dispatcher-Thread(6)" daemon [_thread_blocked, id=8132, stack(0x36a40000,0x36a90000)]
+  0x34fbc800 JavaThread "ASYNC-MANAGER[--]:NULL-QUEUE-Consumer" [_thread_blocked, id=6184, stack(0x369f0000,0x36a40000)]
+  0x34fbc000 JavaThread "TMFAgent-Dispatcher-Thread(5)" daemon [_thread_blocked, id=7636, stack(0x369a0000,0x369f0000)]
+  0x34fbbc00 JavaThread "TMFAgent-Dispatcher-Thread(4)" daemon [_thread_blocked, id=7568, stack(0x36950000,0x369a0000)]
+  0x34fbb400 JavaThread "TMFAgent-Dispatcher-Thread(3)" daemon [_thread_blocked, id=6016, stack(0x36900000,0x36950000)]
+  0x34fbb000 JavaThread "TMFAgent-Dispatcher-Thread(2)" daemon [_thread_blocked, id=2364, stack(0x368b0000,0x36900000)]
+  0x34fba800 JavaThread "TMFAgent-Dispatcher-Thread(1)" daemon [_thread_blocked, id=7516, stack(0x36860000,0x368b0000)]
+  0x35478400 JavaThread "TMFAgent-Dispatcher-Thread(0)" daemon [_thread_blocked, id=7316, stack(0x36810000,0x36860000)]
+  0x35478000 JavaThread "TMFAgent-Multiplexer" daemon [_thread_in_native, id=1852, stack(0x367c0000,0x36810000)]
+  0x35477800 JavaThread "com.marconi.fusion.tmf.i38PlugIn.sbi.NMAlarmProcessor-Processor" daemon [_thread_blocked, id=7936, stack(0x36570000,0x365c0000)]
+  0x35477400 JavaThread "SO-Fusion-AlarmProcessor" daemon [_thread_blocked, id=7436, stack(0x36520000,0x36570000)]
+  0x35476c00 JavaThread "ProtectionSwitchThread[0]" [_thread_blocked, id=5928, stack(0x364d0000,0x36520000)]
+  0x35476800 JavaThread "Receive Worker for ClientChannel: (iiop) EVF4CE46E33F07.eemea.ericsson.se:27888 (53262 -> 27888)" daemon [_thread_in_native, id=7972, stack(0x36480000,0x364d0000)]
+  0x35476000 JavaThread "Receive Worker for ClientChannel: (iiop) localhost:27888 (53261 -> 27888)" daemon [_thread_in_native, id=5812, stack(0x36430000,0x36480000)]
+  0x35475800 JavaThread "TMFAgent-TimerHandler" daemon [_thread_blocked, id=7216, stack(0x363e0000,0x36430000)]
+  0x35475400 JavaThread "EventConsumerImpl-EventConsumer" daemon [_thread_blocked, id=6644, stack(0x36390000,0x363e0000)]
+  0x35474c00 JavaThread "Receive Worker for ClientChannel: (iiop) EVF4CE46E33F07.eemea.ericsson.se:27889 (53260 -> 27889)" daemon [_thread_in_native, id=6804, stack(0x36340000,0x36390000)]
+  0x34f7c000 JavaThread "Receive Worker for ClientChannel: (iiop) localhost:27889 (53259 -> 27889)" daemon [_thread_in_native, id=4724, stack(0x362f0000,0x36340000)]
+  0x34f79000 JavaThread "Channel Reaper" daemon [_thread_blocked, id=7924, stack(0x362a0000,0x362f0000)]
+  0x356d1c00 JavaThread "System-timer" daemon [_thread_blocked, id=3416, stack(0x36250000,0x362a0000)]
+  0x356bf400 JavaThread "Startup-Realignment" [_thread_blocked, id=7852, stack(0x36200000,0x36250000)]
+  0x356a9400 JavaThread "Pool thread #1" daemon [_thread_blocked, id=1524, stack(0x361b0000,0x36200000)]
+  0x3562a400 JavaThread "EventManager-EventManager" daemon [_thread_blocked, id=7984, stack(0x36160000,0x361b0000)]
+  0x35568c00 JavaThread "PoolThreadManager" daemon [_thread_blocked, id=3712, stack(0x35da0000,0x35df0000)]
+  0x3551b000 JavaThread "Channel Reaper" daemon [_thread_blocked, id=6940, stack(0x35d50000,0x35da0000)]
+  0x3551a800 JavaThread "ORBRunner" [_thread_blocked, id=6864, stack(0x35d00000,0x35d50000)]
+  0x3557f000 JavaThread "Worker for ServerProtocol: (iiop) /0.0.0.0:53254" daemon [_thread_in_native, id=3560, stack(0x35cb0000,0x35d00000)]
+  0x354ad400 JavaThread "Thread-0" daemon [_thread_blocked, id=5092, stack(0x34a20000,0x34a70000)]
+  0x01b2c000 JavaThread "Low Memory Detector" daemon [_thread_blocked, id=4568, stack(0x34910000,0x34960000)]
+  0x01b27400 JavaThread "C1 CompilerThread0" daemon [_thread_blocked, id=7336, stack(0x348c0000,0x34910000)]
+  0x01b14c00 JavaThread "JDWP Command Reader" daemon [_thread_in_native, id=6316, stack(0x34700000,0x34750000)]
+  0x01b13c00 JavaThread "JDWP Event Helper Thread" daemon [_thread_blocked, id=6584, stack(0x346b0000,0x34700000)]
+  0x01b12000 JavaThread "JDWP Transport Listener: dt_socket" daemon [_thread_blocked, id=7296, stack(0x34620000,0x34670000)]
+  0x01af4c00 JavaThread "Attach Listener" daemon [_thread_blocked, id=4280, stack(0x345d0000,0x34620000)]
+  0x01af1800 JavaThread "Signal Dispatcher" daemon [_thread_blocked, id=4228, stack(0x34580000,0x345d0000)]
+  0x01ac5800 JavaThread "Finalizer" daemon [_thread_blocked, id=6248, stack(0x34530000,0x34580000)]
+  0x01ac1000 JavaThread "Reference Handler" daemon [_thread_blocked, id=7640, stack(0x344e0000,0x34530000)]
+  0x01dedc00 JavaThread "main" [_thread_blocked, id=7956, stack(0x013c0000,0x01410000)]
+
+Other Threads:
+  0x01abd000 VMThread [stack: 0x34490000,0x344e0000] [id=8148]
+  0x34ec0c00 WatcherThread [stack: 0x349d0000,0x34a20000] [id=6276]
+
+VM state:not at safepoint (normal execution)
+
+VM Mutex/Monitor currently owned by a thread: None
+
+Heap
+ def new generation   total 78784K, used 23437K [0x04400000, 0x09970000, 0x0eea0000)
+  eden space 70080K,  30% used [0x04400000, 0x059280d8, 0x08870000)
+  from space 8704K,  20% used [0x08870000, 0x08a2b718, 0x090f0000)
+  to   space 8704K,   0% used [0x090f0000, 0x090f0000, 0x09970000)
+ tenured generation   total 174784K, used 33235K [0x0eea0000, 0x19950000, 0x24400000)
+   the space 174784K,  19% used [0x0eea0000, 0x10f14c40, 0x10f14e00, 0x19950000)
+ compacting perm gen  total 81920K, used 81815K [0x24400000, 0x29400000, 0x34400000)
+   the space 81920K,  99% used [0x24400000, 0x293e5cd8, 0x293e5e00, 0x29400000)
+No shared spaces configured.
+
+Code Cache  [0x02400000, 0x02998000, 0x04400000)
+ total_blobs=3041 nmethods=2782 adapters=202 free_code_cache=27714368 largest_free_block=384
+
+Dynamic libraries:
+0x00400000 - 0x00425000 	C:\Program Files\Java\jdk1.6.0_30\bin\javaw.exe
+0x77d60000 - 0x77e88000 	C:\Windows\system32\ntdll.dll
+0x76880000 - 0x7695c000 	C:\Windows\system32\kernel32.dll
+0x76460000 - 0x76526000 	C:\Windows\system32\ADVAPI32.dll
+0x77ef0000 - 0x77fb3000 	C:\Windows\system32\RPCRT4.dll
+0x76f30000 - 0x76fcd000 	C:\Windows\system32\USER32.dll
+0x76530000 - 0x7657b000 	C:\Windows\system32\GDI32.dll
+0x77b80000 - 0x77b9e000 	C:\Windows\system32\IMM32.DLL
+0x76750000 - 0x76818000 	C:\Windows\system32\MSCTF.dll
+0x76af0000 - 0x76b9a000 	C:\Windows\system32\msvcrt.dll
+0x76420000 - 0x76429000 	C:\Windows\system32\LPK.DLL
+0x766d0000 - 0x7674d000 	C:\Windows\system32\USP10.dll
+0x76230000 - 0x7626a000 	C:\PROGRA~1\Citrix\system32\radeaphook.dll
+0x76010000 - 0x760bf000 	C:\PROGRA~1\Citrix\system32\ctxsbxhook.dll
+0x76270000 - 0x76278000 	C:\Windows\system32\VERSION.dll
+0x75de0000 - 0x76007000 	C:\Windows\system32\msi.dll
+0x76580000 - 0x766c5000 	C:\Windows\system32\ole32.dll
+0x7c340000 - 0x7c396000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\msvcr71.dll
+0x6d8c0000 - 0x6db6f000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\client\jvm.dll
+0x73ca0000 - 0x73cd2000 	C:\Windows\system32\WINMM.dll
+0x77af0000 - 0x77b7d000 	C:\Windows\system32\OLEAUT32.dll
+0x73b40000 - 0x73b7e000 	C:\Windows\system32\OLEACC.dll
+0x761d0000 - 0x761fc000 	C:\Windows\system32\apphelp.dll
+0x6d870000 - 0x6d87c000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\verify.dll
+0x6d3d0000 - 0x6d3ef000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\java.dll
+0x6d420000 - 0x6d449000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\jdwp.dll
+0x6d740000 - 0x6d746000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\npt.dll
+0x6d8b0000 - 0x6d8bf000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\zip.dll
+0x6d2b0000 - 0x6d2b7000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\dt_socket.dll
+0x76430000 - 0x7645d000 	C:\Windows\system32\WS2_32.dll
+0x76f20000 - 0x76f26000 	C:\Windows\system32\NSI.dll
+0x75300000 - 0x7530f000 	C:\Windows\system32\NLAapi.dll
+0x75950000 - 0x75969000 	C:\Windows\system32\IPHLPAPI.DLL
+0x75910000 - 0x75945000 	C:\Windows\system32\dhcpcsvc.DLL
+0x75b70000 - 0x75b9c000 	C:\Windows\system32\DNSAPI.dll
+0x762b0000 - 0x762c4000 	C:\Windows\system32\Secur32.dll
+0x75900000 - 0x75907000 	C:\Windows\system32\WINNSI.DLL
+0x758d0000 - 0x758f2000 	C:\Windows\system32\dhcpcsvc6.DLL
+0x73330000 - 0x7333f000 	C:\Windows\system32\napinsp.dll
+0x72dd0000 - 0x72de2000 	C:\Windows\system32\pnrpnsp.dll
+0x75790000 - 0x757cb000 	C:\Windows\System32\mswsock.dll
+0x72fa0000 - 0x72fa8000 	C:\Windows\System32\winrnr.dll
+0x77e90000 - 0x77ed9000 	C:\Windows\system32\WLDAP32.dll
+0x76380000 - 0x76387000 	C:\Windows\system32\PSAPI.DLL
+0x72dc0000 - 0x72dcc000 	C:\Windows\system32\wshbth.dll
+0x76960000 - 0x76aea000 	C:\Windows\system32\SETUPAPI.dll
+0x73200000 - 0x73206000 	C:\Windows\system32\rasadhlp.dll
+0x753e0000 - 0x753e5000 	C:\Windows\System32\wshtcpip.dll
+0x6d6b0000 - 0x6d6c3000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\net.dll
+0x757f0000 - 0x757f5000 	C:\Windows\System32\wship6.dll
+0x657b0000 - 0x6583a000 	C:\Program Files\Objectivity 10.2\bin\oojava.dll
+0x64dd0000 - 0x64e62000 	C:\Program Files\Objectivity 10.2\bin\ooas102.dll
+0x71470000 - 0x7188e000 	C:\Program Files\Objectivity 10.2\bin\oodb102.dll
+0x728b0000 - 0x728b6000 	C:\Program Files\Objectivity 10.2\bin\ooseccl.dll
+0x66ce0000 - 0x66d9e000 	C:\Windows\system32\MSVCR100.dll
+0x61dd0000 - 0x61e39000 	C:\Windows\system32\MSVCP100.dll
+0x5e7f0000 - 0x5e857000 	C:\Program Files\Objectivity 10.2\bin\ooco102.dll
+0x6d6d0000 - 0x6d6d9000 	C:\Program Files\Java\jdk1.6.0_30\jre\bin\nio.dll
+0x75470000 - 0x754ab000 	C:\Windows\system32\rsaenh.dll
+0x762d0000 - 0x762ee000 	C:\Windows\system32\USERENV.dll
+
+VM Arguments:
+jvm_args: -agentlib:jdwp=transport=dt_socket,suspend=y,address=localhost:53252 -Dlog4j.configuration=file:run\CONF\log4j.xml -Dlog4j.configuratorClass=com.marconi.fusion.base.logging.log4j.Configurator -Dlog4j.configuration.watchEnabled=yes -Xms256M -Xmx512M -XX:MaxPermSize=256m -Dfile.encoding=Cp1252 
+java_command: com.marconi.fusion.base.application.BaseApplication com.marconi.fusion.tmf.Main -licenseCheckDisabled -userLoginCheckDisabled -tmfPwdCheckDisabled -p run\CONF\Application.properties -p run\CONF\TMFFramework.properties -p run\CONF\ORB.properties
+Launcher Type: SUN_STANDARD
+
+Environment Variables:
+JAVA_HOME=C:\Program Files\Java\jdk1.6.0_30\
+CLASSPATH=C:\Program Files\Objectivity 10.2\lib\oojava.jar
+PATH=C:\Program Files\Java\jdk1.6.0_30\jre\bin;C:/Program Files/Java/jre6/bin/client;C:/Program Files/Java/jre6/bin;C:/Program Files/Java/jre6/lib/i386;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Program Files\Citrix\system32\;C:\Program Files\Objectivity 10.2\bin;C:\Program Files\Objectivity 10.2\assist;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Program Files\Citrix\system32\;C:\Program Files\Objectivity 10.2\bin;C:\Program Files\Objectivity 10.2\assist;.;C:\Program Files\Java\jdk1.6.0_30\bin\;C:\apache-ant-1.8.2\bin;C:\Program Files\OpenVPN\bin;C:\eclipse-java-indigo-SR1-win32\eclipse;
+USERNAME=ekirpal
+OS=Windows_NT
+PROCESSOR_IDENTIFIER=x86 Family 6 Model 23 Stepping 10, GenuineIntel
+
+
+
+---------------  S Y S T E M  ---------------
+
+OS: Windows Vista Build 6002 Service Pack 2
+
+CPU:total 2 (2 cores per cpu, 1 threads per core) family 6 model 23 stepping 10, cmov, cx8, fxsr, mmx, sse, sse2, sse3, ssse3, sse4.1
+
+Memory: 4k page, physical 1957328k(254636k free), swap 10086932k(7147700k free)
+
+vm_info: Java HotSpot(TM) Client VM (20.5-b03) for windows-x86 JRE (1.6.0_30-b12), built on Nov 10 2011 01:51:00 by "java_re" with MS VC++ 7.1 (VS2003)
+
+time: Fri May 04 16:40:55 2012
+elapsed time: 152 seconds
+

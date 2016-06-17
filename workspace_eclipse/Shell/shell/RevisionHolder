@@ -1,0 +1,11 @@
+# $Author: ferioli $
+# $Date: 2005/10/20 09:59:15 $
+# $Name: rel-moved-clerCase $
+# $Revision: 1.2 $
+# $Source: /disk1/local_user/cvs/TMF_V30_C2_PROJECT/TMF_V30_C2/TMF_V30_C2/DISTRIB/RevisionHolder,v $
+# $State: Exp $
+
+Lo scopo di questo file e' permettere l'espensione delle macro (quelle sopra tanto per capi') che sono lette dallo script getTag per il calcolo dei filetti nscosti .release .version .drop e .patch
+
+ciao
+

@@ -1,0 +1,239 @@
+#!/bin/sh
+
+ErrExit()
+{
+  rval=$1
+  /bin/rm -rf ${agent_path}/USERSBACKUP > /dev/null 2>&1
+  if [ ${rval} -ne 0 ];
+  then
+    echo "FULLNAME USERS restore NOT performed!"
+  else
+    echo "FULLNAME USERS restore successfully completed!"
+  fi
+
+  cd "${cur_dir}"
+
+  exit ${rval}
+}
+
+######################
+#Check Parameter     #
+######################
+
+if [ $# -ge 2 ];
+then
+   echo ""
+   echo "Usage $0 [backup_file_fullpathname]"
+   echo ""
+   exit 1
+fi
+
+bfile=""
+if [ "$1" != "" ];
+then
+  bfile="$1"
+  if [ ! -r "${bfile}" ];
+  then
+    echo ""
+    echo "Sorry, file ${bfile} doesn't exist."
+    echo ""
+    exit 1
+  fi
+fi
+
+######## Welcome
+echo ""
+echo "========================================================="
+echo "   FULLNAME - USER RESTORE UTILITY"
+echo "========================================================="
+echo ""
+
+######## AGENT_USER only may run the script...
+if [ -x /usr/bin/whoami ];
+then
+  if [ $(/usr/bin/whoami) != "AGENT_USER" ];
+  then
+    echo "Sorry, you must be AGENT_USER to run this script!"
+    echo ""
+    exit 1
+  fi
+fi
+
+####### Retrieves AGENT environmental variables
+if [ -e ENV_FILE ];
+then
+  . ENV_FILE
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+####### Set Env for AGENT
+
+agent_path=${AGENT_DIR}
+set_name=$(basename agent_path)_BUP
+DATE=$(/bin/date '+%Y_%m_%d_%H_%M_%S')
+USERS_DIR="${AGENT_DIR}/USERS"
+
+
+if [ "${bfile}" = "" ];
+ then
+ echo "WARNING: This operation will DELETE current FULLNAME's Users Data!"
+ answer=""
+ while [ "${answer}" != "y" -a "${answer}" != "n" ];
+  do
+   echo "Are you sure you want to do this? [y/n] [default: n]: "
+   read answer
+   if [ "${answer}" = "" ];
+   then
+    answer="n"
+   fi
+ done
+ if [ ${answer} = "n" ];
+ then
+  echo ""
+  echo "Exiting..."
+  echo ""
+  exit 1
+ fi
+
+######## Gets target
+ answer=""
+ while [ "${answer}" = "" ];
+ do
+  echo ""
+  echo "Insert path to the database to be restored"
+  echo "[name of a device or full path to a backup file]: "
+  read answer
+ done
+ DEV=${answer}
+else
+  DEV="${bfile}"
+fi
+
+if [ ! -r "${DEV}" ];
+then
+  echo ""
+  echo "Sorry, file ${DEV} doesn't exist."
+  echo ""
+  exit 1
+fi
+
+######## Restores
+echo ""
+echo "Restoring FULLNAME's USERS from ${DEV}, please wait..."
+
+if [ -d "${agent_path}"/USERS ];
+then
+  /bin/rm -rf ${agent_path}/USERS > /dev/null 2>&1
+fi
+
+cur_dir=$(pwd)
+cd ${agent_path}
+
+tar xf ${DEV}
+error=$?
+if [ ${error} -ne 0 ];
+then
+  ErrExit ${error}
+fi
+
+if [ -x /usr/contrib/bin/gzip ];
+then
+  /usr/contrib/bin/gzip -r -d ${agent_path}/USERSBACKUP/* > /dev/null 2>&1
+elif [ -x /bin/gzip ];
+then
+    /bin/gzip -r -d ${agent_path}/USERSBACKUP/* > /dev/null 2>&1
+fi
+
+if [ -d "${agent_path}"/USERSBACKUP ];
+then
+  /bin/cp -p -R ${agent_path}/USERSBACKUP/* . > /dev/null 2>&1
+fi
+
+############## code for validating em type and version TR HN42371
+
+if [ -e "${agent_path}"/USERS/sampleEMdata.txt ];
+then
+
+	tmp_agent_ver=$(grep "=" ${agent_path}/USERS/sampleEMdata.txt | cut -d"=" -f1 )
+
+	tmp_agent_mode=$(grep "=" ${agent_path}/USERS/sampleEMdata.txt | cut -d"=" -f2)
+
+	tmp_mode=$(grep "EMS.type =" ${agent_path}/CONF/TMFFramework.properties | cut -d"=" -f2)
+
+	tmp_ver=$(grep "EMS.version=" ${agent_path}/CONF/TMFFramework.properties | cut -d"=" -f2 )
+
+    if [ "${tmp_agent_mode}" != "${tmp_mode}" ];
+	then
+	   	   echo "Selected users of type ${tmp_agent_mode} but users must be type of ${tmp_mode}"
+		   /bin/rm -rf ${agent_path}/USERS > /dev/null 2>&1
+		   ErrExit 1
+	elif [ "${tmp_ver}" != "4.1" ] || [ "${tmp_ver}" = "4.1" -a "${tmp_agent_ver}" != "4.1" -a "${tmp_agent_ver}" != "3.5" -a "${tmp_agent_ver}" != "3.4" -a "${tmp_agent_ver}" != "3.3" -a "${tmp_agent_ver}" != "3.2" -a "${tmp_agent_ver}" != "3.1" ];
+	then
+	       echo "Selected incompatible application of version ${tmp_agent_ver}"
+		   /bin/rm -rf ${agent_path}/USERS > /dev/null 2>&1
+		   ErrExit 1
+	else
+		   /bin/rm -rf ${agent_path}/USERS/*.txt.gz > /dev/null 2>&1
+		   /bin/rm -rf ${agent_path}/USERS/*.txt > /dev/null 2>&1
+	fi
+else
+
+ErrExit 1
+
+fi
+
+############## END code for validating em type and version TR HN42371
+
+SECURITY="SECURITY"
+mydir=${agent_path}/USERS
+cd ${mydir}
+newname=${agent_path##*/}
+for i in `ls`
+do
+	if [ $i = "${SECURITY}" ]; then
+		echo "Verifying directroy SECURITY"
+	else
+		mv ${mydir}/$i ${mydir}/${newname}
+	fi
+done
+
+############## code for adding GET TCA permissions to the user as per CR377 for TMF 3.3
+
+get_dir="${AGENT_DIR}/USERS/${newname}"
+replace_file="${AGENT_DIR}/CONF/DefaultUserProfile.properties"
+cd $get_dir
+echo "All Capabilities" > tmp
+echo "\n" >> tmp
+date >> tmp
+echo "\n" >> tmp
+echo "Preparing previleges for full user"
+cat $replace_file >> tmp
+
+# browse through all the files in f1 (get_dir)
+for file in `ls $get_dir`; do
+  matched=`grep 'All Capabilities' $file`
+  if [ "${matched}" != "" ]; then
+    cp tmp tmp1
+    rm $file
+    mv -i tmp1 $file
+  fi
+done
+
+rm tmp
+
+############## END code for adding GET TCA permissions to the user as per CR377 for TMF 3.3
+
+#rm ${agent_path}/FILES
+cd ${cur_dir}
+
+error=$?
+ErrExit ${error}
+echo ""
+#echo "USERS restored."
+
+exit 0

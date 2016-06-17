@@ -1,0 +1,32 @@
+[ Sat Feb 20 20:20:52 PST 2016 ]deRegistering all..
+[ Sat Feb 20 20:20:52 PST 2016 ]class com.view.ChessMenu is not Registered Yet.
+[ Sat Feb 20 20:20:52 PST 2016 ]class com.view.MainFrame is not Registered Yet.
+[ Sat Feb 20 20:20:52 PST 2016 ]Registering Class :class com.view.ChessMenu
+[ Sat Feb 20 20:20:52 PST 2016 ]getting Object for :class com.view.ChessMenu
+[ Sat Feb 20 20:20:52 PST 2016 ]class com.view.WelcomePanel is not Registered Yet.
+[ Sat Feb 20 20:20:52 PST 2016 ]class com.view.ResultPanel is not Registered Yet.
+[ Sat Feb 20 20:20:52 PST 2016 ]Registering Class :class com.view.ResultPanel
+[ Sat Feb 20 20:20:52 PST 2016 ]getting Object for :class com.view.ResultPanel
+[ Sat Feb 20 20:20:52 PST 2016 ]class com.view.ChessBoard is not Registered Yet.
+[ Sat Feb 20 20:20:52 PST 2016 ]Initalizing Properties Finder...
+[ Sat Feb 20 20:20:52 PST 2016 ]Succesfully Initalizing Properties Finder...
+[ Sat Feb 20 20:20:52 PST 2016 ]setting file to Default cofig file...
+[ Sat Feb 20 20:20:52 PST 2016 ]Registering Class :class com.view.ChessBoard
+[ Sat Feb 20 20:20:52 PST 2016 ]getting Object for :class com.view.ChessBoard
+[ Sat Feb 20 20:20:52 PST 2016 ]Registering Class :class com.view.MainFrame
+[ Sat Feb 20 20:38:00 PST 2016 ]deRegistering all..
+[ Sat Feb 20 20:38:00 PST 2016 ]class com.view.ChessMenu is not Registered Yet.
+[ Sat Feb 20 20:38:00 PST 2016 ]class com.view.MainFrame is not Registered Yet.
+[ Sat Feb 20 20:38:00 PST 2016 ]Registering Class :class com.view.ChessMenu
+[ Sat Feb 20 20:38:00 PST 2016 ]getting Object for :class com.view.ChessMenu
+[ Sat Feb 20 20:38:00 PST 2016 ]class com.view.WelcomePanel is not Registered Yet.
+[ Sat Feb 20 20:38:00 PST 2016 ]class com.view.ResultPanel is not Registered Yet.
+[ Sat Feb 20 20:38:00 PST 2016 ]Registering Class :class com.view.ResultPanel
+[ Sat Feb 20 20:38:00 PST 2016 ]getting Object for :class com.view.ResultPanel
+[ Sat Feb 20 20:38:00 PST 2016 ]class com.view.ChessBoard is not Registered Yet.
+[ Sat Feb 20 20:38:00 PST 2016 ]Initalizing Properties Finder...
+[ Sat Feb 20 20:38:00 PST 2016 ]Succesfully Initalizing Properties Finder...
+[ Sat Feb 20 20:38:00 PST 2016 ]setting file to Default cofig file...
+[ Sat Feb 20 20:38:00 PST 2016 ]Registering Class :class com.view.ChessBoard
+[ Sat Feb 20 20:38:00 PST 2016 ]getting Object for :class com.view.ChessBoard
+[ Sat Feb 20 20:38:00 PST 2016 ]Registering Class :class com.view.MainFrame

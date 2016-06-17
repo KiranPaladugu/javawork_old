@@ -1,0 +1,841 @@
+package com.marconi.fusion.tmf.i36PlugIn.manager;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.base.asn1.StringType;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.util.Holder;
+import com.marconi.fusion.tmf.db.DBConnectionTerminationPoint;
+import com.marconi.fusion.tmf.db.DBCptp;
+import com.marconi.fusion.tmf.db.DBCtp;
+import com.marconi.fusion.tmf.db.DBEms;
+import com.marconi.fusion.tmf.db.DBException;
+import com.marconi.fusion.tmf.db.DBFlowDomain;
+import com.marconi.fusion.tmf.db.DBFlowDomainFragment;
+import com.marconi.fusion.tmf.db.DBFp;
+import com.marconi.fusion.tmf.db.DBFragment;
+import com.marconi.fusion.tmf.db.DBIdentifier;
+import com.marconi.fusion.tmf.db.DBIterator;
+import com.marconi.fusion.tmf.db.DBList;
+import com.marconi.fusion.tmf.db.DBMFDFragment;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.DBMatrixFlowDomain;
+import com.marconi.fusion.tmf.db.DBPortTp;
+import com.marconi.fusion.tmf.db.DBRelation;
+import com.marconi.fusion.tmf.db.DBTp;
+import com.marconi.fusion.tmf.db.Predicate;
+import com.marconi.fusion.tmf.db.TransactionalIterator;
+import com.marconi.fusion.tmf.i36PlugIn.FDFrManager;
+import com.marconi.fusion.tmf.i36PlugIn.I36PlugIn;
+import com.marconi.fusion.tmf.i36PlugIn.I36Utilities;
+import com.marconi.fusion.tmf.i36PlugIn.NeHelper;
+import com.marconi.fusion.tmf.i36PlugIn.SBIClientI;
+import com.marconi.fusion.tmf.iterator.Iterator;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.types.CPTP_Role;
+import com.marconi.fusion.tmf.plugIn.types.ConnectivityRequirement;
+import com.marconi.fusion.tmf.plugIn.types.EMSDn;
+import com.marconi.fusion.tmf.plugIn.types.FDDn;
+import com.marconi.fusion.tmf.plugIn.types.FDFrCreateData;
+import com.marconi.fusion.tmf.plugIn.types.FDFrDn;
+import com.marconi.fusion.tmf.plugIn.types.FDFrModifyData;
+import com.marconi.fusion.tmf.plugIn.types.FDFrRoute;
+import com.marconi.fusion.tmf.plugIn.types.FlowDomain;
+import com.marconi.fusion.tmf.plugIn.types.FlowDomainFragment;
+import com.marconi.fusion.tmf.plugIn.types.LayeredParameterList;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEOrEquipmentDn;
+import com.marconi.fusion.tmf.plugIn.types.MFDDn;
+import com.marconi.fusion.tmf.plugIn.types.MatrixFlowDomain;
+import com.marconi.fusion.tmf.plugIn.types.TMDOrFDDn;
+import com.marconi.fusion.tmf.plugIn.types.TPDataList;
+import com.marconi.fusion.tmf.plugIn.types.TPDn;
+import com.marconi.fusion.tmf.plugIn.types.TPDnList;
+import com.marconi.fusion.tmf.plugIn.types.TerminationPoint;
+import com.marconi.fusion.tmf.plugIn.types.TransmissionParameters;
+import com.marconi.fusion.tmf.predicate.AdditionalInfoPredicate;
+import com.marconi.fusion.tmf.tmfFramework.TmfNameUtilities;
+import com.marconi.fusion.tmf.tmfFramework.db.DatabaseSupport;
+import com.marconi.fusion.tmf.tmfFramework.db.DnIdentifier;
+import com.marconi.fusion.tmf.tmfFramework.db.filter.UserLabelPredicate;
+import com.marconi.fusion.tmf.tmfFramework.delegates.FlowDomainMgr;
+import com.marconi.fusion.tmf.tmfFramework.iterators.InformationExtractorIterator;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayerRateManager;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayeredParameterManager.ParameterName;
+
+/**
+ * Methods that must be implemented getAllFlowDomains inside FORT getFlowDomain inside FORT getAssociatingFD here
+ * getAllAssociatedMFDs here getAllSupportedMFDs here getMFD inside FORT getAssigningMFD here getAllCPTPs here getAllAssignedCPTPs
+ * inside FORT getAllFDFrs inside FORT getFDFr inside FORT getFDFrRoute here getFDFrsWithTP here
+ *
+ * @author egiagua & ekalbel
+ *
+ */
+public class FlowDomainMgrImpl extends FlowDomainMgr {
+	static private Log log = LogFactory.getLog(FlowDomainMgrImpl.class);
+	public NeHelper helper=null;
+
+	public FlowDomainMgrImpl() {
+
+		super();
+	}
+
+	protected SBIClientI getSBIClient() {
+		// if(neHelper != null)
+		// return neHelper.getSBIClient();
+		// else
+		return ((I36PlugIn) getPlugin()).getSBIClient();
+	}
+
+	@Override
+	public void getAllAssociatedMFDs(final TMDOrFDDn tmdOrFdName, final Holder<Iterator<MatrixFlowDomain>> mfds,final Object... varArgs) throws PlugInException {
+		/*
+		 * This service allows an NMS to request a list of matrix flow domains that are associated with a specified transmission
+		 * descriptor or flow domain.
+		 */
+		if(log.isDebugEnabled()){
+			log.debug(new DumpInfo(tmdOrFdName, "getAllAssociatedMFDs invoked"));
+		}
+		/*
+		 * only FD choice is supported
+		 */
+		if (!tmdOrFdName.isFd()) {
+			final String message = "Only FD object is supported.";
+			log.error(new DumpInfo(tmdOrFdName, message));
+			throw PlugInExceptionHandler.notImplemented(message);
+		}
+
+		/*
+		 * get the FD name
+		 */
+		final FDDn fdName = tmdOrFdName.getFd();
+		try {
+			/*
+			 * open a new DB session in read mode
+			 */
+			getDatabaseManager().beginSession(false);
+			/*
+			 * look for the required FlowDomain
+			 */
+			final DBFlowDomain fd = getDatabaseManager().getObject(DBFlowDomain.class, fdName);
+			if (fd == null) {
+				final String message = String.format("FlowDomain <%s> NOT found", TmfNameUtilities.toString(fdName));
+				log.error(message);
+				throw PlugInExceptionHandler.entityNotFound(message);
+			}
+			if(log.isDebugEnabled()){
+				log.debug(new DumpInfo(fdName, "Found FlowDomain..."));
+			}
+			/*
+			 * get for all associated MFDs...
+			 */
+			final DBList<DBMatrixFlowDomain> list = fd.getAssociatedMFDs();
+			/*
+			 * add the adapter to extract the ASN.1 info from the DB objects during iteration
+			 */
+			final InformationExtractorIterator<MatrixFlowDomain, DBMatrixFlowDomain> extractor = new InformationExtractorIterator<MatrixFlowDomain, DBMatrixFlowDomain>(
+					list.iterator());
+			/*
+			 * a transaction iterator as the iterator is the output for the method..
+			 */
+			final TransactionalIterator<MatrixFlowDomain> ti = new TransactionalIterator<MatrixFlowDomain>(extractor);
+
+			/*
+			 * set the output holder
+			 */
+			mfds.setTarget(ti);
+
+		} catch (final DBException e) {
+			log.error(e);
+			throw PlugInExceptionHandler.internalError(e.getMessage());
+		} finally {
+			getDatabaseManager().abortSession();
+		}
+	}
+
+	@Override
+	public void getAllCPTPs(final FDDn fdName, final CPTP_Role cptpRole, final Holder<Iterator<TerminationPoint>> cptpList,final Object... varArgs) throws PlugInException {
+
+		/*
+		 * This service returns the structures of all CPTPs, or all flow domain edge CPTPs, or all flow domain internal CPTPs,
+		 * associated with a flow domain. (see SD1-44_ConnectionlessTechnologyManagement.pdf) The CPTP to be gathered are
+		 * specified by cptpRole cptpr_fd_edge (0) cptpr_fd_internal (1) cptpr_all (2)
+		 *
+		 * assigned CPTP An "unassigned" CPTP becomes an "assigned" CPTP when it is associated to a Matrix Flow Domain (MFD) via a
+		 * management operation. In this role, the CPTP cannot carry any traffic because the MFD is not associated to a Flow
+		 * Domain (FD).
+		 *
+		 * fdInternal CPTP (FD Internal CPTP) An "assigned" CPTP becomes an "fdInternal" CPTP when its MFD is associated to a Flow
+		 * Domain. An "unassigned" CPTP becomes an "fdInternal" CPTP when it is assigned to an MFD that is already associated to a
+		 * Flow Domain. There is a relationship between MFD and internal CPTP, so to get internal CPTP we need to get MFD first
+		 * and then get CPTP
+		 *
+		 * fdEdge CPTP (FD Edge CPTP) An "assigned" CPTP becomes an "fdEdge" CPTP via a management operation (Note: Precondition
+		 * is, that the MFD is already associated to the FD). In this role, the "potential" client Flow Points of the CPTP can be
+		 * used as edge points of a Flow Domain Fragment; i.e., can carry traffic. There is a relationship between FD and edge
+		 * CPTP, so to get edge CPTP it is enough to navigate the relationship
+		 */
+
+		if(log.isDebugEnabled()){
+			log.debug(new DumpInfo(fdName, "getAllCPTPs invoked"));
+		}
+		try {
+			/*
+			 * open a new DB session in read mode
+			 */
+			getDatabaseManager().beginSession(false);
+
+			/*
+			 * look for the required FlowDomain
+			 */
+			final DBFlowDomain fd = getDatabaseManager().getObject(DBFlowDomain.class, fdName);
+			if (fd == null) {
+				final String message = String.format("FlowDomain <%s> NOT found", TmfNameUtilities.toString(fdName));
+				log.error(message);
+				throw PlugInExceptionHandler.entityNotFound(message);
+			}
+			/*
+			 * get for CPTP reading several relationship... collect the DBList
+			 */
+			final List<DBCptp> dbPtpList = new ArrayList<DBCptp>();
+
+			if (cptpRole.isCptpr_fd_edge()) {
+
+				final DBList<DBCptp> tpList = fd.getEdgeCptps();
+
+				final DBIterator<DBCptp> dbTpItr = tpList.iterator();
+				while (dbTpItr.hasNext()) {
+					dbPtpList.add(dbTpItr.next());
+				}
+				dbTpItr.close();
+			}
+
+			if (cptpRole.isCptpr_all() || cptpRole.isCptpr_fd_internal()) {
+				addToDBPtpList(fd, cptpRole, dbPtpList);
+			}
+
+			final DBIterator<DBCptp> dbPtpIter = getDatabaseManager().createIterator(dbPtpList.iterator());
+
+			/*
+			 * add the adapter to extract the ASN.1 info from the DB objects during iteration
+			 */
+			final InformationExtractorIterator<TerminationPoint, DBCptp> extractor = new InformationExtractorIterator<TerminationPoint, DBCptp>(
+					dbPtpIter);
+
+			final TransactionalIterator<TerminationPoint> ti = new TransactionalIterator<TerminationPoint>(extractor);
+
+			/*
+			 * set the holder with the built iterator
+			 */
+			cptpList.setTarget(ti);
+
+		} catch (final DBException e) {
+			log.error(new DumpInfo(e));
+			throw PlugInExceptionHandler.internalError(e.getMessage());
+		} finally {
+			getDatabaseManager().abortSession();
+		}
+
+	}
+
+	/**
+	 * Adds the DB CPTPS to the dbPtpList
+	 * 
+	 * @param fd
+	 * @param cptpRole
+	 * @param dbPtpList
+	 */
+	private void addToDBPtpList(final DBFlowDomain fd, final CPTP_Role cptpRole, final List<DBCptp> dbPtpList) {
+
+		/*
+		 * iterate over all MFDs associated to this FD and add DBList to allList
+		 */
+		final DBList<DBMatrixFlowDomain> mfdList = fd.getAssociatedMFDs();
+		final DBIterator<DBMatrixFlowDomain> mfdIterator = mfdList.iterator();
+		while (mfdIterator.hasNext()) {
+			final DBList<DBCptp> tpList = mfdIterator.next().getAssignedTPs();
+			final DBIterator<DBCptp> dbTpItr = tpList.iterator();
+			DBCptp dbCptp = null;
+			while (dbTpItr.hasNext()) {
+				dbCptp = dbTpItr.next();
+				if (cptpRole.isCptpr_fd_internal()) {
+					if (I36Utilities.isFdInternalCPTP(dbCptp)) {
+						dbPtpList.add(dbCptp);
+					}
+				} else {
+					if(!dbPtpList.contains(dbCptp)){
+						dbPtpList.add(dbCptp);
+					}
+				}
+			}
+			dbTpItr.close();
+		}
+		mfdIterator.close();
+
+	}
+
+	@Override
+	public void getAllSupportedMFDs(final MEOrEquipmentDn meOrEquipmentDn, final Holder<Iterator<MatrixFlowDomain>> mfds,final Object... varArgs)
+			throws PlugInException {
+		/*
+		 * This service allows an NMS to request a list of matrix flow domains that are contained by a specified managed element
+		 * or supported with a specified equipment.
+		 */
+		log.debug(new DumpInfo(meOrEquipmentDn, "getAllSupportedMFDs invoked"));
+
+		/*
+		 * check if able to manage the input for now only ME is supported
+		 */
+		if (!meOrEquipmentDn.isMeDn()) {
+			final String message = "Only ME object is supported.";
+			log.error(new DumpInfo(meOrEquipmentDn, message));
+			throw PlugInExceptionHandler.notImplemented(message);
+		}
+
+		/*
+		 * get the ME name
+		 */
+		final MEDn meName = meOrEquipmentDn.getMeDn();
+
+		try {
+			/*
+			 * open a new DB session in read mode
+			 */
+			getDatabaseManager().beginSession(false);
+
+			/*
+			 * look for the required ManagedElements
+			 */
+			final DBManagedElement me = getDatabaseManager().getObject(DBManagedElement.class, meName);
+			if (me == null) {
+				final String message = String.format("ManagedElement <%s> NOT found", TmfNameUtilities.toString(meName));
+				log.error(message);
+				throw PlugInExceptionHandler.entityNotFound(message);
+			}
+			/*
+			 * get all associated MFDs...
+			 */
+			final DBList<DBMatrixFlowDomain> dbMfdList = (DBList<DBMatrixFlowDomain>) me.getMFDs();
+			final DBIterator<DBMatrixFlowDomain> dbMfdIter = getDatabaseManager().createIterator(dbMfdList.iterator());
+
+			/*
+			 * add the adapter to extract the ASN.1 info from the DB objects during iteration
+			 */
+			final InformationExtractorIterator<MatrixFlowDomain, DBMatrixFlowDomain> extractor = new InformationExtractorIterator<MatrixFlowDomain, DBMatrixFlowDomain>(
+					dbMfdIter);
+
+			/*
+			 * transaction iterator as the iterator is the output for the method..
+			 */
+			final TransactionalIterator<MatrixFlowDomain> ti = new TransactionalIterator<MatrixFlowDomain>(extractor);
+
+			/*
+			 * set the holder with the built iterator
+			 */
+			mfds.setTarget(ti);
+
+		} catch (final DBException e) {
+			log.error(e);
+			throw PlugInExceptionHandler.internalError(e.getMessage());
+		} finally {
+			getDatabaseManager().abortSession();
+		}
+	}
+
+	@Override
+	public void getAssigningMFD(final TPDn cptpName,final Holder<MatrixFlowDomain> flowDomainHolder,final Object... varargs) throws PlugInException {
+		/*
+		 * This service returns the matrix flow domain to which is assigned a given "CPTP" termination point.
+		 */
+		if(log.isDebugEnabled()){
+			log.debug(new DumpInfo(cptpName, "getAssigningMFDs invoked"));
+		}
+		/*
+		 * if (!cptpName.isPresentCtp()) { String message = "Only CPTP object is supported."; log.error(new DumpInfo(cptpName,
+		 * message)); throw PlugInExceptionHandler.invalidInput(message); }
+		 */
+
+		try {
+			/*
+			 * open a new DB session in read mode
+			 */
+			getDatabaseManager().beginSession(false);
+			// checking if the input CPTP exists; currently we create CPTP only on PTP/FTP
+			final DBCptp tp = getDatabaseManager().getObject(DBCptp.class, cptpName);
+			if (tp == null) {
+				final String message = String.format("TP <%s> NOT found", TmfNameUtilities.toString(cptpName));
+				log.error(message);
+				throw PlugInExceptionHandler.entityNotFound(message);
+			}
+
+			final DBMatrixFlowDomain dbMfd = tp.getAssigningMFD().get();
+			if (dbMfd == null) {
+				final String message = String.format("TP <%s> not associated to any MFD.", TmfNameUtilities.toString(cptpName));
+				log.error(message);
+				flowDomainHolder.setTarget(null);
+			}
+
+			final MatrixFlowDomain mfd = dbMfd.getInformation();
+
+			flowDomainHolder.setTarget(mfd);
+
+		} catch (final DBException e) {
+			log.error(e);
+			throw PlugInExceptionHandler.internalError(e.getMessage());
+		} finally {
+			getDatabaseManager().abortSession();
+		}
+
+	}
+
+	@Override
+	public void getAssociatingFD(final MFDDn mfdDN,final Holder<FlowDomain> fdHolder,final Object... varArgs) throws PlugInException {
+		/*
+		 * This operation returns the flow domain structure for the (single) flow domain that the Matrix Flow Domain that is
+		 * supplied as a parameter is associated to.
+		 */
+		if(log.isDebugEnabled()){
+			log.debug(new DumpInfo(mfdDN, "getAssociatingFD invoked"));
+		}
+		try {
+			/*
+			 * open a new DB session in read mode
+			 */
+			getDatabaseManager().beginSession(false);
+			/*
+			 * look for the required MFD
+			 */
+			final DBMatrixFlowDomain mfd = getDatabaseManager().getObject(DBMatrixFlowDomain.class, mfdDN);
+			if (mfd == null) {
+				final String message = String.format("MFD <%s> NOT found", TmfNameUtilities.toString(mfdDN));
+				log.error(message);
+				throw PlugInExceptionHandler.entityNotFound(message);
+			}
+			final DBRelation<DBFlowDomain> associatingFD = mfd.getAssociatingFlowDomain();
+
+			final DBFlowDomain dbfd = associatingFD.get();
+			if (dbfd == null) {
+				final String message = String
+						.format("getAssociatingFD returns no FD, for MFDDn <%s>", TmfNameUtilities.toString(mfdDN));
+				log.error(message);
+				fdHolder.setTarget(null);
+			} else {
+				final FlowDomain fd = dbfd.getInformation();
+				fdHolder.setTarget(fd);
+			}
+
+		} catch (final DBException e) {
+			log.error(e);
+			throw PlugInExceptionHandler.internalError(e.getMessage());
+		} finally {
+			getDatabaseManager().abortSession();
+		}
+
+	}
+
+	@Override
+	public void getFDFrRoute(final FDFrDn fdfrName, final Holder<FDFrRoute> routeHolder, final Object... varArgs) throws PlugInException {
+		/*
+		 * This service returns the route for the FDFr whose name is specified as a parameter. It is only used for systems where
+		 * the route is provisioned by the NMS (e.g., it is not useful for Ethernet networks using GVRP).
+		 */
+		if(log.isDebugEnabled()){
+			log.debug(new DumpInfo(fdfrName, "getFDFrRoute invoked"));
+		}
+		try {
+			/*
+			 * open a new DB session in read mode
+			 */
+			getDatabaseManager().beginSession(false);
+			/*
+			 * look for the required FlowDomainFragment
+			 */
+			final DBFlowDomainFragment dbFDFr = getDatabaseManager().getObject(DBFlowDomainFragment.class, fdfrName);
+
+			if (dbFDFr == null) {
+				final String message = String.format("FlowDomainFragment <%s> NOT found", TmfNameUtilities.toString(fdfrName));
+				log.error(message);
+				throw PlugInExceptionHandler.entityNotFound(message);
+			}
+			final DBList<DBMFDFragment> mfdFrs = dbFDFr.getMfdFr();
+			final DBIterator<DBMFDFragment> mfdFrIter = mfdFrs.iterator();
+			final FDFrRoute route=new FDFrRoute();
+			while (mfdFrIter.hasNext()) {
+				route.add(mfdFrIter.next().getInformation());
+			}
+			mfdFrIter.close();
+			if(log.isDebugEnabled()){
+				log.debug(new DumpInfo(fdfrName, String.format("Added %d MatrixFlowDomainFragments into FlowDomainFragment Route...",
+						route.size())));
+			}
+			routeHolder.setTarget(route);
+		} catch (final DBException e) {
+			log.error(e);
+			throw PlugInExceptionHandler.internalError(e.getMessage());
+		} finally {
+			getDatabaseManager().abortSession();
+		}
+
+	}
+
+	@Override
+	public void getFDFrsWithTP(final TPDn tpName, final Holder<Iterator<FlowDomainFragment>> fdFrList,final Object... varArgs) throws PlugInException {
+		/*
+		 * This service allows the NMS to request from the EMS the flow domain fragments that are connected to a specified flow
+		 * point or CPTP. In case of a flow point as input parameter not more then one flow domain fragment will be returned. If
+		 * the operation is performed on CTP then exception will be thrown.
+		 */
+		if(log.isDebugEnabled()){
+			log.debug(new DumpInfo(tpName, "getFDFrsWithTP invoked"));
+		}
+		try {
+			/*
+			 * open a new DB session in read mode
+			 */
+			getDatabaseManager().beginSession(false);
+			// Added below check as part of the Fix for TR HO35633
+			final DBTp tp =getDatabaseManager().getObject(DBTp.class, tpName);
+			if (tp instanceof DBCtp) {
+				final String message = String.format("Invalid TP.Operation Should be performed on FTP Or PTP ");
+				log.error(message);
+				throw PlugInExceptionHandler.invalidInput("Invalid TP.Operation should be performed either on PTP or FTP");
+			}
+
+			final List<DBConnectionTerminationPoint> dbFpList = new ArrayList<DBConnectionTerminationPoint>();
+
+			// checking if an FP exists with input TPDn name
+			// Fix for TR HO35633.Changed DBCtp to DBFp to avoid ClassCast Exception
+			final DBFp dbFP = getDatabaseManager().getObject(DBFp.class, tpName);
+
+			if (dbFP != null) {
+				dbFpList.add(dbFP);
+
+			} else {
+
+				// checking if an CPTP exists with input TPDn name; currently we create CPTP only on PTP/FTP
+				final DBPortTp dbPtp = getDatabaseManager().getObject(DBPortTp.class, tpName);
+				if (dbPtp != null) {
+					// getting FPs on CPTP
+					final Predicate<DBConnectionTerminationPoint> fpPredicate = new AdditionalInfoPredicate<DBConnectionTerminationPoint>("FP", "True", false);
+					final com.marconi.fusion.tmf.iterator.Iterator<DBConnectionTerminationPoint> dbFpItr = DatabaseSupport.getCTPs(getDatabaseManager(),
+							dbPtp, fpPredicate);
+
+					while (dbFpItr.hasNext()) {
+						dbFpList.add(dbFpItr.next());
+					}
+
+					dbFpItr.close();
+
+				} else {
+					final String message = String.format("TP <%s> NOT found", TmfNameUtilities.toString(tpName));
+					log.error(message);
+					throw PlugInExceptionHandler.entityNotFound(message);
+				}
+			}
+			// not getting the FDFrs associated to the FPs in list
+			final List<DBFlowDomainFragment> tempFDFrList = new ArrayList<DBFlowDomainFragment>();
+
+			DBIterator<DBFragment<?>> fpConnItr = null;
+
+			for (final DBConnectionTerminationPoint dbFp : dbFpList) {
+				fpConnItr = ((DBFp)dbFp).getFragments().iterator();
+
+				while (fpConnItr.hasNext()) {
+					final DBFragment<?> curr = fpConnItr.next();
+					if (curr instanceof DBFlowDomainFragment) {
+						tempFDFrList.add((DBFlowDomainFragment) curr);
+					}
+				}
+				fpConnItr.close();
+			}
+
+			final DBIterator<DBFlowDomainFragment> dbFdfrIter = getDatabaseManager().createIterator(tempFDFrList.iterator());
+
+			final InformationExtractorIterator<FlowDomainFragment, DBFlowDomainFragment> extractor = new InformationExtractorIterator<FlowDomainFragment, DBFlowDomainFragment>(
+					dbFdfrIter);
+
+			final TransactionalIterator<FlowDomainFragment> ti = new TransactionalIterator<FlowDomainFragment>(extractor);
+
+			fdFrList.setTarget(ti);
+
+		} catch (final DBException e) {
+			log.error(e);
+			throw PlugInExceptionHandler.internalError(e.getMessage());
+		} finally {
+			getDatabaseManager().abortSession();
+		}
+	}
+
+	/*
+	 * (non-Javadoc) Returns the list of CPTPs associated with MFD.
+	 *
+	 * @see
+	 * com.marconi.fusion.tmf.tmfFramework.delegates.FlowDomainMgr#getAllAssignableCPTPs(com.marconi.fusion.tmf.plugIn.types.MFDDn
+	 * , com.marconi.fusion.base.util.Holder)
+	 */
+	@Override
+	public void getAllAssignableCPTPs(final MFDDn mfdDn, final Holder<Iterator<TerminationPoint>> cptpList,final Object... varArgs) throws PlugInException {
+		try {
+			if (mfdDn == null) {
+				final String errMsg = "MFDDn cannot be null";
+				log.error(errMsg);
+				throw PlugInExceptionHandler.invalidInput(errMsg);
+			}
+
+			// open a new DB session in read mode
+			getDatabaseManager().beginSession(false);
+
+			log.info(String.format("get Assignable CPTps of MFD <%s> ", TmfNameUtilities.toString(mfdDn)));
+
+			final DBMatrixFlowDomain dbMfd = getDatabaseManager().getObject(DBMatrixFlowDomain.class, mfdDn);
+
+			if (dbMfd == null) {
+				final String errMsg = String.format("MFD <%s> not found in the Database.", TmfNameUtilities.toString(mfdDn));
+				log.error(errMsg);
+				throw PlugInExceptionHandler.entityNotFound(errMsg);
+			}
+
+			final MEDn meDn=new MEDn();
+			meDn.setMe(dbMfd.getDn().getMe());
+			final DBIdentifier meIdentifier = new DnIdentifier<MEDn>(meDn);
+			final DBManagedElement dbMe = getDatabaseManager().getObject(DBManagedElement.class,meIdentifier);
+			final DBIterator<DBPortTp> ptps = dbMe.getPTPs().iterator();
+			final List<DBTp> dbTpList = new ArrayList<DBTp>();
+
+			while (ptps.hasNext()) {
+				final DBPortTp ptp = ptps.next();
+				final TerminationPoint tp = ptp.getInformation();
+				final LayeredParameterList layeredParams = tp.getTransmissionParams();
+				for (int lpCnt = 0; lpCnt < layeredParams.size(); lpCnt++) {
+					addToDBPtpList(layeredParams, lpCnt, dbTpList, ptp,dbMfd);
+				}
+			}
+
+			ptps.close();
+
+			final DBIterator<DBTp> dbCPTPIter = getDatabaseManager().createIterator(dbTpList.iterator());
+
+			/*
+			 * add the adapter to extract the ASN.1 info from the DB objects during iteration
+			 */
+			final InformationExtractorIterator<TerminationPoint, DBTp> extractor = new InformationExtractorIterator<TerminationPoint, DBTp>(
+					dbCPTPIter);
+
+			// a transaction iterator as the iterator is the output for the method..
+			final TransactionalIterator<TerminationPoint> ti = new TransactionalIterator<TerminationPoint>(extractor);
+
+			/*
+			 * set the holder with the built iterator
+			 */
+			cptpList.setTarget(ti);
+			if(log.isDebugEnabled()){
+				log.debug(new DumpInfo(cptpList, String.format("CPTPs assignable to MFD <%s>", mfdDn)));
+			}
+		} catch (final DBException e) {
+			log.error(e);
+			throw PlugInExceptionHandler.internalError(e.getMessage());
+		} finally {
+			getDatabaseManager().abortSession();
+		}
+	}
+
+	/**
+	 * Adds the DB CPTPS to the dbPtpList in case of getAllAssignableCPTPs
+	 * 
+	 * @param transmissionParams
+	 * @param lpCnt
+	 * @param dbTpList
+	 * @param ptp
+	 * @param dbMfd
+	 */
+	private void addToDBPtpList(final LayeredParameterList layeredParams, final int lpCnt, final List<DBTp> dbTpList, final DBPortTp ptp,
+			final DBMatrixFlowDomain dbMfd) {
+		final String strLayer = LayerRateManager.toString(layeredParams.get(lpCnt).getLayer());
+		if (strLayer.equals("LR_Ethernet")) {
+			final TransmissionParameters transParams = layeredParams.get(lpCnt).getTransmissionParams();
+			for (int trCnt = 0; trCnt < transParams.size(); trCnt++) {
+				if (transParams.get(trCnt).getName().equals(ParameterName.PortTPRoleState.name())) {
+					if (transParams.get(trCnt).getValue().getValue().equals("unassigned")) {
+						dbTpList.add(ptp); // CPTP with unassigned CPTP role.
+					} else {
+						if (ptp.getAssigningMFD().get().getDn().equals(dbMfd.getDn())) {
+							dbTpList.add(ptp);// CPTP with assigned/fdInternal/fdEdge CPTP role
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see com.marconi.fusion.tmf.tmfFramework.delegates.FlowDomainMgr#getFDFrsByUserLabel(java.lang.String,
+	 * com.marconi.fusion.tmf.plugIn.types.FDFrList)
+	 */
+	@Override
+	public void getFDFrsByUserLabel(final String userLabel, final Holder<Iterator<FlowDomainFragment>> fdfrItrHolder,final Object... varArgs ) throws PlugInException {
+		/*
+		 * This service allows the NMS to request from the EMS the flow domain fragments with specific userlabel.
+		 */
+		if(log.isDebugEnabled()){
+			log.debug(String.format("get FDFrs by userlabel <%s> ", userLabel));
+		}
+
+		try {
+			getDatabaseManager().beginSession(false);
+			// This predicate tells if userlabel of input FDFr matches with required userlabel.
+			final Predicate<DBFlowDomainFragment> predicate = new UserLabelPredicate<DBFlowDomainFragment>(userLabel);
+
+			// Fetching all FDFrs using relation FDFr -> FD -> EMS.
+			// So first getting all FDs in EMS and then all FDFrs in each FD for comparision.
+			final EMSDn emsDn = getSBIClient().getPlugIn().getEMSDn();
+			final DBEms ems = getSBIClient().getDbManager().getEMS(emsDn);
+			final DBIterator<DBFlowDomain> dbFDItr = ems.getFDs().iterator();
+
+			final List<DBFlowDomainFragment> fdFrList = new ArrayList<DBFlowDomainFragment>();
+			while (dbFDItr.hasNext()) {
+
+				final com.marconi.fusion.tmf.iterator.Iterator<DBFlowDomainFragment> fdFrItr = DatabaseSupport.getFDFrs(
+						getDatabaseManager(), dbFDItr.next().getDn(), predicate);
+
+				while (fdFrItr.hasNext()) {
+					fdFrList.add(fdFrItr.next());
+				}
+
+				fdFrItr.close();
+			}
+
+			dbFDItr.close();
+
+			final DBIterator<DBFlowDomainFragment> dbFdfrIter = getDatabaseManager().createIterator(fdFrList.iterator());
+
+			final InformationExtractorIterator<FlowDomainFragment, DBFlowDomainFragment> extractor = new InformationExtractorIterator<FlowDomainFragment, DBFlowDomainFragment>(
+					dbFdfrIter);
+
+			final TransactionalIterator<FlowDomainFragment> ti = new TransactionalIterator<FlowDomainFragment>(extractor);
+
+			fdfrItrHolder.setTarget(ti);
+
+		} catch (final DBException e) {
+			log.error(e);
+			throw PlugInExceptionHandler.internalError(e.getMessage());
+
+		} catch (final Exception e) {
+			log.error(e);
+			throw PlugInExceptionHandler.unableToComply(e.getMessage());
+
+		} finally {
+			getDatabaseManager().abortSession();
+		}
+	}
+
+	/**
+	 * This method is used to Create and Activate FDFr
+	 *
+	 * @param createData
+	 * @param connectivityRequirement
+	 * @param aEnd
+	 * @param zEnd
+	 * @param internalTPs
+	 * @param mfdfrs
+	 * @param tpsToModify
+	 * @param theFDFr
+	 * @param notConnectableCPTPList
+	 * @param parameterProblemsTPList
+	 * @param errorReason
+	 * @return
+	 */
+	@Override
+	public void createAndActivateFDFr(final FDFrCreateData createData, final ConnectivityRequirement connectivityRequirement,
+			final TPDnList aEndHolder, final TPDnList zEndHolder, final Holder<TPDnList> internalTPsHolder, final Holder<FDFrRoute> mfdfrsHolder,
+			final Holder<TPDataList> tpsToModifyHolder, final Holder<FlowDomainFragment> theFDFrHolder,
+			final Holder<TPDnList> notConnectableCPTPListHolder, final Holder<TPDnList> parameterProblemsTPListHolder,
+			final Holder<StringType> errorReasonHolder, final Object... varArgs) throws PlugInException {
+		try {
+			final FDFrManager fdfrManager = new FDFrManager(getSBIClient());
+			fdfrManager.createAndActivateFDFr(createData, connectivityRequirement, aEndHolder, zEndHolder, internalTPsHolder,
+					mfdfrsHolder, tpsToModifyHolder, theFDFrHolder, notConnectableCPTPListHolder, parameterProblemsTPListHolder);
+
+			notConnectableCPTPListHolder.setTarget(new TPDnList());
+			parameterProblemsTPListHolder.setTarget(new TPDnList());
+			errorReasonHolder.setTarget(new StringType(fdfrManager.getErrorReason()));
+		} catch (final PlugInException ex) {
+			log.error(String.format("Exception occured in the createAndActivateFDFr()", ex));
+			throw ex;
+
+		}catch (final Exception ex) {
+			log.error(String.format("Exception occured in the createAndActivateFDFr()", ex));
+			throw PlugInExceptionHandler.internalError();
+
+		}
+	}
+
+	/**
+	 * This method sets the required values for data cross connection.
+	 *
+	 * @param fdfrName
+	 * @param fdfrModifyData
+	 * @param connectivityRequirement
+	 * @param tpsToModify
+	 * @param failedTPList
+	 * @param parameterProblemsTPList
+	 * @param newFDFr
+	 * @param errorReason
+	 * @return dataXConn
+	 */
+	@Override
+	public void modifyFDFr(final FDFrDn fdfrName, final FDFrModifyData fdfrModifyData, final ConnectivityRequirement connectivityRequirement,
+			final Holder<TPDataList> tpsToModifyHolder, final Holder<TPDnList> failedTPListHolder,
+			final Holder<TPDnList> parameterProblemsTPListHolder, final Holder<FlowDomainFragment> newFDFrHolder,
+			final Holder<StringType> errorReasonHolder, final Object... varArgs) throws PlugInException {
+		try {
+			final FDFrManager fdfrManager = new FDFrManager(getSBIClient());
+			fdfrManager.modifyFDFr(fdfrName, fdfrModifyData, connectivityRequirement, tpsToModifyHolder, failedTPListHolder,
+					parameterProblemsTPListHolder, newFDFrHolder);
+
+			failedTPListHolder.setTarget(new TPDnList());
+			parameterProblemsTPListHolder.setTarget(new TPDnList());
+			errorReasonHolder.setTarget(new StringType(fdfrManager.getErrorReason()));
+		} catch (final PlugInException ex) {
+			log.error(String.format("Exception occured in the modifyFDFr()", ex));
+			throw ex;
+
+		} catch (final Exception ex) {
+			log.error(String.format("Exception occured in the modifyFDFr()", ex));
+			throw PlugInExceptionHandler.internalError(ex.getMessage());
+		}
+	}
+
+	/**
+	 * This method deletes flow domain fragment
+	 *
+	 * @param fdfrDn
+	 * @param tpsToModify
+	 * @param errorReason
+	 * @throws PlugInException
+	 */
+	@Override
+	public void deactivateAndDeleteFDFr(final FDFrDn fdfrDn, final Holder<TPDataList> tpsToModify, final Holder<FlowDomainFragment> fDFrHolder,
+			final Holder<StringType> errorReason, final Object... varargs) throws PlugInException {
+
+		try {
+			final FDFrManager fdfrManager = new FDFrManager(getSBIClient());
+			fdfrManager.deactivateAndDeleteFDFr(fdfrDn, tpsToModify, fDFrHolder);
+			errorReason.setTarget(new StringType(fdfrManager.getErrorReason()));
+		} catch (final PlugInException ex) {
+			log.error(String.format("Exception occured in the deactivateAndDeleteFDFr()", ex));
+			throw ex;
+
+		}catch (final Exception ex) {
+			log.error(String.format("Exception occured in the deactivateAndDeleteFDFr()", ex));
+			throw PlugInExceptionHandler.internalError(ex.getMessage());
+
+		}
+	}
+}

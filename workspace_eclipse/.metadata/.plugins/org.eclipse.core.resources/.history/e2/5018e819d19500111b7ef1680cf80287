@@ -1,0 +1,4376 @@
+/*
+o * Created on Jun 13og., 2005
+ *
+ * TODO To change the template for this generated file go to
+ * Window - Preferences - Java - Code Style - Code Templates
+ */
+package com.marconi.fusion.tmf.i36PlugIn;
+
+import java.util.UUID;
+
+import org.apache.commons.collections.bidimap.DualHashBidiMap;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X36.X36AlSignalType;
+import com.marconi.fusion.X36.X36CardId;
+import com.marconi.fusion.X36.X36CardIdentification;
+import com.marconi.fusion.X36.X36CardInformation;
+import com.marconi.fusion.X36.X36ChannelIdentification;
+import com.marconi.fusion.X36.X36ClientPortInfo;
+import com.marconi.fusion.X36.X36ClientTrafficType;
+import com.marconi.fusion.X36.X36ConcatenatedTimeSlot;
+import com.marconi.fusion.X36.X36CoordPh;
+import com.marconi.fusion.X36.X36Frequency;
+import com.marconi.fusion.X36.X36GenericTP;
+import com.marconi.fusion.X36.X36KLM;
+import com.marconi.fusion.X36.X36MfdId;
+import com.marconi.fusion.X36.X36NeId;
+import com.marconi.fusion.X36.X36NetworkElement;
+import com.marconi.fusion.X36.X36ODUId;
+import com.marconi.fusion.X36.X36ODUInfo;
+import com.marconi.fusion.X36.X36ODUMapping;
+import com.marconi.fusion.X36.X36ODUMappingInfo;
+import com.marconi.fusion.X36.X36ODUTimeSlot;
+import com.marconi.fusion.X36.X36OpticalChannelInfo;
+import com.marconi.fusion.X36.X36PhysicalCardInfo;
+import com.marconi.fusion.X36.X36PortId;
+import com.marconi.fusion.X36.X36PortIdentification;
+import com.marconi.fusion.X36.X36PortInformation;
+import com.marconi.fusion.X36.X36PrimaryTPID;
+import com.marconi.fusion.X36.X36ProtectionUnitInfo;
+import com.marconi.fusion.X36.X36ResourceIdentification;
+import com.marconi.fusion.X36.X36SetOfCoordPh;
+import com.marconi.fusion.X36.X36SetOfGenericTP;
+import com.marconi.fusion.X36.X36SetOfKLM;
+import com.marconi.fusion.X36.X36SetOfNeId;
+import com.marconi.fusion.X36.X36ShelfId;
+import com.marconi.fusion.X36.X36ShelfInformation;
+import com.marconi.fusion.X36.X36SlotId;
+import com.marconi.fusion.X36.X36SlotInformation;
+import com.marconi.fusion.X36.X36SpecificPortInformation;
+import com.marconi.fusion.X36.X36TerminationChannel;
+import com.marconi.fusion.X36.X36TimeSlot;
+import com.marconi.fusion.X36.X36TrafficType;
+import com.marconi.fusion.X36.X36UnitIdentification;
+import com.marconi.fusion.X36.X36VCGroup;
+import com.marconi.fusion.X36.X36Vc4Id;
+import com.marconi.fusion.X36.X36WdmAdaptPort;
+import com.marconi.fusion.X36.X36WdmPort;
+import com.marconi.fusion.base.asn1.IntegerType;
+import com.marconi.fusion.base.logging.DumpInfo;
+import com.marconi.fusion.base.util.Holder;
+import com.marconi.fusion.tmf.additionalInformation.ChannelInformation;
+import com.marconi.fusion.tmf.additionalInformation.PortInformation;
+import com.marconi.fusion.tmf.additionalInformation.TimeSlotInformation;
+import com.marconi.fusion.tmf.db.DBCtp;
+import com.marconi.fusion.tmf.db.DBFtp;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.DBPortTp;
+import com.marconi.fusion.tmf.db.DBPtp;
+import com.marconi.fusion.tmf.db.DBTp;
+import com.marconi.fusion.tmf.db.Session;
+import com.marconi.fusion.tmf.i36PlugIn.I36PlugIn.PluginProperty;
+import com.marconi.fusion.tmf.naming.Naming;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.TpType;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.CtpName;
+import com.marconi.fusion.tmf.plugIn.types.CtpNameComponent;
+import com.marconi.fusion.tmf.plugIn.types.CtpNameComponents;
+import com.marconi.fusion.tmf.plugIn.types.Directionality;
+import com.marconi.fusion.tmf.plugIn.types.EquipmentDn;
+import com.marconi.fusion.tmf.plugIn.types.EquipmentProtectionGroupDn;
+import com.marconi.fusion.tmf.plugIn.types.FDDn;
+import com.marconi.fusion.tmf.plugIn.types.FDFrDn;
+import com.marconi.fusion.tmf.plugIn.types.FDFrId;
+import com.marconi.fusion.tmf.plugIn.types.FDId;
+import com.marconi.fusion.tmf.plugIn.types.Frequency;
+import com.marconi.fusion.tmf.plugIn.types.GenericTPId;
+import com.marconi.fusion.tmf.plugIn.types.HolderDn;
+import com.marconi.fusion.tmf.plugIn.types.HolderId;
+import com.marconi.fusion.tmf.plugIn.types.J;
+import com.marconi.fusion.tmf.plugIn.types.LayerRate;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.MEDnList;
+import com.marconi.fusion.tmf.plugIn.types.MEId;
+import com.marconi.fusion.tmf.plugIn.types.MFDDn;
+import com.marconi.fusion.tmf.plugIn.types.ManagedElement;
+import com.marconi.fusion.tmf.plugIn.types.NameAndStringValue;
+import com.marconi.fusion.tmf.plugIn.types.ObjectName;
+import com.marconi.fusion.tmf.plugIn.types.ObjectType;
+import com.marconi.fusion.tmf.plugIn.types.PGId;
+import com.marconi.fusion.tmf.plugIn.types.PMResource;
+import com.marconi.fusion.tmf.plugIn.types.PortCoordinates;
+import com.marconi.fusion.tmf.plugIn.types.ProtectionGroupDn;
+import com.marconi.fusion.tmf.plugIn.types.TCProfileDn;
+import com.marconi.fusion.tmf.plugIn.types.TPDn;
+import com.marconi.fusion.tmf.plugIn.types.TPId;
+import com.marconi.fusion.tmf.tmfFramework.repository.LayerRateManager;
+import com.marconi.fusion.tmf.utils.AIHelper;
+
+/**
+ * @author merlor
+ *
+ * TODO To change the template for this generated type comment go to
+ * Window - Preferences - Java - Code Style - Code Templates
+ */
+public class I36Naming {
+
+	private static final Log LOG = LogFactory.getLog(I36Naming.class);
+
+	public enum CTPType {
+		ETHERNET,
+		ENCAPSULATION,
+		UNTAGGED,
+		SINGLEVLANTAGGED
+	}
+	//	private I36DatabaseManager dbManager = null;
+	//	private EMId emId;
+	SBIClientI sbiClient = null;
+	DualHashBidiMap meRemapper = new DualHashBidiMap();
+	String ctpNativeNameSeparator = "-";
+	//	private Map<X36NeId, MEId> toMEId = new HashMap<X36NeId, MEId>();
+	//	private Map<MEId, X36NeId> toNEId = new HashMap<MEId, X36NeId>();
+
+
+	public I36Naming(final SBIClientI sbiClient) {
+		this.sbiClient = sbiClient;
+		ctpNativeNameSeparator = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.namingCTPNativeNameSeparator,
+						ctpNativeNameSeparator);
+	}
+
+	//	public I36Naming(EMId emId, I36DatabaseManager db) {
+	//    	this.emId = emId;
+	//		this.dbManager = db;
+	//    }
+
+	/* ***************************************************************************/
+	public String getEMId() {
+		return sbiClient.getEMId();
+	}
+
+	/* ***************************************************************************/
+	public void insert(final X36NeId neId, final MEDn meDn) {
+		insert(neId, meDn.getMe());
+	}
+
+	/* ***************************************************************************/
+	public void insert(final X36NeId neId, final MEId meId) {
+		synchronized (meRemapper) {
+			meRemapper.put(neId, meId);
+		}
+		//		synchronized (toMEId) {
+		//			toMEId.put(neId, meId);
+		//		}
+		//		synchronized (toNEId) {
+		//			toNEId.put(meId, neId);
+		//		}
+	}
+
+	public void replaceNeId(final X36NeId oldNeId, final X36NeId newNeId) {
+		synchronized (meRemapper) {
+			final MEId oldMEId = (MEId) meRemapper.get(oldNeId);
+			meRemapper.remove(oldNeId);
+			meRemapper.put(newNeId, oldMEId);
+		}
+	}
+
+
+	public void removeNeId(final X36NeId neId) {
+		synchronized (meRemapper) {
+			meRemapper.remove(neId);
+		}
+	}
+
+
+	public void replaceMEId(final MEId oldMEId,final MEId newMEId)
+	{
+		synchronized (meRemapper) {
+			final X36NeId neId=(X36NeId)meRemapper.getKey(oldMEId);
+			meRemapper.remove(neId);
+			meRemapper.put(neId, newMEId);
+		}
+	}
+
+	/* ***************************************************************************/
+	public MEId get(final X36NeId neId) {
+		MEId dn = null;
+		synchronized (meRemapper) {
+			dn = (MEId)meRemapper.get(neId);
+		}
+		//		synchronized (toMEId) {
+		//			dn = toMEId.get(neId);
+		//		}
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	private X36NeId get(final MEId meId) {
+		X36NeId neId = null;
+		synchronized (meRemapper) {
+			neId = (X36NeId)meRemapper.getKey(meId);
+		}
+		if (neId == null) {
+			LOG.error("Unable to locate remapping for <" + meId.getValue() + ">");
+			throw PlugInExceptionHandler.invalidInput("ME name not known: " + meId.getValue());
+		}
+		//		synchronized (toNEId) {
+		//			neId = toNEId.get(meId);
+		//		}
+		return neId;
+	}
+
+	private X36NeId get(final MEId meId, final String hostName) {
+		X36NeId neId = null;
+		synchronized (meRemapper) {
+			neId = (X36NeId) meRemapper.getKey(meId);
+		}
+		if (neId == null) {
+			LOG.error("Unable to locate remapping for <" + meId.getValue() + ">");
+			throw PlugInExceptionHandler.invalidInput("ME name not known: " + meId.getValue());
+		}
+		return neId;
+	}
+
+	/* ***************************************************************************/
+	public boolean makeObjectName(final X36NeId neId, final X36ChannelIdentification chId, final ObjectType objType, final ObjectName objectName) {
+		final X36PortIdentification  port = chId.getPort();
+
+		//    	TPDn tpDn               = null;
+		//    	EquipmentDn equipmentDn = null;
+		//    	HolderDn holderDn       = null;
+		//    	MEDn meDn               = null;
+		final X36SlotId slotId = new X36SlotId(port.getCardId().getValue());
+
+		boolean ret = true;
+		switch( objType.getValue() ){
+
+		case ObjectType.ot_managed_element:
+			objectName.setMeDn(makeMEDn(neId));
+			break;
+
+		case ObjectType.ot_equipment_holder:
+			objectName.setHolderDn(makeShelfDn(neId, port.getShelfId()));
+			break;
+
+		case ObjectType.ot_equipment:
+			objectName.setEquipmentDn(makeSlotDn(neId, port.getShelfId(), slotId, port.getCardId()));
+			break;
+
+			/* PDH Physical connector:        */
+		case ObjectType.ot_physical_termination_point:
+			objectName.setPtpDn(makePTPDn(neId, port.getShelfId(), slotId, port.getCardId(), port.getPortId()));
+			break;
+
+		case ObjectType.ot_connection_termination_point:
+		default:
+			ret = false;
+			break;
+		}
+
+		return ret;
+	}
+
+	//	/* ***************************************************************************/
+	//	public boolean makeObjectName(X36NeId neId, X36ChannelIdentification chId, ACClassType classType, ObjectName objectName) {
+	//    	X36PortIdentification  port = chId.getPort();
+	//
+	////    	TPDn tpDn               = null;
+	////    	EquipmentDn equipmentDn = null;
+	////    	HolderDn holderDn       = null;
+	////    	MEDn meDn               = null;
+	//    	boolean ret = true;
+	//    	X36TrafficType tt = new X36TrafficType();
+	//    	switch( classType.getValue() ){
+	//
+	//    	case ACClassType.managedElement:
+	//    		objectName.setmeDn(makeMEDn(neId));
+	//    		break;
+	//
+	//    	case ACClassType.shelf:
+	//    	case ACClassType.equipmentHolder:
+	//    		objectName.setholderDn(makeShelfDn(neId, port.getShelfId()));
+	//    		break;
+	//
+	//    	case ACClassType.slot     :
+	//    	case ACClassType.equipment:
+	//    	case ACClassType.card     :
+	//    		objectName.setequipmentDn(makeSlotDn(neId, port.getShelfId(), port.getCardId()));
+	//    		break;
+	//
+	//    		/* PDH Physical connector:        */
+	//    	case ACClassType.pPITTP   :
+	//    	case ACClassType.e1CTP    :
+	//    	case ACClassType.e2CTP    :
+	//    	case ACClassType.e3CTP    :
+	//    	case ACClassType.e4CTP    :
+	//    		/* SDH Physical connector:        */
+	//    	case ACClassType.eSPITTP  :
+	//    	case ACClassType.oSPITTP  :
+	//    	case ACClassType.sPITTP   :
+	//    	case ACClassType.rsTTP    :
+	//    	case ACClassType.rsCTP    :
+	//    	case ACClassType.msTTP    :
+	//    	case ACClassType.msCTP    :
+	//    		/* WDM Physical connector:        */
+	//    	case ACClassType.otsTTP   :
+	//    	case ACClassType.omsTTP   :
+	//    		/* WDM Client Physical connector: */
+	//    	case ACClassType.ogPITTP  :
+	//    	case ACClassType.orsInTTP :
+	//    	case ACClassType.otuTTP   :
+	//    	case ACClassType.otuCTP   :
+	//    		/* Ethernet phisicalConnector */
+	//    	case ACClassType.mtPITTP  :
+	//    	case ACClassType.mtAdpCTP :
+	//    		objectName.setptpDn(makePTPDn(neId, port));
+	//    		break;
+	//
+	//    		/*
+	//    		 * PDH-PC CTP:
+	//    		 */
+	//    	case ACClassType.vc12TTP  :
+	//    	case ACClassType.p12CTP   :
+	//    	case ACClassType.vc2TTP   :
+	//    	case ACClassType.p2CTP    :
+	//    	case ACClassType.vc3TTP   :
+	//    	case ACClassType.p3CTP    :
+	//    	case ACClassType.vc4TTP   :
+	//    	case ACClassType.p4CTP    :
+	//    		objectName.setctpDn(makeCTPDn(neId, port, classType));
+	//
+	//    		break;
+	//
+	//    		/*
+	//    		 * SDH-PC CTP:
+	//    		 */
+	//    	case ACClassType.au4CTP:
+	//    		tt.setvc4();
+	//    		objectName.setctpDn(makeCTPDn(neId, chId, tt));
+	//    		break;
+	//    	case ACClassType.tu12CTP  :
+	//    		tt.setvc12();
+	//    		objectName.setctpDn(makeCTPDn(neId, chId, tt));
+	//    		break;
+	//    	case ACClassType.tu2CTP   :
+	//    		tt.setvc2();
+	//    		objectName.setctpDn(makeCTPDn(neId, chId, tt));
+	//    		break;
+	//    	case ACClassType.tu3CTP   :
+	//    		tt.setvc3();
+	//    		objectName.setctpDn(makeCTPDn(neId, chId, tt));
+	//    		break;
+	//
+	////    	case ACClassType.vc4ATTP  :
+	////    		tt.setvc4_4c();
+	////    		break;
+	////
+	////    	case ACClassType.tuXCTP   :
+	////    		break;
+	////
+	//    		/*
+	//    		 * WDM.Client-PC CTP:
+	//    		 */
+	//    	//case ACClassType.orsOutTTP:
+	//    	//case ACClassType.ochTTP   :
+	//    	//	objectName.settpDn(makeCTPDn(neId, port, classType));
+	//    	//	break;
+	//    		//return null;//NameMaker.getWdmClientCTPName( neId, shelfId, cardId, portId);
+	//
+	//    		/*
+	//    		 * WDM-PC/LINE CTP:
+	//    		 */
+	//    	case ACClassType.ochCTP:
+	//    		tt.setoch();
+	//    		objectName.setctpDn(makeCTPDn(neId, chId, tt));
+	//    		break;
+	//
+	//    	case ACClassType.oduTTP:
+	//    	case ACClassType.oduCTP:
+	//    		tt.setodu1();
+	//    		objectName.setctpDn(makeCTPDn(neId, chId, tt));
+	//    		break;
+	//
+	//    	default:
+	//    		ret = false;
+	//    		break;
+	//    	}
+	//
+	//    	return ret;
+	//	}
+
+	/* ***************************************************************************/
+	public MEDn makeMEDn(final X36NetworkElement ne) {
+		/**
+		 * Prima lo cerco nella mappa, se non lo trovo allora lo costruisco
+		 */
+		MEDn dn = makeMEDn(ne.getNeId());
+
+		if (dn != null){
+			return dn;
+		}
+
+		final String fmt = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.namingMEFormat, "%d");
+
+		final String vendor = sbiClient.getPlugIn().getVendor();
+		final String name = String.format(fmt, ne.getNeId().getValue(),
+						ne.getLocation().getValue(),
+						ne.getAcronym().getValue(),
+						ne.getIdentifier().getValue(),
+						ne.getNeInfo().getNeModel().getValue(),
+						vendor);
+
+		dn = new MEDn();
+		//    	dn.getme().getnmName().set(getEMId().getnmName());
+		//    	dn.getme().getemName().set(getEMId().getemName());
+		//    	dn.getme().getmeName().set(name);
+		dn.getMe().set(name);
+
+		insert(ne.getNeId(), dn);
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public MEDnList makeMEsDn(final X36SetOfNeId setOf) {
+		final MEDnList list = new MEDnList();
+
+		for (final X36NeId item : setOf) {
+			final MEDn name = makeMEDn(item);
+			if (name != null){
+				list.add(name);
+			}
+		}
+
+		return list;
+	}
+
+	/* ***************************************************************************/
+	public MEDn makeMEDn(final X36NeId id) {
+		/*
+		 * Added for getting MEDn from MECache to support Q3NE functionality
+		 */
+		MEDn meDn = null;
+		meDn = sbiClient.getPlugIn().getMECache().get(id.getValue());
+
+		if (meDn == null) {
+			final MEId name = makeMEId(id);
+			if (name != null) {
+				meDn = new MEDn();
+				meDn.setMe(name);
+			}
+		}
+		return meDn;
+	}
+
+	//    /* ***************************************************************************/
+	//    public MEDn makeMEDn(int id) {
+	//    	MEDn name = Naming.makeMEDn(emId, String.valueOf(id));
+	//    	return name;
+	//    }
+
+	/* ***************************************************************************/
+	public MEId makeMEId(final X36NeId id) {
+		final MEId name = get(id);
+		//    	if (name == null) {
+		//    		name = Naming.makeMEId(getEMId(), String.valueOf(id.getValue()));
+		//    		insert(id, name);
+		//    	}
+		return name;
+	}
+
+	/* ***************************************************************************/
+	public HolderDn makeRackDn(final X36NeId neId, final X36ShelfInformation info) {
+		final HolderDn dn = new HolderDn();
+
+		dn.setMe(makeMEId(neId));
+		dn.setHolder(makeRackId(info));
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public static HolderId makeRackId(final X36ShelfInformation info) {
+		String rack = "rack";
+		if (info.isPresentRack()){
+			rack = info.getRack().getValue();
+		}
+		final HolderId id = Naming.makeHolderId(rack);
+
+		return id;
+	}
+
+	/* ***************************************************************************/
+	public HolderDn makeShelfDn(final X36NeId neId, final X36ShelfId id) {
+		final HolderDn dn = new HolderDn();
+
+		dn.setMe(makeMEId(neId));
+		dn.setHolder(Naming.makeHolderId(null, id.getValue()));
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public EquipmentDn makeSlotDn(final X36NeId neId, final X36ShelfId shelfId, final X36SlotId slotId, final X36CardId cardId) {
+		final boolean useSlotForNaming = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingEQUseSlotId, true);
+		final int id = useSlotForNaming ? slotId.getValue() : cardId.getValue();
+
+		final EquipmentDn dn = new EquipmentDn();
+
+		dn.setMe(makeMEId(neId));
+		dn.setHolder(Naming.makeHolderId(null, shelfId.getValue(), id));
+		dn.setEquipment("1");
+		return dn;
+	}
+
+	public EquipmentDn makeSlotDn(final X36CardIdentification cardIdentification, final X36NeId neId) {
+		return makeSlotDn(neId,
+						cardIdentification.getShelfId(),
+						new X36SlotId(cardIdentification.getCardId().getValue()),
+						cardIdentification.getCardId());
+	}
+
+
+	/*
+	 * This method is added for naming of coupler
+	 *
+	 */
+
+	public TPDn makeCouplerTPDn(final X36NeId neId, final X36ShelfId shelfId, final X36SlotId slotId, final X36CardId cardId, final X36PortId portId,
+					final boolean isPTP) {
+		final boolean useSlotForNaming = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingPTPUseSlotId, true);
+
+		final int id = useSlotForNaming ? slotId.getValue() : cardId.getValue();
+
+		final TPDn name = new TPDn();
+		name.setMe(this.get(neId));
+
+		final PortCoordinates portCoord = new PortCoordinates();
+		portCoord.setShelf(String.valueOf(shelfId.getValue()));
+		portCoord.setSlot(String.valueOf(id));
+		portCoord.setPort(String.valueOf(portId.getValue()));
+
+		final GenericTPId genTpId = new GenericTPId();
+		String label = null;
+		genTpId.setCoord(portCoord);
+		if (isPTP) {
+			label = "/external";
+			genTpId.setLabel(label);
+			name.setPresentTp();
+			name.getTp().setPtp(genTpId);
+
+		} else {
+			label = "/internal";
+			genTpId.setLabel(label);
+			name.setPresentTp();
+			name.getTp().setFtp(genTpId);
+		}
+
+		return name;
+	}
+
+	public TPDn makePTPDn(final X36NeId neId, final X36ShelfId shelfId, final X36CardId cardId, final X36PortId portId) {
+		final int id = cardId.getValue();
+
+		final TPDn dn = Naming.makePTPDn(this.get(neId),
+						shelfId.getValue(),
+						id,
+						portId.getValue());
+
+		return dn;
+	}
+
+	public TPDn makePTPDn(final X36NeId neId, final X36ShelfId shelfId, final X36SlotId slotId, final X36CardId cardId, final X36PortId portId) {
+		final boolean useSlotForNaming = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingPTPUseSlotId, true);
+
+		final int id = useSlotForNaming ? slotId.getValue() : cardId.getValue();
+
+		final TPDn dn = Naming.makePTPDn(this.get(neId),
+						shelfId.getValue(),
+						id,
+						portId.getValue());
+
+		return dn;
+	}
+
+	public TPDn makePTPDn(final X36UnitIdentification ui, final MEDn meDn) {
+		final TPDn tpDn = new TPDn();
+
+		final PortCoordinates portCoord = new PortCoordinates();
+		portCoord.setShelf(String.valueOf(ui.getShelfId().getValue()));
+		portCoord.setSlot(String.valueOf(ui.getCardId().getValue()));
+		portCoord.setPort(String.valueOf(ui.getPortId().getValue()));
+
+		final GenericTPId genTpId = new GenericTPId();
+		genTpId.setCoord(portCoord);
+		final TPId tpId = new TPId();
+		tpId.setPtp(genTpId);
+		tpDn.setMe(meDn.getMe());
+		tpDn.setPresentTp();
+		tpDn.setTp(tpId);
+
+		return tpDn;
+	}
+
+	public TPDn makePTPDn(final X36ResourceIdentification ui, final X36NeId neId) {
+		// e se lo slot id non ce l'ho?
+		final TPDn dn = Naming.makePTPDn(this.get(neId),
+						ui.getCardInfo().getShelfId().getValue(),
+						ui.getCardInfo().getCardId().getValue(),
+						ui.getPortId().getValue());
+		return dn;
+	}
+
+	public TPDn makeFTPDn(final X36NeId neId, final X36ShelfId shelfId, final X36SlotId slotId, final X36CardId cardId, final X36PortId portId) {
+		final boolean useSlotForNaming = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingPTPUseSlotId, true);
+
+		final int id = useSlotForNaming ? slotId.getValue() : cardId.getValue();
+
+		final TPDn dn = Naming.makeFTPDn(this.get(neId),
+						shelfId.getValue(),
+						id,
+						portId.getValue());
+
+		return dn;
+	}
+
+	public TPDn makeFTPDn(final X36NeId neId, final X36ShelfId shelfId, final X36SlotId slotId,
+					final X36CardId cardId, final X36PortId portId, final X36Frequency frequency) {
+		final boolean useSlotForNaming = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingPTPUseSlotId, true);
+
+		final int id = useSlotForNaming ? slotId.getValue() : cardId.getValue();
+
+		final TPDn name = new TPDn();
+		name.setMe(this.get(neId));
+
+		final PortCoordinates portCoord = new PortCoordinates();
+		portCoord.setShelf(String.valueOf(shelfId.getValue()));
+		portCoord.setSlot(String.valueOf(id));
+		portCoord.setPort(String.valueOf(portId.getValue()));
+
+		final GenericTPId genTpId = new GenericTPId();
+		genTpId.setCoord(portCoord);
+		/**
+		 * As part of fix for TR HM40684 and HM48573: When frequency is not set
+		 * on an NE, the EM will set the frequency as -1 by default. This
+		 * frequency(i.e -1) will not be normalized. It will be normalized only
+		 * when the frequency is -ve in TMF.
+		 */
+
+		final X36Frequency newFreq = normalizeFrequency(frequency);
+		String label ;
+		if (newFreq.getValue() <= 0) {
+			label = "/frequency="+ sbiClient.getPlugIn().getProfile().getProperty(PluginProperty.negativeFreqeuncyForFTP,"UNCONFIGURED");
+		} else {
+			label = "/frequency="+ Naming.getFrequency(newFreq.getValue()).getValue();
+		}
+
+		name.setPresentTp();
+		genTpId.setLabel(label);
+		name.getTp().setFtp();
+		name.getTp().setFtp(genTpId);
+
+		return name;
+	}
+
+	public TPDn makeFTPDn(final X36NeId neId, final X36ShelfId shelfId, final X36SlotId slotId, final X36CardId cardId, final X36PortId portId,
+					final int vc4Id, final int vc3Id, final int vc2Id, final int vc12Id, final LayerRate lR) {
+
+		final boolean useSlotForNaming = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingPTPUseSlotId, true);
+
+		final int id = useSlotForNaming ? slotId.getValue() : cardId.getValue();
+
+		final TPDn dn = I36Naming.makeFTPDn(this.get(neId),
+						shelfId.getValue(),
+						id,
+						portId.getValue(),
+						vc4Id, vc3Id, vc2Id, vc12Id, lR);
+
+		return dn;
+	}
+
+	public GenericTPId makeFTPComponent(final X36ShelfId shelfId, final X36SlotId slotId, final X36CardId cardId, final X36PortId portId) {
+		final boolean useSlotForNaming = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingPTPUseSlotId, true);
+
+		final int id = useSlotForNaming ? slotId.getValue() : cardId.getValue();
+
+		return Naming.makeFTPId(String.valueOf(shelfId.getValue()),
+						String.valueOf(id),
+						String.valueOf(portId.getValue()));
+	}
+
+	public String makeValue(final GenericTPId id) {
+		return Naming.makeValue(id);
+	}
+
+	//	/* ***************************************************************************/
+	//	public TPDn makePTPDn(X36NeId neId, X36PortIdentification id) {
+	//		X36SlotId slotId = new X36SlotId(id.getCardId().getValue());
+	//		TPDn dn = makePTPDn(neId,
+	//							id.getShelfId(),
+	//							slotId,
+	//							id.getPortId());
+	//
+	//		return dn;
+	//	}
+	//
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36TrafficType tt) {
+		/*
+		 * potrei aver bisogno delle info sul timeslot inteso in senso generico
+		 */
+		TPDn dn = null;
+		boolean mplsSupport = false;
+		final MEId meId = tpDn.getMe();
+
+		final MEDn Medn = new MEDn();
+		Medn.setMe(meId);
+
+		final ManagedElement me = new ManagedElement();
+		me.setName(Medn);
+
+		final DBManagedElement dbME = sbiClient.getDbManager().getManagedElement(Medn);
+
+		final AdditionalInfo addInfo = dbME.getAdditionalInfo();
+		final NameAndStringValue[] addInfoList = addInfo.getAll();
+		for (final NameAndStringValue ai : addInfoList) {
+			if (ai.getName().toString().equalsIgnoreCase("LayeredParameters")) {
+				if (ai.getValue().toString() != null) {
+					mplsSupport = true;
+				}
+			}
+		}
+
+		switch (tt.getValue()) {
+		case X36TrafficType.vc12:
+			dn = makeCTPDn(tpDn, TpType.VC12);
+			break;
+
+		case X36TrafficType.vc2:
+			dn = makeCTPDn(tpDn, TpType.VC2);
+			break;
+
+		case X36TrafficType.vc3:
+			dn = makeCTPDn(tpDn, TpType.VC3);
+			break;
+
+		case X36TrafficType.vc4:
+			dn = makeCTPDn(tpDn, TpType.VC4);
+			break;
+		case X36TrafficType.odu1:
+			// if (mplsSupport) {
+			dn = makeCTPDn(tpDn, TpType.otmPort);
+			// }
+			break;
+		default:
+			break;
+		}
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36TimeSlot timeSlot, final X36TrafficType tt) {
+		/*
+		 * potrei aver bisogno delle info sul timeslot inteso in senso generico
+		 */
+
+		TPDn dn = null;
+		//TPDn dn = new TPDn();
+
+		switch (timeSlot.getMemberId()) {
+		case X36TimeSlot._null:
+			dn = makeCTPDn(tpDn, tt);
+			break;
+		case X36TimeSlot.klm:
+			dn = makeCTPDn(tpDn, timeSlot.getKlm());
+			break;
+		case X36TimeSlot.timeSlotId:
+			LOG.warn(new DumpInfo(timeSlot, "TimeSlot not yet implemented"));
+			break;
+
+			// Non piu` usato, ora ci sono gli alias.
+			//case X36TimeSlot.ochId:
+			// TODO come le becco le frequenze???
+			//X36OpticalChannelInfo info = (X36OpticalChannelInfo)getInfo(neId, id);
+			//			dn = makeCTPDn(neId, port, timeSlot.getochId());
+			//break;
+		case X36TimeSlot.simpleSonetKLM:
+			LOG.warn(new DumpInfo(timeSlot, "SimpleSonetKLM timeSlot not yet implemented"));
+			break;
+		case X36TimeSlot.genericTpId:
+			LOG.warn(new DumpInfo(timeSlot, "GenericTpId timeSlot not yet implemented"));
+			break;
+		case X36TimeSlot.oduTimeSlot:
+			// niente da fare poiche` si usa l'alias
+			break;
+		case X36TimeSlot.ochId:
+			// niente da fare poiche` si usa l'alias???
+			//log.error(new DumpInfo(id, "Che d'e`"));
+			break;
+			//		case X36TimeSlot.rst:
+			//			dn = makeCTPDn(tpDn, timeSlot);
+			//			break;
+		default:
+			LOG.error(new DumpInfo(timeSlot, "TimeSlot not yet implemented"));
+			break;
+		}
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36ConcatenatedTimeSlot concatTimeSlot, final X36TrafficType tt) {
+
+		/*
+		 * potrei aver bisogno delle info sul timeslot inteso in senso generico
+		 */
+		TPDn dn = null;
+
+		if (concatTimeSlot.isSetOfKLM()) {
+			final X36SetOfKLM setOf = concatTimeSlot.getSetOfKLM();
+			final int cardinality = setOf.size();
+			final X36KLM klm = setOf.get(0);
+			final int Id = klm.getAu4().getValue();
+			final int instanceId = (Id - 1) / cardinality + 1;
+
+
+			dn = makeCTPDn(tpDn, instanceId, cardinality);
+		} else {
+			LOG.error(new DumpInfo(concatTimeSlot, "TimeSlot not yet implemented"));
+		}
+		return dn;
+	}
+
+
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36TerminationChannel channel, final X36TrafficType tt) {
+		if (channel.isSimple()) {
+			return makeCTPDn(tpDn, channel.getSimple().getTimeSlot(), tt);
+		} else {
+			LOG.error(new DumpInfo(channel, "Channel not simple: not yet implemented"));
+		}
+		return null;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn ptpDn, final X36TimeSlot timeSlot, final X36AlSignalType ast) {
+		/*
+		 * questa e' da preferire a quella con il trafficType perche' ha piu' valori
+		 * come enumerato e quindi e' piu' flessibile
+		 * si potrebbe convertire il trafficType in un alSignalType se si puo'
+		 * in modo da avere un solo set di metodi
+		 *
+		 * potrei aver bisogno delle info sul timeslot inteso in senso generico
+		 */
+		TPDn dn = new TPDn(ptpDn);
+		//TPDn dn = new TPDn();
+
+		switch (timeSlot.getMemberId()) {
+		case X36TimeSlot._null:
+			dn = makeCTPDn(ptpDn, ast);
+			break;
+		case X36TimeSlot.klm:
+			dn = makeCTPDn(ptpDn, timeSlot.getKlm());
+			break;
+		case X36TimeSlot.timeSlotId:
+			LOG.warn(new DumpInfo(timeSlot, "TimeSlot not yet implemented"));
+			break;
+
+			// Non piu` usato, ora ci sono gli alias.
+			//case X36TimeSlot.ochId:
+			// TODO come le becco le frequenze???
+			//X36OpticalChannelInfo info = (X36OpticalChannelInfo)getInfo(neId, id);
+			//			dn = makeCTPDn(neId, port, timeSlot.getochId());
+			//break;
+		case X36TimeSlot.simpleSonetKLM:
+			LOG.warn(new DumpInfo(timeSlot, "SimpleSonetKLM timeSlot not yet implemented"));
+			break;
+		case X36TimeSlot.genericTpId:
+			LOG.warn(new DumpInfo(timeSlot, "GenericTpId timeSlot not yet implemented"));
+			break;
+		case X36TimeSlot.oduTimeSlot:
+			// niente da fare poiche` si usa l'alias
+			break;
+		case X36TimeSlot.ochId:
+			// niente da fare poiche` si usa l'alias???
+			//log.error(new DumpInfo(id, "Che d'e`"));
+			break;
+		default:
+			LOG.error(new DumpInfo(timeSlot, "TimeSlot not yet implemented"));
+			break;
+		}
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn ptpDn, final X36AlSignalType ast) {
+		/*
+		 * potrei aver bisogno delle info sul timeslot inteso in senso generico
+		 */
+		TpType tpType = null;
+		switch (ast.getValue()) {
+		case X36AlSignalType.tu12vc12:
+			tpType = TpType.VC12;
+			break;
+
+		case X36AlSignalType.tu2vc2:
+			tpType = TpType.VC2;
+			break;
+
+		case X36AlSignalType.tu3vc3:
+			tpType = TpType.VC3;
+			break;
+
+		case X36AlSignalType.au4vc4:
+			tpType = TpType.VC4;
+			break;
+
+		default:
+			LOG.warn(new DumpInfo(ptpDn, String.format("AlSignalType <%s> not supported for CTP on PTP...",
+							ast.getEnum())));
+			break;
+		}
+		final TPDn dn = (tpType != null) ? makeCTPDn(ptpDn, tpType) : null;
+
+		return dn;
+	}
+
+	/**
+	 * ProtectionGroupDn
+	 */
+	public ProtectionGroupDn makePGDn(final TPDn tpDn, final X36NeId neId) {
+		final ProtectionGroupDn out = new ProtectionGroupDn();
+		final MEId meId = makeMEId(neId);
+		out.setMe(meId);
+		final PGId pgId = new PGId();
+		final String tpName = Naming.makeValue(tpDn.getTp().getPtp().getCoord());
+		pgId.setValue(tpName);
+		out.setGroup(pgId);
+		return out;
+	}
+
+	/**
+	 * ProtectionGroupDn
+	 */
+	public ProtectionGroupDn makePGDn(final X36ProtectionUnitInfo unitInfo, final X36NeId neId) {
+		final TPDn ptpDn = makePTPDn(unitInfo.getResourceId(), neId);
+		return makePGDn(ptpDn, neId);
+	}
+
+	/**
+	 * EquipmentProtectionGroupDn
+	 */
+	public EquipmentProtectionGroupDn makeEPGDn(final EquipmentDn eqpDn, final X36NeId neId) {
+		final EquipmentProtectionGroupDn out = new EquipmentProtectionGroupDn();
+		out.setMe(eqpDn.getMe());
+		final PGId pgId = new PGId();
+		final String eqName = Naming.makeValue(eqpDn.getHolder());
+		pgId.setValue(eqName);
+		out.setGroup(pgId);
+		return out;
+	}
+
+	/**
+	 * EquipmentProtectionGroupDn
+	 */
+	public EquipmentProtectionGroupDn makeEPGDn(final X36ResourceIdentification resource, final X36NeId neId) {
+		final EquipmentDn eqpDn = makeSlotDn(resource.getCardInfo(), neId);
+		return makeEPGDn(eqpDn, neId);
+	}
+
+	//	/* ***************************************************************************/
+	//	public TPDn makeCTPDn(X36NeId neId, X36ChannelIdentification id, X36AlSignalType ast) {
+	//		/*
+	//		 * questa e' da preferire a quella con il trafficType perche' ha piu' valori
+	//		 * come enumerato e quindi e' piu' flessibile
+	//		 * si potrebbe convertire il trafficType in un alSignalType se si puo'
+	//		 * in modo da avere un solo set di metodi
+	//		 *
+	//		 * potrei aver bisogno delle info sul timeslot inteso in senso generico
+	//		 */
+	//		X36PortIdentification port     = id.getPort();
+	//		X36TimeSlot           timeSlot = id.gettimeSlot();
+	//
+	//		TPDn dn = null;
+	//		//TPDn dn = new TPDn();
+	//
+	//		switch (timeSlot.getMemberId()) {
+	//		case X36TimeSlot._null:
+	//			dn = makeCTPDn(neId, port, ast);
+	//			break;
+	//		case X36TimeSlot.klm:
+	//			dn = makeCTPDn(neId, port, timeSlot.getklm());
+	//			break;
+	//		case X36TimeSlot.timeSlotId:
+	//			log.warn(new DumpInfo(timeSlot, "TimeSlot not yet implemented"));
+	//			break;
+	//
+	//			// Non piu` usato, ora ci sono gli alias.
+	//		//case X36TimeSlot.ochId:
+	//			// TODO come le becco le frequenze???
+	//			//X36OpticalChannelInfo info = (X36OpticalChannelInfo)getInfo(neId, id);
+	////			dn = makeCTPDn(neId, port, timeSlot.getochId());
+	//			//break;
+	//		case X36TimeSlot.simpleSonetKLM:
+	//			log.warn(new DumpInfo(timeSlot, "SimpleSonetKLM timeSlot not yet implemented"));
+	//			break;
+	//		case X36TimeSlot.genericTpId:
+	//			log.warn(new DumpInfo(timeSlot, "GenericTpId timeSlot not yet implemented"));
+	//			break;
+	//		case X36TimeSlot.oduTimeSlot:
+	//			// niente da fare poiche` si usa l'alias
+	//			break;
+	//		case X36TimeSlot.ochId:
+	//			// niente da fare poiche` si usa l'alias???
+	//			//log.error(new DumpInfo(id, "Che d'e`"));
+	//			break;
+	//		default:
+	//			log.error(new DumpInfo(timeSlot, "TimeSlot not yet implemented"));
+	//			break;
+	//		}
+	//
+	//		return dn;
+	//	}
+
+	//	/* ***************************************************************************/
+	//	public TPDn makeCTPDn(X36NeId neId, X36PortIdentification id, X36AlSignalType ast) {
+	//		/*
+	//		 * potrei aver bisogno delle info sul timeslot inteso in senso generico
+	//		 */
+	//		TPDn dn = null;
+	//		switch (ast.getValue()) {
+	//		case X36AlSignalType.tu12vc12:
+	//			dn = makeCTPName(neId, id, PortType.e1);
+	//			break;
+	//
+	//		case X36AlSignalType.tu2vc2:
+	//			dn = makeCTPName(neId, id, PortType.e2);
+	//			break;
+	//
+	//		case X36AlSignalType.tu3vc3:
+	//			dn = makeCTPName(neId, id, PortType.e3);
+	//			break;
+	//
+	//		case X36AlSignalType.au4vc4:
+	//			dn = makeCTPName(neId, id, PortType.e4);
+	//			break;
+	//
+	//		default:
+	//			String coord = TmfNameUtilities.toString(getEMId());
+	//			coord += ":" + neId.getValue();
+	//			coord += "," + id.getShelfId().getValue();
+	//			coord += "," + id.getCardId().getValue();
+	//			coord += "," + id.getPortId().getValue();
+	//
+	//			log.warn(String.format("AlSignalType <%s> not supported for CTP on <%s>...",
+	//							ast.getEnum(), coord));
+	//			break;
+	//		}
+	//
+	//		return dn;
+	//	}
+
+	/* ***************************************************************************/
+	public CtpName makeCTPName(final X36Frequency sinkFreq) { //throws PlugInException {
+
+		final CtpName ctpName = new CtpName();
+
+		//		Directionality dir = new Directionality(Directionality.d_bidirectional);
+		//		ctpName.getComponents().set(dir);
+
+		final CtpNameComponents ctpNameC = new CtpNameComponents();
+
+		// frequenza in tera hertz
+		// moved into normalizeFrequency
+		//		int frequency = sinkFreq.getValue();
+		//		if (frequency < 10000) {
+		//			/*
+		//			 * GG 18/11/2008
+		//			 * It seems MV36 rounds the numbers...
+		//			 */
+		//			frequency = I36Utilities.makeFrequencyFromNM(frequency);
+		//			sinkFreq.set(frequency);
+		//		}
+		//
+		//		OchCtp ochComponent = Naming.getOchComponent(frequency);
+		/**
+		 * As part of fix for TR HM40684 and HM48573: When frequency is not set
+		 * on an NE, the EM will set the frequency as -1 by default. This
+		 * frequency(i.e -1) will not be normalized. It will be normalized only
+		 * when the frequency is -ve in TMF.
+		 */
+		final CtpNameComponent ctpNameComp = new CtpNameComponent();
+		final X36Frequency normalizedFreq = new X36Frequency(normalizeFrequency(sinkFreq).getValue());
+		Frequency freq = null;
+		if (normalizedFreq.getValue() <= 0) {
+			String label = null;
+			final String property = sbiClient.getPlugIn().getProfile().getProperty(PluginProperty.negativeFreqeuncyForCTP,"UNCONFIGURED");
+			label = property;
+			freq = new Frequency(label);
+		} else {
+			freq = Naming.getFrequency(sinkFreq);
+		}
+
+		ctpNameComp.setFrequency(freq);
+		ctpNameC.add(ctpNameComp);
+		ctpName.setComponents(ctpNameC);
+
+
+		//		OchCtp ochComponent = Naming.getOchComponent(sinkFreq.getValue());
+		//
+		//		ctpNameC.setOch(ochComponent);
+		//		ctpName.setComponents(ctpNameC);
+
+		return ctpName;
+	}
+
+	/**
+	 * X36OpticalChannelInfo
+	 */
+	/* ***************************************************************************/
+	public CtpName makeCTPName(final X36OpticalChannelInfo ochInfo) {//throws PlugInException {
+
+		//controllo (per sicurezza) se le due frequenze sono uguali
+		final X36Frequency sinkFreq = ochInfo.getOpticFrequencySink();
+		final X36Frequency sourceFreq = ochInfo.getOpticFrequencySource();
+
+		if (sinkFreq.getValue() != sourceFreq.getValue()) {
+			LOG.warn(String.format("Optic Frequency Sink <%d> differs from " +
+							"Optic Frequency Source <%d>. Getting the sink one.",
+							sinkFreq.getValue(), sourceFreq.getValue()));
+		}
+
+		final CtpName ctpName = new CtpName();
+
+		//		Directionality dir = new Directionality(Directionality.d_bidirectional);
+		//		ctpName.getComponents().set(dir);
+
+		final CtpNameComponents ctpNameC = new CtpNameComponents();
+
+		/*
+		 * GG quelli stronzi della X36 non hanno previsto la wavelength
+		 * per i DWDM arriva proprio questa...
+		 * tentiamo di discriminare in base al valore numerico
+		 * prendiamo come soglia 10000
+		 * se < 10000 allora e' una lunghezza d'onda
+		 * dovrebbe essere espressa in pm (pico metri)
+		 * la riporto in frequenza espressa in THz facendo
+		 * F = C/lamdba dove C ~ 300000
+		 */
+
+		// moved into normalizeFrequency
+		//		int frequency = sinkFreq.getValue();
+		//		if (frequency < 10000) {
+		//			/*
+		//			 * GG 27/10/2008
+		//			 * Pare che il MV36 faccia arrotondamento
+		//			 * GG 18/11/2008
+		//			 * moved into I36Utilities
+		//			 */
+		//			frequency = I36Utilities.makeFrequencyFromNM(frequency);
+		//			sinkFreq.set(frequency);
+		//		}
+
+		// frequenza in tera hertz
+
+		//		OchCtp ochComponent = Naming.getOchComponent(sinkFreq.getValue(), ochInfo.getOchId().getValue());
+
+
+		//		ctpNameC.setOch(ochComponent);
+		//		ctpName.setComponents(ctpNameC);
+		/**
+		 * As part of fix for TR HM40684 and HM48573: When frequency is not set
+		 * on an NE, the EM will set the frequency as -1 by default. This
+		 * frequency(i.e -1) will not be normalized. It will be normalized only
+		 * when the frequency is -ve in TMF.
+		 */
+
+		final CtpNameComponent ochComp = new CtpNameComponent();
+		final X36Frequency normalizedFreq = new X36Frequency(normalizeFrequency(sinkFreq).getValue());
+		Frequency freq = null;
+		if (normalizedFreq.getValue() <= 0) {
+			String label = null;
+			final String property = sbiClient.getPlugIn().getProfile().getProperty(PluginProperty.negativeFreqeuncyForCTP,"UNCONFIGURED");
+			label = "/frequency="+property;
+			freq = new Frequency(label);
+		} else {
+			freq = Naming.getFrequency(sinkFreq);
+		}
+
+		ochComp.setFrequency(freq);
+		ctpNameC.add(ochComp);
+		ctpName.setComponents(ctpNameC);
+
+		return ctpName;
+	}
+
+	/* ***************************************************************************/
+	static public CtpName makeCTPName(final X36WdmPort wdmPort) {
+		final CtpName ctpName = new CtpName();
+
+		//		Directionality dir = new Directionality(Directionality.d_bidirectional);
+		//		ctpName.getComponents().set(dir);
+
+		final CtpNameComponents ctpNameC = new CtpNameComponents();
+		final CtpNameComponent wdmComp = new CtpNameComponent();
+
+		// fisso sempre a 1
+		//		WdmAmplifierCtp amplifCtp = new WdmAmplifierCtp();
+		//		amplifCtp.setOms(1);
+
+		//		ctpNameC.setWdmAmplifier(amplifCtp);
+		//		ctpName.setComponents(ctpNameC);
+
+		wdmComp.getOms().set(1);
+		ctpNameC.add(wdmComp);
+
+		ctpName.setComponents(ctpNameC);
+
+		return ctpName;
+	}
+
+	/**
+	 * X36WdmAdaptPort
+	 */
+	/* ***************************************************************************/
+	public CtpName makeCTPName(final X36WdmAdaptPort wdmAdaptPort) {// throws PlugInException {
+		//controllo (per sicurezza) se le due frequenze sono uguali
+		final X36Frequency sinkFreq = wdmAdaptPort.getOpticFrequencySink();
+		final X36Frequency sourceFreq = wdmAdaptPort.getOpticFrequencySource();
+
+		if (sinkFreq.getValue() != sourceFreq.getValue()) {
+			LOG.warn(String.format("Optic Frequency Sink <%d> differs from " +
+							"Optic Frequency Source <%d>. Getting the sink one.",
+							sinkFreq.getValue(), sourceFreq.getValue()));
+		}
+
+		return makeCTPName(sinkFreq);
+	}
+
+	/* ***************************************************************************/
+	static public CtpName makeCTPName(final X36SlotInformation info) {
+		final X36KLM klm = new X36KLM();
+
+		klm.setAu4(info.getAu4Id().getValue());
+		final CtpName ctpName = makeCTPName(klm, Directionality.D_BIDIRECTIONAL);
+
+		return ctpName;
+	}
+
+	/* ***************************************************************************/
+	static public CtpName makeCTPName(final X36KLM klm, final Directionality directionality) {
+		final CtpName ctpName = new CtpName();
+
+		final CtpNameComponents ctpNameC = ctpName.getComponents();
+
+		return makeCTPName(ctpNameC, klm, directionality);
+	}
+
+	static public CtpName makeCTPName(final CtpNameComponents ctpNameC, final X36KLM klm, final Directionality directionality) {
+		final CtpNameComponent name = new CtpNameComponent();
+		//		name.getSts3c_au4().setVc4(klm.getAu4().getValue());
+		name.getSts3c_au4().getAu4().setJ(klm.getAu4().getValue());
+		ctpNameC.add(name);
+
+		if (klm.getTu3().getValue() != 0) {
+			// we need to add  LO components
+			fillName(ctpNameC, klm);
+		}
+		//		if (klm.getTu3().getValue() == 0) {// au4
+		//			ctpNameC.setHo();
+		//			ctpNameC.getHo().setSts3c_au4();
+		//			ctpNameC.getHo().getSts3c_au4().setJ(klm.getAu4());
+		//		} else {// tuxy
+		//			ctpNameC.setLoOfsts3c_au4();
+		//			Name(ctpNameC, klm);
+		//		}
+
+		final CtpName ctpName = new CtpName();
+
+		ctpName.setComponents(ctpNameC);
+
+		return ctpName;
+	}
+
+	/* ***************************************************************************/
+	static public CtpName makeCTPName(final int primaryVlanID,
+					final CTPType type) {
+		/* ************************************************************************** */
+		CtpName ctpName = new CtpName();
+		final CtpNameComponents name = new CtpNameComponents();
+		final CtpNameComponent nameComp1 = new CtpNameComponent();
+		//CtpNameComponent nameComp2 = new CtpNameComponent();
+
+		switch (type) {
+		case ETHERNET: {
+			// EthernetComponent ethComponent = new EthernetComponent();
+			// ethComponent.setEthernet(id);
+			//
+			// CtpNameComponents ctpNameC = new CtpNameComponents();
+			// ctpNameC.setEthernet(ethComponent);
+			//
+			// ctpName.setComponents(ctpNameC);
+
+			nameComp1.setEth(Integer.toString(primaryVlanID));
+			name.add(nameComp1);
+			ctpName.setComponents(name);
+		}
+		break;
+		case UNTAGGED: {
+			// EthernetComponent ethComponent = new EthernetComponent();
+			// ethComponent.setEthernet(id);
+			//
+			// CtpNameComponents ctpNameC = new CtpNameComponents();
+			// ctpNameC.setEthernet(ethComponent);
+			//
+			// ctpName.setComponents(ctpNameC);
+
+			nameComp1.setEth("Puntagged");
+			name.add(nameComp1);
+			ctpName.setComponents(name);
+		}
+		break;
+
+		/*
+		 * case SINGLEVLANTAGGED: {
+		 * 
+		 * if (isSvid == null) { if (primaryVlanID > 0) {
+		 * nameComp1.setEthvid(Integer.toString(primaryVlanID)); } else if
+		 * (primaryVlanID == 0) { nameComp1.setEth("Palltagged"); } } else if
+		 * (isSvid.equals("yes")) {
+		 * nameComp1.setEthsvid(Integer.toString(primaryVlanID)); } else {
+		 * nameComp1.setEthcvid(Integer.toString(primaryVlanID)); }
+		 * 
+		 * name.add(nameComp1); ctpName.setComponents(name); } break;
+		 */
+
+		// DUALVLANTAGGED case block is removed because it is handled inside
+		// makeCTPDnQinQ() method of the same class as part of
+		// the fix for TR HO32024.
+
+		case ENCAPSULATION: {
+			// InverseMultiplexingComponent iMComponent = new
+			// InverseMultiplexingComponent();
+			//
+			// EthernetFragment ethFragment = new EthernetFragment();
+			// ethFragment.getEncapsulation().setEncapsulation(id);
+			// ethFragment.getHo_lo().setNone();
+			//
+			// Fragment fragment = new Fragment();
+			// fragment.setEthernet(ethFragment);
+
+			// iMComponent.setFragment(fragment);
+			// Encapsulation enc = new Encapsulation();
+			// EthernetEncapsulation ethEnc = new EthernetEncapsulation();
+			// ethEnc.setEncapsulation(id);
+			//
+			// enc.setEthernet(ethEnc);
+			// iMComponent.setEncapsulation(enc);
+
+			nameComp1.setEncapsulation(primaryVlanID);
+			name.add(nameComp1);
+			ctpName.setComponents(name);
+
+			// CtpNameComponents ctpNameC = new CtpNameComponents();
+			// ctpNameC.setInverseMultiplexing(iMComponent);
+			//
+			// ctpName.setComponents(ctpNameC);
+		}
+		break;
+
+		default:
+			ctpName = null;
+			break;
+		}
+
+		return ctpName;
+	}
+
+	/* ***************************************************************************/
+	static public void fillName(final CtpNameComponents cnc, final X36KLM klm) {
+		if (klm.getTu2().getValue() == 0) {// tu3
+			final CtpNameComponent name = new CtpNameComponent();
+			name.getTu3_vc3().getTu3().setK(klm.getTu3().getValue());
+			cnc.add(name);
+		} else if (klm.getTu12().getValue() == 0) {// tu2
+			final CtpNameComponent name = new CtpNameComponent();
+			name.getVt6_tu2().getTu2().setK(klm.getTu3().getValue());
+			name.getVt6_tu2().getTu2().setL(klm.getTu2().getValue());
+			cnc.add(name);
+		} else {// tu12
+			final CtpNameComponent name = new CtpNameComponent();
+			name.getVt2_tu12().getTu12().setK(klm.getTu3().getValue());
+			name.getVt2_tu12().getTu12().setL(klm.getTu2().getValue());
+			name.getVt2_tu12().getTu12().setM(klm.getTu12().getValue());
+			cnc.add(name);
+		}
+	}
+
+	/* ***************************************************************************/
+	public CtpName makeCTPName(final X36Frequency frequency, final X36ODUTimeSlot timeSlot, final Directionality directionality) {
+		/*
+		 * se la frequency == -1 la si omette
+		 */
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents name = ctpName.getComponents();
+
+		//		ctpName.setDirectionality(directionality);
+
+		//		CtpNameComponents ctpNameC = ctpName.getComponents();
+		//		ctpNameC.setOch();
+
+		/*if (frequency.getValue() != -1){
+			CtpNameComponent cnc = new CtpNameComponent();
+			cnc.getFrequency().set(Naming.getFrequency(normalizeFrequency(frequency).getValue()));
+			name.add(cnc);
+		}*/
+		/**
+		 * As part of fix for TR HM40684 and HM48573: When frequency is not set
+		 * on an NE, the EM will set the frequency as -1 by default. This
+		 * frequency(i.e -1) will not be normalized. It will be normalized only
+		 * when the frequency is -ve in TMF.
+		 */
+		Frequency freq = null;
+
+
+		CtpNameComponent cnc = new CtpNameComponent();
+		//fix for TR HM40684,HM48573 START
+		final X36Frequency normalizedFreq = new X36Frequency(normalizeFrequency(frequency).getValue());
+		if (normalizedFreq.getValue() <= 0) {
+			String label = null;
+			final String property = sbiClient.getPlugIn().getProfile().getProperty(PluginProperty.negativeFreqeuncyForCTP,"UNCONFIGURED");
+			label = "/frequency="+property;
+			freq = new Frequency(label);
+
+			freq = Naming.getFrequency(frequency);
+
+
+
+			cnc.getFrequency().set(freq);
+			name.add(cnc);
+		}
+
+
+		//		OchCtp och = ctpNameC.getOch();
+		//
+		//		if (frequency.getValue() != -1) {
+		//			normalizeFrequency(frequency);
+		//			och.setFrequency(Naming.getFrequency(frequency));
+		//		}
+
+		final X36ODUId oduId = timeSlot.getOduId();
+		if (oduId.getOdu3().getValue() > 0) {
+			cnc = new CtpNameComponent();
+			cnc.getOdu3().set(oduId.getOdu3().getValue());
+			name.add(cnc);
+		}
+		if (oduId.getOdu2().getValue() > 0) {
+			cnc = new CtpNameComponent();
+			cnc.getOdu2().set(oduId.getOdu2().getValue());
+			name.add(cnc);
+		}
+		if (oduId.getOdu1().getValue() > 0) {
+			cnc = new CtpNameComponent();
+			cnc.getOdu1().set(oduId.getOdu1().getValue());
+			name.add(cnc);
+		}
+
+
+		//		X36ODUId oduId = timeSlot.getOduId();
+		//		if (oduId.getOdu3().getValue() > 0)
+		//			och.setOdu3(oduId.getOdu3().getValue());
+		//		if (oduId.getOdu2().getValue() > 0)
+		//			och.setOdu2(oduId.getOdu2().getValue());
+		//		if (oduId.getOdu1().getValue() > 0)
+		//			och.setOdu1(oduId.getOdu1().getValue());
+
+		if (timeSlot.isPresentJklm()) {
+			final X36KLM klm = timeSlot.getJklm();
+			makeCTPName(name, klm, Directionality.D_BIDIRECTIONAL);
+		}
+		//		if (timeSlot.isPresentJklm()) {
+		//			X36KLM klm = timeSlot.getJklm();
+		//
+		//			och.setPresentTermination();
+		//			OchCtpTermination termination = och.getTermination();
+		//
+		//			if (klm.getTu3().getValue() == 0) {
+		//				termination.setHo();
+		//
+		//				termination.getHo().setSts3c_au4();
+		//				termination.getHo().getSts3c_au4().setJ(klm.getAu4().getValue());
+		//			} else {
+		//				termination.setLoOfsts3c_au4();
+		//
+		//				fillName(termination.getLoOfsts3c_au4(), klm);
+		//			}
+		//		}
+
+		return ctpName;
+	}
+
+
+	/* ************************************************************************** */
+	/**
+	 * This method constructs CTPName for potentially concatenated CTP's for OTMn Port
+	 * @param frequency
+	 * @param timeSlot
+	 * @param directionality
+	 * @param instanceId
+	 * @param concatenationOrder
+	 * @return
+	 */
+	public CtpName makeCTPName(final X36Frequency frequency, final X36ODUTimeSlot timeSlot, final Directionality directionality, final int instanceId,
+					final int concatenationOrder) {
+		/*
+		 * se la frequency == -1 la si omette
+		 */
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents name = ctpName.getComponents();
+
+		/**
+		 * As part of fix for TR HM40684 and HM48573: When frequency is not set on an NE, the EM will set the frequency as -1 by default.
+		 * This frequency(i.e -1) will not be normalized. It will be normalized only when the frequency is -ve in TMF.
+		 */
+		Frequency freq = null;
+
+		CtpNameComponent cnc = new CtpNameComponent();
+		// fix for TR HM40684,HM48573 START
+		final X36Frequency normalizedFreq = new X36Frequency(normalizeFrequency(frequency).getValue());
+		if (normalizedFreq.getValue() <= 0) {
+			String label = null;
+			final String property = sbiClient.getPlugIn().getProfile().getProperty(PluginProperty.negativeFreqeuncyForCTP, "UNCONFIGURED");
+			label = "/frequency=" + property;
+			freq = new Frequency(label);
+
+			freq = Naming.getFrequency(frequency);
+
+			cnc.getFrequency().set(freq);
+			name.add(cnc);
+		}
+
+		// OchCtp och = ctpNameC.getOch();
+		//
+		// if (frequency.getValue() != -1) {
+		// normalizeFrequency(frequency);
+		// och.setFrequency(Naming.getFrequency(frequency));
+		// }
+
+		final X36ODUId oduId = timeSlot.getOduId();
+		if (oduId.getOdu3().getValue() > 0) {
+			cnc = new CtpNameComponent();
+			cnc.getOdu3().set(oduId.getOdu3().getValue());
+			name.add(cnc);
+		}
+		if (oduId.getOdu2().getValue() > 0) {
+			cnc = new CtpNameComponent();
+			cnc.getOdu2().set(oduId.getOdu2().getValue());
+			name.add(cnc);
+		}
+		if (oduId.getOdu1().getValue() > 0) {
+			cnc = new CtpNameComponent();
+			cnc.getOdu1().set(oduId.getOdu1().getValue());
+			name.add(cnc);
+		}
+
+		// X36ODUId oduId = timeSlot.getOduId();
+		// if (oduId.getOdu3().getValue() > 0)
+		// och.setOdu3(oduId.getOdu3().getValue());
+		// if (oduId.getOdu2().getValue() > 0)
+		// och.setOdu2(oduId.getOdu2().getValue());
+		// if (oduId.getOdu1().getValue() > 0)
+		// och.setOdu1(oduId.getOdu1().getValue());
+
+		final CtpNameComponent sdhCtp = new CtpNameComponent();
+
+		// SdhConcatenatedTpComponent sdhConcatComponent = new SdhConcatenatedTpComponent();
+
+		switch (concatenationOrder) {
+		case 1:
+			// sdhConcatComponent.setSts3c_vc4_1c(instanceId);
+			sdhCtp.getSts3c_au4().setVc4(instanceId);
+			break;
+
+		case 4:
+			// sdhConcatComponent.setSts12c_vc4_4c(instanceId);
+			sdhCtp.getSts12c_vc4_4c().setVc(instanceId);
+			break;
+
+		case 16:
+			// sdhConcatComponent.setSts48c_vc4_16c(instanceId);
+			sdhCtp.getSts48c_vc4_16c().setVc(instanceId);
+			break;
+
+		case 64:
+			// sdhConcatComponent.setSts192c_vc4_64c(instanceId);
+			sdhCtp.getSts192c_vc4_64c().setVc(instanceId);
+			break;
+
+		case 256:
+			// sdhConcatComponent.setSts768c_vc4_256c(instanceId);
+			sdhCtp.getSts768c_vc4_256c().setVc(instanceId);
+			break;
+
+		default:
+			LOG.error("This concatenation order <" + concatenationOrder + "> is not supported.");
+			break;
+		}
+
+		// ctpNameC.setConcatenated(sdhConcatComponent);
+		// ctpName.setComponents(ctpNameC);
+		name.add(sdhCtp);
+		// if (timeSlot.isPresentJklm()) {
+		// X36KLM klm = timeSlot.getJklm();
+		//
+		// och.setPresentTermination();
+		// OchCtpTermination termination = och.getTermination();
+		//
+		// if (klm.getTu3().getValue() == 0) {
+		// termination.setHo();
+		//
+		// termination.getHo().setSts3c_au4();
+		// termination.getHo().getSts3c_au4().setJ(klm.getAu4().getValue());
+		// } else {
+		// termination.setLoOfsts3c_au4();
+		//
+		// fillName(termination.getLoOfsts3c_au4(), klm);
+		// }
+		// }
+
+		return ctpName;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final X36PortIdentification portIdentity, final long mfdId) {
+
+		String str = makeNativeEMSName(portIdentity);
+
+		if (str.length() > 0){
+			str += ctpNativeNameSeparator;
+		}
+		str += mfdId;
+
+		return str;
+	}
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName, final X36PortInformation portInfo, final X36ODUId oduId, final int instanceId, final int concatenationOrder) {
+		IntegerType ochId = new IntegerType(1);
+		if (oduId.isPresentOchId()) {
+			ochId = oduId.getOchId();
+		}
+
+		String str = makeNativeEMSName(cardName, portInfo, ochId);
+
+		if (str.length() > 0) {
+			str += ctpNativeNameSeparator;
+		}
+		str += oduId.getOdu3().getValue() + ctpNativeNameSeparator;
+		str += oduId.getOdu2().getValue() + ctpNativeNameSeparator;
+		str += oduId.getOdu1().getValue() + ctpNativeNameSeparator;
+		str += instanceId + ctpNativeNameSeparator + concatenationOrder + "c";
+
+		return str;
+	}
+
+	/* ************************************************************************** */
+
+	public String makeNativeEMSName(final X36PortIdentification portIdentity) {
+
+		final String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.namingPTPNativeNameFormat, "%s-%d");
+		final String str = portIdentity.getShelfId().getValue() + ctpNativeNameSeparator + portIdentity.getCardId().getValue();
+
+		final String nativeEMSName = String.format(format, str, portIdentity.getPortId().getValue());
+
+		return nativeEMSName;
+	}
+
+
+
+	/* ***************************************************************************/
+
+	// naming of FDFR
+	public FDFrDn makeFDFrDn(final FDDn dn) {
+
+		final FDId fdId =  dn.getFd();
+		final FDFrDn frDn = new FDFrDn();
+		frDn.setFd(fdId);
+		final UUID uuId = UUID.randomUUID();
+		final String name = uuId.toString();
+		final FDFrId fdFrId = new FDFrId(name);
+		frDn.setFdFr(fdFrId);
+
+		return frDn;
+
+	}
+
+	/**
+	 * @return - TCProfileDn
+	 */
+	public static TCProfileDn makeTCProfileDn() {
+		final TCProfileDn tcProfDn = new TCProfileDn();
+
+		final String uuId = UUID.randomUUID().toString();
+		tcProfDn.setTcProfile(uuId);
+
+		return tcProfDn;
+	}
+
+	/* ***************************************************************************/
+	// naming of  MFD
+
+	public MFDDn makeMFDDn(final long mfdId, final X36NeId neId) {
+
+		final MFDDn dn = new MFDDn();
+		final MEId meId = makeMEId(neId);
+
+		if (meId == null){
+			return null;
+		}
+
+		dn.setMe(meId);
+		dn.setMfd(String.valueOf(mfdId));
+		return dn;
+
+	}
+	/* ***************************************************************************/
+	//naming of FD
+
+	public FDDn makeFDDn(final DBManagedElement ne, final X36MfdId mfdId) {
+
+		final String format = sbiClient.getProfile().getProperty(
+						I36PlugIn.PluginProperty.fdNameFormat, "%s-%s");
+		final String name = String.format(format, ne.getName(), mfdId.getValue());
+		final FDDn dn = makeFDDn(name);
+		return dn;
+	}
+	/* ***************************************************************************/
+	//static public CtpName makeCTPName(X36OchId ochId, int directionality) {
+	//	CtpName ctpName = new CtpName();
+	//
+	//	ctpName.setDirectionality(directionality);
+	//
+	//	CtpNameComponents ctpNameC = ctpName.getComponents();
+	//	OchCtp            och = new OchCtp();
+	//
+	//	och.setchannel(ochId.getValue());
+	//
+	//	ctpNameC.setOch(och);
+	//
+	//	return ctpName;
+	//}
+
+	public FDDn makeFDDn(final String name) {
+		final FDDn dn = new FDDn();
+		final FDId fdId = new FDId(name);
+		// dn.getFd().set(fdId);
+		dn.setFd(fdId);
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final TpType type) {//throws PlugInException {
+		TPDn              dn = new TPDn(tpDn);
+		dn.setPresentCtp();
+
+		final CtpName           name = dn.getCtp();
+		final CtpNameComponents components = new CtpNameComponents();
+		final CtpNameComponent component = new CtpNameComponent();
+
+
+		//        name.getDirectionality().setD_bidirectional();
+
+
+		switch (type) {
+		case VC12: // pdh into SDH (adaptation)
+			//            	component.setPdhTrib();
+			//            	component.getPdhTrib().setVt2_tu12(1);
+			component.getVt2_tu12().setVc12(1);
+			break;
+		case VC2:  // pdh into SDH (adaptation)
+			//            	component.setPdhTrib();
+			//            	component.getPdhTrib().setVt6_tu2(1);
+			component.getVt6_tu2().setVc2(1);
+			break;
+		case VC3:  // pdh into SDH (adaptation)
+		case ds3_lo:  // pdh into SDH (adaptation)
+			//            	component.setPdhTrib();
+			//            	component.getPdhTrib().setTu3_vc3(1);
+			component.getTu3_vc3().setVc3(1);
+			break;
+		case VC4:  // pdh into SDH (adaptation)
+			//            	component.setPdhTrib();
+			//            	component.getPdhTrib().setSts3c_au4(1);
+			component.getSts3c_au4().setVc4(1);
+			break;
+		case ms_radioPort:
+			component.getLine3_ms1().set(1);
+			break;
+		default:
+			LOG.error(new DumpInfo(type, "Port type not supported for port..."));
+			dn = null;
+			break;
+		}
+		components.add(component);
+		name.setComponents(components);
+
+		return dn;
+	}
+
+	// Creates a CTP Name for TpTypes E1, E2, E3
+	public TPDn makePDHCTPDn(final TPDn tpDn, final int e3Id, final int e2Id, final int e1Id) {
+
+		final TPDn dn = new TPDn(tpDn);
+		dn.setPresentCtp();
+
+		final CtpName           name = dn.getCtp();
+		final CtpNameComponents components = new CtpNameComponents();
+
+		if (e3Id > 0) {
+			final CtpNameComponent component = new CtpNameComponent();
+			component.getE3().set(e3Id);
+			components.add(component);
+		}
+
+		if (e2Id > 0) {
+			final CtpNameComponent component = new CtpNameComponent();
+			component.getE2().set(e2Id);
+			components.add(component);
+		}
+
+		if (e1Id > 0) {
+			final CtpNameComponent component = new CtpNameComponent();
+			component.getE1().set(e1Id);
+			components.add(component);
+		}
+
+		name.setComponents(components);
+		return dn;
+	}
+
+	// Creates a CTP Name for E1 CTP in LTU using klm structure
+	public TPDn makeCTPDn(final TPDn tpDn, final X36KLM klm, final TpType tpType) {
+		final TPDn dn = new TPDn(tpDn);
+
+		final CtpName tuCtpName = makeCTPName(klm, Directionality.D_BIDIRECTIONAL);
+		final CtpName ctpName = new CtpName();
+
+		final CtpNameComponents ctpComps = tuCtpName.getComponents();
+		final CtpNameComponent ctpComp = new CtpNameComponent();
+		ctpComp.getE1().set(1);
+
+		ctpComps.add(ctpComp);
+		ctpName.setComponents(ctpComps);
+
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36Frequency frequency) {
+		final TPDn dn = new TPDn(tpDn);
+
+		// costruisco la parte di CTP name
+		CtpName ctpName = new CtpName();
+		ctpName = makeCTPName(frequency);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36Frequency frequency, final X36ODUId oduId, final boolean dsr) {
+
+		TPDn dn;
+		if (frequency != null){
+			dn = makeCTPDn(tpDn, frequency);
+		}
+		else{
+			dn = new TPDn(tpDn);
+		}
+
+		//		TPDn dn = new TPDn(tpDn);
+
+		final CtpName ctpName = dn.getCtp();
+		final CtpNameComponents ochComponents = ctpName.getComponents();
+
+		CtpNameComponent ochComponent = new CtpNameComponent();
+
+		//		OchCtp ochCtp = ctpName.getComponents().getOch();
+
+		if (oduId != null) {
+			if (oduId.getOdu3().getValue() > 0) {
+				//ochCtp.setOdu3(oduId.getOdu3().getValue());
+				ochComponent.getOdu3().set(oduId.getOdu3().getValue());
+				ochComponents.add(ochComponent);
+			}
+			if (oduId.getOdu2().getValue() > 0) {
+				//ochCtp.setOdu2(oduId.getOdu2().getValue());
+				ochComponent = new CtpNameComponent();
+				ochComponent.getOdu2().set(oduId.getOdu2().getValue());
+				ochComponents.add(ochComponent);
+			}
+			if (oduId.getOdu1().getValue() > 0) {
+				//ochCtp.setOdu1(oduId.getOdu1().getValue());
+				ochComponent = new CtpNameComponent();
+				ochComponent.getOdu1().set(oduId.getOdu1().getValue());
+				ochComponents.add(ochComponent);
+			}
+			if (oduId.isPresentOdu0()) {
+				if (oduId.getOdu0().getValue() > 0) {
+					// ochCtp.setOdu1(oduId.getOdu1().getValue());
+					ochComponent = new CtpNameComponent();
+					ochComponent.getOdu0().set(oduId.getOdu0().getValue());
+					ochComponents.add(ochComponent);
+				}
+			}
+		}
+
+		if (dsr) {
+			ochComponent = new CtpNameComponent();
+			ochComponent.setDsr(1);
+			ochComponents.add(ochComponent);
+			//			ochCtp.setPresentTermination();
+			//			ochCtp.getTermination().setDsr();
+		}
+
+		//		CtpName ctpName = new CtpName();
+		//		ctpName.getComponents().setOch(ochCtp);
+		//		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36ClientTrafficType clTrafficType, final int id) {
+
+		final TPDn dn = new TPDn(tpDn);
+		dn.setPresentCtp();
+
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents ctpComp = new CtpNameComponents();
+		final CtpNameComponent cbrCtp = new CtpNameComponent();
+		if (clTrafficType.equals(X36ClientTrafficType.CTTSTM1)) {
+			cbrCtp.setSection3_rs1(id);
+		} else if (clTrafficType.equals(X36ClientTrafficType.CTTSTM4)) {
+			cbrCtp.setSection12_rs4(id);
+		} else if (clTrafficType.equals(X36ClientTrafficType.CTTSTM16)) {
+			cbrCtp.setSection48_rs16(id);
+		} else if (clTrafficType.equals(X36ClientTrafficType.CTTSTM64)) {
+			cbrCtp.setSection192_rs64(id);
+		} else if (clTrafficType.equals(X36ClientTrafficType.CTTSTM256)) {
+			cbrCtp.setSection768_rs256(id);
+		} else {
+			cbrCtp.setDsr(id);
+		}
+		ctpComp.add(cbrCtp);
+		ctpName.setComponents(ctpComp);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36ODUMapping mapping, final int id) {
+
+		final TPDn dn = new TPDn(tpDn);
+
+		dn.setPresentCtp();
+
+		final CtpName ctpName = new CtpName();
+		//        ctpName.getDirectionality().setD_bidirectional();
+
+		//        CbrComponent cbrComponent = new CbrComponent();
+		final CtpNameComponents ctpComp = new CtpNameComponents();
+		final CtpNameComponent cbrCtp = new CtpNameComponent();
+
+		if (mapping.isOdu()) {
+			final X36ODUMappingInfo mappingInfo = mapping.getOdu();
+
+			//        	OduMapping oduMap = new OduMapping();
+			switch(mappingInfo.getKLevel().getValue()) {
+			case 1:
+				cbrCtp.setOdu1(id);
+				break;
+
+			case 2:
+				cbrCtp.setOdu2(id);
+				break;
+
+			case 3:
+				cbrCtp.setOdu3(id);
+				break;
+
+			default:
+				LOG.error("Invalid kLevel " + mappingInfo.getKLevel().getValue() +", setting to odu1");
+				cbrCtp.setOdu1(id);
+				break;
+			}
+
+		} else{
+			cbrCtp.setDsr(id);
+		}
+
+		//        ctpName.getComponents().setCbr(cbrComponent);
+		ctpComp.add(cbrCtp);
+		ctpName.setComponents(ctpComp);
+
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+
+
+	/* ***************************************************************************/
+	public TPDn makeFTPDn(final X36NeId neId, final X36ShelfId shelfId, final X36SlotId slotId,
+					final X36CardId cardId, final X36PortId portId,final X36ODUMapping mapping, final int id) {
+
+		final boolean useSlotForNaming = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingPTPUseSlotId, true);
+
+		final int slotNumber = useSlotForNaming ? slotId.getValue() : cardId.getValue();
+
+		final TPDn name = new TPDn();
+		name.setMe(this.get(neId));
+
+		final PortCoordinates portCoord = new PortCoordinates();
+		portCoord.setShelf(String.valueOf(shelfId.getValue()));
+		portCoord.setSlot(String.valueOf(slotNumber));
+		portCoord.setPort(String.valueOf(portId.getValue()));
+
+		final GenericTPId genTpId = new GenericTPId();
+		genTpId.setCoord(portCoord);
+		String label="";
+		if (mapping.isOdu()) {
+			final X36ODUMappingInfo mappingInfo = mapping.getOdu();
+			if(mappingInfo.getKLevel()!=null){
+				switch(mappingInfo.getKLevel().getValue()) {
+				case 1:
+					label = "/odu1=" + id;
+					break;
+
+				case 2:
+					label = "/odu2=" + id;
+					break;
+
+				case 3:
+					label = "/odu3=" + id;
+					break;
+
+				default:
+					LOG.error("Invalid kLevel " + mappingInfo.getKLevel().getValue() +", setting to odu1");
+					label = "/odu1=" + 1;
+					break;
+				}
+			}else{
+				LOG.error("Invalid kLevel " + mappingInfo.getKLevel()+", setting to odu1");
+				label = "/odu1=" + 1;
+			}
+		} else{
+			label = "/odu1=" + 1;
+		}
+		name.setPresentTp();
+		genTpId.setLabel(label);
+		name.getTp().setFtp(genTpId);
+		return name;
+	}
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn                  tpDn,
+					final X36OpticalChannelInfo ochInfo) {
+
+		final TPDn dn = new TPDn(tpDn);
+
+		// costruisco la parte di CTP name
+		CtpName ctpName = new CtpName();
+		ctpName = makeCTPName(ochInfo);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn            tpDn,
+					final X36WdmAdaptPort wdmAdaptPort) {
+
+		final TPDn dn = new TPDn(tpDn);
+
+		// costruisco la parte di CTP name
+		CtpName ctpName = new CtpName();
+		ctpName = makeCTPName(wdmAdaptPort);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36SlotInformation info) {
+		final TPDn dn = new TPDn(tpDn);
+		// costruisco la parte di CTP name
+		final CtpName ctpName = makeCTPName(info);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36KLM klm) {
+		final TPDn dn = new TPDn(tpDn);
+		// costruisco la parte di CTP name
+		final CtpName ctpName = makeCTPName(klm, Directionality.D_BIDIRECTIONAL);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36Frequency frequency, final X36ODUTimeSlot timeSlot) {
+		final TPDn dn = new TPDn(tpDn);
+
+		// costruisco la parte di CTP name
+		final CtpName ctpName = makeCTPName(frequency, timeSlot, Directionality.D_BIDIRECTIONAL);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	/* ************************************************************************** */
+	public TPDn makeCTPDn(final TPDn tpDn, final X36Frequency frequency, final X36ODUTimeSlot timeSlot, final int instanceId, final int concatenationOrder) {
+		final TPDn dn = new TPDn(tpDn);
+
+		// costruisco la parte di CTP name
+		final CtpName ctpName = makeCTPName(frequency, timeSlot, Directionality.D_BIDIRECTIONAL, instanceId, concatenationOrder);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36WdmPort wdmPort) {
+
+		final TPDn dn = new TPDn(tpDn);
+
+		// costruisco la parte di CTP name
+		final CtpName ctpName = makeCTPName(wdmPort);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	//	// Rigeneratori SDH
+	//    /* ***************************************************************************/
+	//	public TPDn makeCTPDn(X36NeId neId, X36PortIdentification portId,
+	//						  X36SpecificPortInformation specificPortInformation) {
+	//    /* ***************************************************************************/
+	//
+	//		return makeCTPDn(neId,
+	//				String.valueOf(portId.getShelfId().getValue()),
+	//				String.valueOf(portId.getCardId().getValue()),
+	//				String.valueOf(portId.getPortId().getValue()),
+	//				specificPortInformation);
+	//	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn,
+					final X36SpecificPortInformation specificPortInformation) {
+		/* ***************************************************************************/
+
+		final TPDn dn = new TPDn(tpDn);
+
+		// costruisco la parte di CTP name
+		final CtpName ctpName = makeCTPName(specificPortInformation);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+	/**
+	 * Gestione concatenazione virtuale
+	 * @param neId
+	 * @param portId
+	 * @param instanceId
+	 * @param concatenationOrder
+	 * @param encapsulationInstance
+	 * @return
+	 */
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final int instanceId,
+					final int concatenationOrder, final int encapsulationInstance) {
+		/* ***************************************************************************/
+		// make the name of concatenated au4
+		final TPDn dn = makeCTPDn(tpDn, instanceId, concatenationOrder);
+
+		final CtpName ctpName = dn.getCtp();
+		final CtpNameComponents ctpNameComps = ctpName.getComponents();
+
+		final CtpNameComponent nameComp = new CtpNameComponent();
+		nameComp.setEncapsulation(encapsulationInstance);
+		ctpNameComps.add(nameComp);
+
+		//		// dal nome dell'au4 costruisco il nome del CTP di encapsulation
+		//		// per la Virtual Concatenation
+		//		TPDn encapsulationName = new TPDn();
+		//		encapsulationName.setMe(dn.getMe());
+		//		encapsulationName.getTp().setPtp(dn.getTp().getPtp());
+		//
+		//		InverseMultiplexingComponent iMComponent = new InverseMultiplexingComponent();
+		//
+		//		Encapsulation enc = new Encapsulation();
+		//		VirtualConcatenationEncapsulation vcEnc = new VirtualConcatenationEncapsulation();
+		//		vcEnc.setConcatenated(dn.getCtp().getComponents().getConcatenated());
+		//		vcEnc.setEncapsulation(encapsulationInstance);
+		//
+		//		enc.setVirtualConcatenation(vcEnc);
+		//		iMComponent.setEncapsulation(enc);
+		//
+		//		CtpNameComponents ctpNameC = new CtpNameComponents();
+		//		ctpNameC.setInverseMultiplexing(iMComponent);
+		//
+		//		encapsulationName.setPresentCtp();
+		//		CtpName ctpName = encapsulationName.getCtp();
+		//
+		//		ctpName.setDirectionality(Directionality.d_bidirectional);
+		//		return encapsulationName;
+
+		return dn;
+	}
+
+
+
+
+
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn encapsulationName, final X36Vc4Id vc4Id) {
+		/* ***************************************************************************/
+		/* we are making the name for vc4 under encapsulation CTP for vc
+		 * virtual concatenated
+		 */
+
+		final TPDn fragmentName = new TPDn(encapsulationName);
+
+		final CtpNameComponent vc4 = new CtpNameComponent();
+		vc4.getSts3c_au4().setVc4(vc4Id.getValue());
+
+		fragmentName.getCtp().getComponents().add(vc4);
+
+
+		//		InverseMultiplexingComponent iMComponent = new InverseMultiplexingComponent();
+		//
+		//		Fragment fr = new Fragment();
+		//		VirtualConcatenationFragment vcFr = new VirtualConcatenationFragment();
+		//		VirtualConcatenationEncapsulation vcEnc = new VirtualConcatenationEncapsulation();
+		//		vcEnc.setConcatenated(encapsulationName.getCtp().getComponents().getInverseMultiplexing().
+		//									getEncapsulation().getVirtualConcatenation().getConcatenated());
+		//		vcEnc.setEncapsulation(encapsulationName.getCtp().getComponents().getInverseMultiplexing().
+		//									getEncapsulation().getVirtualConcatenation().getEncapsulation());
+		//		vcFr.setEncapsulation(vcEnc);
+		//
+		//		// creo hoSdhComponent
+		//		SdhHOCtpComponent sdhComponent = new SdhHOCtpComponent();
+		//		sdhComponent.setSts3c_au4(j);
+		//		vcFr.setAu4(sdhComponent);
+
+		//		fr.setVirtualConcatenation(vcFr);
+		//		iMComponent.setFragment(fr);
+
+		//		CtpNameComponents ctpNameC = new CtpNameComponents();
+		//		ctpNameC.setInverseMultiplexing(iMComponent);
+
+		//		fragmentName.setPresentCtp();
+		//		fragmentName.getCtp().setComponents(ctpNameC);
+
+		return fragmentName;
+	}
+
+	/**
+	 * Gestione frammentazione ethernet
+	 * @param neId
+	 * @param portId
+	 * @param encapsulationInstance
+	 * @return
+	 */
+	//	/* ***************************************************************************/
+	//	public TPDn makeCTPDn(TPDn tpDn, int encapsulationInstance) {
+	//	/* ***************************************************************************/
+	//		TPDn encapsulationName = new TPDn(tpDn);
+	//
+	////		/**
+	////		 * Costruisco il nome del TP
+	////		 */
+	////		if (isPTP) {
+	////			TPDn ptpName = makePTPDn(neId, portId);
+	////			encapsulationName.setMe(ptpName.getMe());
+	////			encapsulationName.getTp().setPtp(ptpName.getTp().getPtp());
+	////		} else {
+	////			TPDn ftpName = makeFTPDn(neId, portId.getShelfId(), portId.getCardId(), portId.getPortId());
+	////			encapsulationName.setMe(ftpName.getMe());
+	////			encapsulationName.getTp().setftp(ftpName.getTp().getftp());
+	////		}
+	//
+	//		InverseMultiplexingComponent iMComponent = new InverseMultiplexingComponent();
+	//
+	//		Encapsulation enc = new Encapsulation();
+	//		EthernetEncapsulation ethEnc = new EthernetEncapsulation();
+	//		ethEnc.setEncapsulation(encapsulationInstance);
+	//
+	//		enc.setEthernet(ethEnc);
+	//		iMComponent.setEncapsulation(enc);
+	//
+	//		CtpNameComponents ctpNameC = new CtpNameComponents();
+	//		ctpNameC.setInverseMultiplexing(iMComponent);
+	//
+	//		encapsulationName.setPresentCtp();
+	//		encapsulationName.getCtp().setComponents(ctpNameC);
+	//
+	//		return encapsulationName;
+	//	}
+
+	/* ************************************************************************** */
+	public TPDn makeCTPDn(final TPDn tpDn, final int primaryVlanID,
+					final CTPType type) {
+		/* ************************************************************************** */
+		/**
+		 * Cerco il PTP oppure l'FTP
+		 */
+		final TPDn ctpName = new TPDn(tpDn);
+
+		ctpName.setCtp(makeCTPName(primaryVlanID,type));
+
+		return ctpName;
+	}
+
+	public TPDn makeCTPDn(final TPDn tpDn, final int primaryVlanID,
+					final String isSTagged) {
+
+		final TPDn ctpDn = new TPDn(tpDn);
+		final CtpNameComponents ctpNameComponents = new CtpNameComponents();
+		final CtpNameComponent ctpNameComponent = new CtpNameComponent();
+		final CtpName ctpName = new CtpName();
+
+		if (isSTagged.equals("")) {
+			if (primaryVlanID > 0) {
+				ctpNameComponent.setEthvid(Integer.toString(primaryVlanID));
+			} else if (primaryVlanID == 0) {
+				ctpNameComponent.setEth("Palltagged");
+			}
+		} else if (isSTagged.equals("yes")) {
+			ctpNameComponent.setEthsvid(Integer.toString(primaryVlanID));
+		} else {
+			ctpNameComponent.setEthcvid(Integer.toString(primaryVlanID));
+		}
+
+		ctpNameComponents.add(ctpNameComponent);
+		ctpName.setComponents(ctpNameComponents);
+		ctpDn.setCtp(ctpName);
+		return ctpDn;
+	}
+
+	/**
+	 * to get the name of lag ctp
+	 * 
+	 * @param tpDn
+	 * @param ethName
+	 * @return
+	 */
+	public TPDn makeCTPDn(final TPDn tpDn, final String ethName) {
+
+		final TPDn ctpDn = new TPDn(tpDn);
+
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents name = new CtpNameComponents();
+		final CtpNameComponent nameComp = new CtpNameComponent();
+
+		nameComp.setEth(ethName);
+		name.add(nameComp);
+		ctpName.setComponents(name);
+
+		ctpDn.setCtp(ctpName);
+
+		return ctpDn;
+	}
+
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final X36GenericTP genericTP, final int encapsulationInstance) {
+		/* ***************************************************************************/
+		/**
+		 * Costruisco il nome del PTP
+		 */
+		//		TPDn ptpName = new TPDn(tpDn);
+
+		final TPDn fragmentName = new TPDn(tpDn);
+		//		fragmentName.setMe(ptpName.getMe());
+		//		fragmentName.getTp().setPtp(ptpName.getTp().getPtp());
+
+		//		InverseMultiplexingComponent iMComponent = new InverseMultiplexingComponent();
+		//
+		//		Fragment fr = new Fragment();
+		//
+		//		EthernetFragment ethFr = new EthernetFragment();
+		//		EthernetEncapsulation ethEnc = new EthernetEncapsulation();
+		//		ethEnc.setEncapsulation(encapsulationInstance);
+		//		ethFr.setEncapsulation(ethEnc);
+
+		CtpName name = null;
+
+		if (fragmentName.getCtp() != null){
+			name = fragmentName.getCtp();
+		}
+		else {
+			name = new CtpName();
+		}
+
+		final CtpNameComponents ctpComps = new CtpNameComponents();
+		CtpNameComponent sdhComp = new CtpNameComponent();
+
+		sdhComp.setEncapsulation(encapsulationInstance);
+		ctpComps.add(sdhComp);
+
+		// creo HO_LO
+		//		HO_LO ho_lo = new HO_LO();
+		//		SdhHOCtpComponent sdhComponent = new SdhHOCtpComponent();
+
+		sdhComp = new CtpNameComponent();
+		sdhComp.getSts3c_au4().setVc4(genericTP.getGenericTpId().getValue());
+		ctpComps.add(sdhComp);
+
+		name.setComponents(ctpComps);
+		//		ho_lo.setHo(sdhComponent);
+		//		ethFr.setHo_lo(ho_lo);
+
+		//		fr.setEthernet(ethFr);
+		//		iMComponent.setFragment(fr);
+
+		//		CtpNameComponents ctpNameC = new CtpNameComponents();
+		//		ctpNameC.setInverseMultiplexing(iMComponent);
+
+
+		//		fragmentName.setPresentCtp();
+		//		fragmentName.getCtp().setComponents(ctpNameC);
+
+		if (fragmentName.getCtp() == null) {
+			fragmentName.setCtp(name);
+		}
+
+		return fragmentName;
+	}
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn,final TpType tpType, final X36GenericTP genericTP, final int encapsulationInstance) {
+		/* ***************************************************************************/
+		/**
+		 * naming of Fragment CTP for Ethernet over PDH port (ETU 3 scenario)
+		 */
+		//		TPDn ptpName = new TPDn(tpDn);
+
+		final TPDn fragmentName = new TPDn(tpDn);
+		CtpName name = null;
+
+		if (fragmentName.getCtp() != null) {
+			name = fragmentName.getCtp();
+		} else {
+			name = new CtpName();
+		}
+
+		final CtpNameComponents ctpComps = new CtpNameComponents();
+		CtpNameComponent pdhComp = new CtpNameComponent();
+
+		if (encapsulationInstance == 1){
+			pdhComp.setEncapsulation(1);
+			ctpComps.add(pdhComp);
+		}
+
+		pdhComp = new CtpNameComponent();
+		pdhComp.getE1().set(genericTP.getGenericTpId().getValue());
+		ctpComps.add(pdhComp);
+
+		name.setComponents(ctpComps);
+
+		if (fragmentName.getCtp() == null) {
+			fragmentName.setCtp(name);
+		}
+
+		return fragmentName;
+	}
+
+
+
+	/**
+	 * Fast ethernet ed L2C
+	 * @param neId
+	 * @param portId
+	 * @param lR
+	 * @param encapsulationInstance
+	 * @return
+	 */
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final LayerRate lR,
+					final int encapsulationInstance, final int fragmentInst) {
+		/* ***************************************************************************/
+		/**
+		 * Cerco il PTP oppure l'FTP
+		 */
+		final TPDn fragmentName = new TPDn(tpDn);
+
+		//		InverseMultiplexingComponent iMComponent = new InverseMultiplexingComponent();
+		//
+		//		Fragment fr = new Fragment();
+		//
+		//		EthernetFragment ethFr = new EthernetFragment();
+		//		EthernetEncapsulation ethEnc = new EthernetEncapsulation();
+
+		//if (isPTP) {
+		//			ethEnc.setEncapsulation(encapsulationInstance);
+		//}
+		//else {
+		//	ethEnc.setEncapsulation(0);
+		//}
+
+		//		ethFr.setEncapsulation(ethEnc);
+
+		// creo HO_LO
+		//		HO_LO ho_lo = new HO_LO();
+
+		final CtpName name = fragmentName.getCtp();
+		final CtpNameComponents ctpNameC = new CtpNameComponents();
+		CtpNameComponent encapCtp = new CtpNameComponent();
+
+		encapCtp.setEncapsulation(encapsulationInstance);
+
+		ctpNameC.add(encapCtp);
+
+		encapCtp = new CtpNameComponent();
+
+		if (LayerRateManager.equals(lR, "LR_VT2_and_TU12_VC12")) {
+			//			ho_lo.setVt2_tu12(fragmentInst);
+			encapCtp.getVt2_tu12().setVc12(fragmentInst);
+
+		} else if (LayerRateManager.equals(lR, "LR_VT6_and_TU2_VC2")) {
+			//			ho_lo.setVt6_tu2(fragmentInst);
+			encapCtp.getVt6_tu2().setVc2(fragmentInst);
+
+		} else if (LayerRateManager.equals(lR, "LR_Low_Order_TU3_VC3")) {
+			//			ho_lo.setTu3_vc3(fragmentInst);
+			encapCtp.getTu3_vc3().setVc3(fragmentInst);
+
+		} else if (LayerRateManager.equals(lR, "LR_STS3c_and_AU4_VC4")) {
+			//			SdhHOCtpComponent sdhComponent = new SdhHOCtpComponent();
+			//			J j = new J();
+			//			j.setJ(fragmentInst);
+			//			sdhComponent.setSts3c_au4(j);
+			//			ho_lo.setHo(sdhComponent);
+			encapCtp.getSts3c_au4().setVc4(fragmentInst);
+
+		} else {
+			LOG.error("LayerRate " + lR.toString() + " is not supported for fragmentation, setting to LR_STS3c_and_AU4_VC4");
+
+			//			SdhHOCtpComponent sdhComponent = new SdhHOCtpComponent();
+			//			J j = new J();
+			//			j.setJ(fragmentInst);
+			//			sdhComponent.setSts3c_au4(j);
+			//			ho_lo.setHo(sdhComponent);
+			encapCtp.getSts3c_au4().setVc4(fragmentInst);
+		}
+
+		//		ethFr.setHo_lo(ho_lo);
+		//
+		//		fr.setEthernet(ethFr);
+		//		iMComponent.setFragment(fr);
+
+		//		CtpNameComponents ctpNameC = new CtpNameComponents();
+		//		ctpNameC.setInverseMultiplexing(iMComponent);
+
+		ctpNameC.add(encapCtp);
+		name.setComponents(ctpNameC);
+
+		//		fragmentName.setPresentCtp();
+		//		fragmentName.getCtp().setComponents(ctpNameC);
+
+		return fragmentName;
+	}
+
+	/* ***************************************************************************/
+
+	/* ************************************************************************** */
+	public TPDn makeCTPDn(final TPDn tpDn, final LayerRate lR, final int fragmentInst) {
+		/* ************************************************************************** */
+		/*
+		 * crea i CTP di fragment per i VCG L2 i nomi risultanti sono uguali a quelli pdhTrib (pdh in sdh)....
+		 */
+		final TPDn fragmentName = new TPDn(tpDn);
+
+		fragmentName.setPresentCtp();
+		final CtpName ctp = fragmentName.getCtp();
+
+		final CtpNameComponents pdhComponents = new CtpNameComponents();
+		final CtpNameComponent ethEncapsulation = new CtpNameComponent();
+		final CtpNameComponent pdhComponent = new CtpNameComponent();
+		// PdhAdapCtpComponent pdh = fragmentName.getCtp().getComponents().getPdhTrib();
+
+		if (LayerRateManager.equals(lR, "LR_VT2_and_TU12_VC12")) {
+			// pdh.setVt2_tu12(fragmentInst);
+			ethEncapsulation.setEncapsulation(1);
+			pdhComponent.getVt2_tu12().setVc12(fragmentInst);
+		} else if (LayerRateManager.equals(lR, "LR_VT6_and_TU2_VC2")) {
+			// pdh.setVt6_tu2(fragmentInst);
+			ethEncapsulation.setEncapsulation(1);
+			pdhComponent.getVt6_tu2().setVc2(fragmentInst);
+		} else if (LayerRateManager.equals(lR, "LR_Low_Order_TU3_VC3")) {
+			// pdh.setTu3_vc3(fragmentInst);
+			ethEncapsulation.setEncapsulation(1);
+			pdhComponent.getTu3_vc3().setVc3(fragmentInst);
+		} else if (LayerRateManager.equals(lR, "LR_STS3c_and_AU4_VC4")) {
+			// pdh.setSts3c_au4(fragmentInst);
+			ethEncapsulation.setEncapsulation(1);
+			pdhComponent.getSts3c_au4().setVc4(fragmentInst);
+		} else {
+			final String msg = "LayerRate " + lR.toString() + " is not supported for fragmentation, setting to LR_STS3c_and_AU4_VC4";
+			LOG.error(msg);
+
+			throw PlugInExceptionHandler.internalError(msg);
+		}
+		pdhComponents.add(ethEncapsulation);
+		pdhComponents.add(pdhComponent);
+		ctp.setComponents(pdhComponents);
+
+		return fragmentName;
+	}
+
+	/**
+	 * Backplane CTP
+	 * @param ftpDn
+	 * @param lR
+	 * @param vc4Id
+	 * @param vc3Id
+	 * @param vc2Id
+	 * @param vc12Id
+	 * @return
+	 */
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn ftpDn, final LayerRate lR, final int vc4Id, final int vc3Id, final int vc2Id, final int vc12Id, final boolean isFlat) {
+		/* ***************************************************************************/
+		final TPDn ctpDn = new TPDn();
+		ctpDn.setMe(ftpDn.getMe());
+		ctpDn.setPresentTp();
+		ctpDn.getTp().setFtp(ftpDn.getTp().getFtp());
+
+		final CtpName ctpName = new CtpName();
+
+		final CtpNameComponents ctpNameC = new CtpNameComponents();
+		//		ctpNameC = ctpName.getComponents();
+
+
+		//		ctpName.setDirectionality(Directionality.d_bidirectional);
+
+		//		CtpNameComponents ctpNameC = ctpName.getComponents();
+
+		if (isFlat) { // come il PDH adaptation
+			/*
+			 * GG in questo caso me ne sbatto delle coord e ci piazzo 1
+			 * ma faccio bene?
+			 */
+
+
+			//			PdhAdapCtpComponent pdhAdapt = new PdhAdapCtpComponent();
+			final CtpNameComponent cnc = new CtpNameComponent();
+
+			if (LayerRateManager.equals(lR, "LR_STS3c_and_AU4_VC4")) {
+				//				pdhAdapt.setSts3c_au4(1);
+				cnc.getSts3c_au4().setVc4(1);
+			} else if (LayerRateManager.equals(lR, "LR_Low_Order_TU3_VC3")) {
+				//pdhAdapt.setTu3_vc3(1);
+				cnc.getTu3_vc3().setVc3(1);
+			} else if (LayerRateManager.equals(lR, "LR_VT6_and_TU2_VC2")) {
+				//pdhAdapt.setVt6_tu2(1);
+				cnc.getVt6_tu2().setVc2(1);
+			} else if (LayerRateManager.equals(lR, "LR_VT2_and_TU12_VC12")) {
+				//pdhAdapt.setVt2_tu12(1);
+				cnc.getVt2_tu12().setVc12(1);
+			} else {
+				LOG.error("Layer Rate not supported " + LayerRateManager.toString(lR));
+			}
+
+			ctpNameC.add(cnc);
+			ctpName.setComponents(ctpNameC);
+
+			//			ctpNameC.setPdhTrib(pdhAdapt);
+
+		} else { // caso nested come l'SDH normale
+
+			final CtpNameComponent sdhComp = new CtpNameComponent();
+
+			final J j = new J();
+			j.setJ(vc4Id);
+			sdhComp.getSts3c_au4().setAu4(j);
+			ctpNameC.add(sdhComp);
+
+			final X36KLM klm = new X36KLM();
+			klm.setTu3(vc3Id);
+			klm.setTu2(vc2Id);
+			klm.setTu12(vc12Id);
+
+			if (klm.getTu3().getValue() != 0) {
+				// we need to add  LO components
+				fillName(ctpNameC, klm);
+			}
+
+			ctpName.setComponents(ctpNameC);
+
+			//			if (LayerRateManager.equals(lR, "LR_STS3c_and_AU4_VC4")) {
+			////				SdhHOCtpComponent hoCtpComponent = new SdhHOCtpComponent();
+			//				J j = new J();
+			//				j.setJ(vc4Id);
+			////				hoCtpComponent.setSts3c_au4(j);
+			//				sdhComp.getSts3c_au4().setAu4(j);
+			////				ctpNameC.setHo(hoCtpComponent);
+			//
+			//			} else
+			//
+			//			if (LayerRateManager.equals(lR, "LR_Low_Order_TU3_VC3")) {
+			////				SdhLOCtpOfsts3c_au4Component loCtpComponent = new SdhLOCtpOfsts3c_au4Component();
+			//				JK jk = new JK();
+			//				jk.setJ(vc4Id);
+			//				jk.setK(vc3Id);
+			////				loCtpComponent.setTu3_vc3(jk);
+			//				sdhComp.getTu3_vc3().set(jk);
+			////				ctpNameC.setLoOfsts3c_au4(loCtpComponent);
+			//
+			//			} else if (LayerRateManager.equals(lR, "LR_VT6_and_TU2_VC2")) {
+			////				SdhLOCtpOfsts3c_au4Component loCtpComponent = new SdhLOCtpOfsts3c_au4Component();
+			//				JKL jkl = new JKL();
+			//				jkl.setJ(vc4Id);
+			//				jkl.setK(vc3Id);
+			//				jkl.setL(vc2Id);
+			//				loCtpComponent.setVt6_tu2(jkl);
+			//				ctpNameC.setLoOfsts3c_au4(loCtpComponent);
+			//
+			//			} else if (LayerRateManager.equals(lR, "LR_VT2_and_TU12_VC12")) {
+			//				SdhLOCtpOfsts3c_au4Component loCtpComponent = new SdhLOCtpOfsts3c_au4Component();
+			//				JKLM jklm = new JKLM();
+			//				jklm.setJ(vc4Id);
+			//				jklm.setK(vc3Id);
+			//				jklm.setL(vc2Id);
+			//				jklm.setM(vc12Id);
+			//				loCtpComponent.setVt2_tu12(jklm);
+			//				ctpNameC.setLoOfsts3c_au4(loCtpComponent);
+			//
+			//			} else {
+			//				log.error("Layer Rate not supported " + LayerRateManager.toString(lR));
+			//			}
+
+		}
+
+		ctpDn.setCtp(ctpName);
+		return ctpDn;
+	}
+
+
+	/* ***************************************************************************/
+	public TPDn makeCTPDn(final TPDn tpDn, final int instanceId,final int concatenationOrder) {
+		/* ***************************************************************************/
+		final TPDn dn = new TPDn(tpDn);
+
+		final CtpName ctpName = new CtpName();
+
+		//		Directionality dir = new Directionality(Directionality.d_bidirectional);
+		//		ctpName.setDirectionality(dir);
+
+		final CtpNameComponents ctpNameC = new CtpNameComponents();
+		final CtpNameComponent sdhCtp = new CtpNameComponent();
+
+		//		SdhConcatenatedTpComponent sdhConcatComponent = new SdhConcatenatedTpComponent();
+
+		switch (concatenationOrder) {
+		case 1:
+			//			sdhConcatComponent.setSts3c_vc4_1c(instanceId);
+			sdhCtp.getSts3c_au4().setVc4(instanceId);
+			break;
+
+		case 4:
+			//			sdhConcatComponent.setSts12c_vc4_4c(instanceId);
+			sdhCtp.getSts12c_vc4_4c().setVc(instanceId);
+			break;
+
+		case 16:
+			//			sdhConcatComponent.setSts48c_vc4_16c(instanceId);
+			sdhCtp.getSts48c_vc4_16c().setVc(instanceId);
+			break;
+
+		case 64:
+			//			sdhConcatComponent.setSts192c_vc4_64c(instanceId);
+			sdhCtp.getSts192c_vc4_64c().setVc(instanceId);
+			break;
+
+		case 256:
+			//			sdhConcatComponent.setSts768c_vc4_256c(instanceId);
+			sdhCtp.getSts768c_vc4_256c().setVc(instanceId);
+			break;
+
+		default:
+			LOG.error("This concatenation order <" + concatenationOrder + "> is not supported.");
+			break;
+		}
+
+		//		ctpNameC.setConcatenated(sdhConcatComponent);
+		//		ctpName.setComponents(ctpNameC);
+		ctpNameC.add(sdhCtp);
+		ctpName.setComponents(ctpNameC);
+		dn.setCtp(ctpName);
+		return dn;
+	}
+
+	/* ***************************************************************************/
+	static public CtpName makeCTPName(final X36SpecificPortInformation specificPortInformation) {
+
+		final CtpName ctpName = new CtpName();
+
+		//		Directionality dir = new Directionality(Directionality.d_bidirectional);
+		//		ctpName.setDirectionality(dir);
+
+		final CtpNameComponents ctpNameC = new CtpNameComponents();
+		final CtpNameComponent multiplexCtp = new CtpNameComponent();
+
+		// fisso sempre a 1
+		switch (specificPortInformation.getMemberId()) {
+
+		case X36SpecificPortInformation.oStm1Port:
+		case X36SpecificPortInformation.eStm1Port:
+		{
+			//				MultiplexCtpComponent regenCtp = new MultiplexCtpComponent();
+			//				regenCtp.setLine3_ms1(1);
+			multiplexCtp.getLine3_ms1().set(1);
+			//				ctpNameC.setMultiplex(regenCtp);
+		}
+		break;
+
+		case X36SpecificPortInformation.stm4Port:
+		{
+			//				MultiplexCtpComponent regenCtp = new MultiplexCtpComponent();
+			//				regenCtp.setLine12_ms4(1);
+			multiplexCtp.getLine12_ms4().set(1);
+		}
+		//			ctpNameC.setMultiplex(regenCtp);
+		break;
+
+		case X36SpecificPortInformation.stm16Port:
+		{
+			//				MultiplexCtpComponent regenCtp = new MultiplexCtpComponent();
+			//				regenCtp.setLine48_ms16(1);
+			//				ctpNameC.setMultiplex(regenCtp);
+			multiplexCtp.getLine48_ms16().set(1);
+		}
+		break;
+
+		case X36SpecificPortInformation.stm64Port:
+		{
+			//				MultiplexCtpComponent regenCtp = new MultiplexCtpComponent();
+			//				regenCtp.setLine192_ms64(1);
+			//				ctpNameC.setMultiplex(regenCtp);
+			multiplexCtp.getLine192_ms64().set(1);
+		}
+		break;
+
+		case X36SpecificPortInformation.stm256Port:
+		{
+			//				MultiplexCtpComponent regenCtp = new MultiplexCtpComponent();
+			//				regenCtp.setLine768_ms256(1);
+			//				ctpNameC.setMultiplex(regenCtp);
+			multiplexCtp.getLine768_ms256().set(1);
+		}
+		break;
+		}
+
+		ctpNameC.add(multiplexCtp);
+		ctpName.setComponents(ctpNameC);
+
+		//		ctpName.setComponents(ctpNameC);
+
+		return ctpName;
+	}
+
+	/* ***************************************************************************/
+	public X36SetOfNeId getNesId(final MEDnList list) {
+		final X36SetOfNeId setOf = new X36SetOfNeId();
+
+		for (final MEDn item : list) {
+			final X36NeId neId = getNeId(item);
+			if (neId != null) {
+				setOf.add(neId);
+			}
+		}
+
+		return setOf;
+	}
+
+	/* ***************************************************************************/
+	public X36NeId getNeId(final MEDn name) {
+		/*
+		 * Session session = null; DBManagedElement dbME = null; try { session =
+		 * sbiClient.getDbManager().beginSession(false); dbME =
+		 * sbiClient.getDbManager().getManagedElement(name); } catch (final
+		 * Exception e) {
+		 * 
+		 * } finally { if (session != null) { session.terminate(); } } final
+		 * EmSystemProfile emSystemProfile = (EmSystemProfile)
+		 * dbME.getAdditionalInformation(EmSystemProfile.NAME); if
+		 * (emSystemProfile != null) {
+		 * emSystemProfile.getSyntax().getHostName().getValue(); } else {
+		 * sbiClient.getHostName(); }
+		 */
+
+		final X36NeId neId = getNeId(name.getMe());
+		return neId;
+	}
+
+	/* ***************************************************************************/
+	public X36NeId getNeId(final MEId name) {// to be removed
+
+		final X36NeId neId = get(name);
+		return neId;
+	}
+
+	public X36NeId getNeId(final MEId name, final String hostName) {
+		final X36NeId neId = get(name, hostName);
+		return neId;
+	}
+
+	/* ***************************************************************************/
+	public X36NeId getNeId(final TPDn name) {
+		return getNeId(name.getMe());
+	}
+
+	/* ***************************************************************************/
+	public X36NeId makeNeId(final PMResource name) {
+		if (name.isMeDn()) {
+			return getNeId(name.getMeDn().getMe());
+		} else if (name.isTpDn()) {
+			return getNeId(name.getTpDn());
+		} else {
+			return null;
+		}
+	}
+
+	/*
+	 * GG  nuovi metodi per beccare le coord X36 ealtre info dal DB e non dai nomi TMF
+	 */
+
+	/* *******************************get ChannelId********************************************/
+	public X36ChannelIdentification getChannelId(final TPDn name,
+					final Holder<DBTp> holder) {
+		X36ChannelIdentification channelId = null;
+		Session session = sbiClient.getDbManager().getSession();
+		final boolean sessionToBeTerminate = session == null;
+
+		try {
+			if (session == null) {
+				session = sbiClient.getDbManager().beginSession(false);
+			}
+
+			final DBTp tp = sbiClient.getDbManager().getTP(name);
+
+			if (tp == null) {
+				LOG.error(new DumpInfo(name, "Unable to locate TP for..."));
+				return null;
+			}
+
+			holder.setTarget(tp);
+			channelId = getChannelId(tp);
+
+		} catch (final PlugInException e) {
+			throw PlugInExceptionHandler.invalidInput("Unable to perform the operation on TP...");
+		} catch (final Exception e) {
+			LOG.error(new DumpInfo(name, "Unable to get X36 coord for..."));
+		} finally {
+			if (sessionToBeTerminate && (session != null)) {
+				session.terminate();
+			}
+		}
+
+		return channelId;
+	}
+
+
+	/* ***************************************************************************/
+	public X36ChannelIdentification getChannelId(final DBTp tp) {
+		X36ChannelIdentification channelId = null;
+		if (tp instanceof DBFtp) {
+			final ChannelInformation ci = (ChannelInformation)tp.getAdditionalInformation(ChannelInformation.NAME);
+			if (ci != null) {
+				channelId = AIHelper.buildChannelIdentification(ci.getSyntax());
+			}
+		} else if (tp instanceof DBCtp) {
+			final DBPortTp ptp = ((DBCtp)tp).getPtp().get();
+			channelId = getChannelId(ptp);
+
+			final TimeSlotInformation ti = (TimeSlotInformation)tp.getAdditionalInformation(TimeSlotInformation.NAME);
+			if (ti != null) {
+				channelId.setTimeSlot(AIHelper.buildTimeSlot(ti.getSyntax().getCoord()));
+			}
+		} else if (tp instanceof DBPtp) {
+			final PortInformation pi = (PortInformation)tp.getAdditionalInformation(PortInformation.NAME);
+			if (pi != null) {
+				channelId = AIHelper.buildChannelIdentification(pi.getSyntax());
+			}
+		}
+
+		if (channelId == null) {
+			/*
+			 * la disperazione....
+			 * provo con il metodo vecchio
+			 */
+
+			channelId = makeChannelId(tp.getDn());
+
+		}
+
+		return channelId;
+	}
+
+
+
+	/* ***************************************************************************/
+	static public X36ChannelIdentification makeChannelId(final TPDn name) {
+		final X36ChannelIdentification channelId = new X36ChannelIdentification();
+		channelId.setPort(makePortId(name.getTp()));
+
+		if (name.isPresentCtp()) {
+			channelId.setTimeSlot(makeTimeSlot(name.getCtp()));
+		} else {
+			channelId.getTimeSlot().setNull();
+		}
+
+
+		return channelId;
+	}
+
+	/* ***************************************************************************/
+	@Deprecated
+	static public X36PortIdentification makePortId(final TPId name) {
+		X36PortIdentification portId = null;
+		if (name.isPtp()) {
+			portId = makePortId(name.getPtp());
+		} else if (name.isFtp()) {
+			portId = makePortId(name.getFtp());
+		}
+		else {
+			LOG.warn(new DumpInfo(name, "Making X36PortIdentification is not yet supported from...")); //TODO
+		}
+
+		return portId;
+	}
+
+	/* ***************************************************************************/
+	@Deprecated
+	static public X36CardIdentification makeCardId(final HolderId name) {
+		final X36CardIdentification cardId = new X36CardIdentification();
+
+		cardId.setShelfId(Integer.valueOf(name.getShelf().getValue()).intValue());
+		cardId.setCardId(Integer.valueOf(name.getSlot().getValue()).intValue());
+
+		return cardId;
+	}
+
+	/* ***************************************************************************/
+	@Deprecated
+	static public X36CardIdentification makeCardId(final TPId name) {
+		X36CardIdentification cardId = null;
+		if (name.isPtp()) {
+			cardId = makeCardId(name.getPtp());
+		} else if (name.isFtp())
+		{
+			cardId = makeCardId(name.getFtp());
+			//log.warn(new DumpInfo(name, "Making X36CardIdentification is not yet supported from...")); //TODO
+		}
+
+
+		return cardId;
+	}
+
+	/* ***************************************************************************/
+	@Deprecated
+	static public X36PortIdentification makePortId(final GenericTPId name) {
+		final X36PortIdentification portId = makePortId(name.getCoord());
+
+		return portId;
+	}
+
+	/* ***************************************************************************/
+	@Deprecated
+	static public X36CardIdentification makeCardId(final GenericTPId name) {
+		final X36CardIdentification cardId = makeCardId(name.getCoord());
+
+		return cardId;
+	}
+
+	/* ***************************************************************************/
+	@Deprecated
+	static public X36PortIdentification makePortId(final PortCoordinates coord) {
+		final X36PortIdentification portId = new X36PortIdentification();
+
+		portId.setShelfId(Integer.valueOf(coord.getShelf().getValue()).intValue());
+		portId.setCardId(Integer.valueOf(coord.getSlot().getValue()).intValue());
+		portId.setPortId(Integer.valueOf(coord.getPort().getValue()).intValue());
+
+		return portId;
+	}
+
+	/* ***************************************************************************/
+	@Deprecated
+	static public X36CardIdentification makeCardId(final PortCoordinates coord) {
+		final X36CardIdentification cardId = new X36CardIdentification();
+
+		cardId.setShelfId(Integer.valueOf(coord.getShelf().getValue()).intValue());
+		cardId.setCardId(Integer.valueOf(coord.getSlot().getValue()).intValue());
+
+		return cardId;
+	}
+
+	/* ***************************************************************************/
+	@Deprecated
+	static public X36TimeSlot makeTimeSlot(final CtpName name) {
+
+		LOG.error("DEPRECATED METHOD!!! DON'T USE IT");
+		return new X36TimeSlot();
+		//return makeTimeSlot(name.getComponents());
+	}
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36TimeSlot makeTimeSlot(CtpNameComponents name) {
+	//		X36TimeSlot out = new X36TimeSlot();
+	//
+	//		switch (name.getMemberId()) {
+	//		case CtpNameComponents.ho:
+	//			out = makeTimeSlot(name.getHo());
+	//			break;
+	//		case CtpNameComponents.multiplex:
+	//			out = makeTimeSlot(name.getMultiplex());
+	//			break;
+	//		case CtpNameComponents.inverseMultiplexing:
+	//			out = makeTimeSlot(name.getInverseMultiplexing());
+	//			break;
+	////		case CtpNameComponents.loOfSingle_sts1_au3:
+	////			break;
+	//		case CtpNameComponents.loOfsts1_au3:
+	//			break;
+	//		case CtpNameComponents.loOfsts3c_au4:
+	//			out = makeTimeSlot(name.getLoOfsts3c_au4());
+	//			break;
+	//		case CtpNameComponents.concatenated:
+	//			throw PlugInExceptionHandler.invalidInput();
+	////			out = makeTimeSlot(name.getConcatenated());
+	////			break;
+	//		case CtpNameComponents.och:
+	//			out = makeTimeSlot(name.getOch());
+	//			break;
+	//		case CtpNameComponents.pdhTrib:
+	//		case CtpNameComponents.pdh:
+	//		case CtpNameComponents.cbr:
+	//			out.setNull();
+	//			break;
+	//		default:
+	//			log.warn(new DumpInfo(name, "Not yet supported"));
+	//		break;
+	//		}
+	//
+	//		return out;
+	//	}
+	/************************/
+	//	@Deprecated
+	//	static public X36TimeSlot makeTimeSlot(InverseMultiplexingComponent name){
+	//		X36TimeSlot out = new X36TimeSlot();
+	//
+	//		switch (name.getMemberId()){
+	//
+	//		case InverseMultiplexingComponent.fragment:
+	//			out = makeTimeSlot(name.getFragment());
+	//			break;
+	//		case InverseMultiplexingComponent.encapsulation:
+	//			out = makeTimeSlot(name.getEncapsulation());
+	//			break;
+	////			case InverseMultiplexingComponent.encapsulation:
+	////			out.setNull();
+	////			break;
+	//		default:
+	//			log.warn(new DumpInfo(name, "Not yet supported"));
+	//		break;
+	//		}
+	//
+	//		return out;
+	//
+	//	}
+
+	//	@Deprecated
+	//	static public X36TimeSlot makeTimeSlot(Fragment name){
+	//		X36TimeSlot out = new X36TimeSlot();
+	//
+	//		switch (name.getMemberId()){
+	//
+	//		case Fragment.virtualConcatenation:
+	//			out = makeTimeSlot(name.getVirtualConcatenation());
+	//			break;
+	//
+	//
+	//
+	//		default:
+	//			log.warn(new DumpInfo(name, "Not yet supported"));
+	//		break;
+	//		}
+	//
+	//		return out;
+	//
+	//	}
+	//
+	//	static public X36TimeSlot makeTimeSlot(Encapsulation name){
+	//		X36TimeSlot out = new X36TimeSlot();
+	//
+	//		switch (name.getMemberId()){
+	//
+	//		case Encapsulation.virtualConcatenation:
+	//			out = makeTimeSlot(name.getVirtualConcatenation());
+	//			break;
+	//
+	//		default:
+	//			log.warn(new DumpInfo(name, "Not yet supported"));
+	//		break;
+	//		}
+	//
+	//		return out;
+	//
+	//	}
+
+	//	static public X36TimeSlot makeTimeSlot(VirtualConcatenationEncapsulation name){
+	//		X36TimeSlot out = new X36TimeSlot();
+	//		X36KLM klm = new X36KLM();
+	//		klm = makeKLM(name.getConcatenated());
+	//
+	//		out.setKlm(klm);
+	//		return out;
+	//	}
+
+
+
+	//	@Deprecated
+	//	static public X36TimeSlot makeTimeSlot(VirtualConcatenationFragment name){
+	//		X36TimeSlot out = new X36TimeSlot();
+	//		X36VirtualTpId virtualTPId = new X36VirtualTpId();
+	//
+	//		SdhConcatenatedTpComponent sdhConc = name.getEncapsulation().getConcatenated();
+	//		SdhHOCtpComponent sdhHO = name.getAu4();
+	//
+	//		switch (sdhConc.getMemberId()) {
+	//		case SdhConcatenatedTpComponent.sts12c_vc4_4c:
+	//		{
+	//			int au4ConcatId = sdhConc.getSts12c_vc4_4c().getValue();
+	//			int au4Id = 4*(au4ConcatId - 1) + 1;
+	//
+	//			virtualTPId.setAu4(au4Id);
+	//
+	//		}
+	//		break;
+	//
+	//		case SdhConcatenatedTpComponent.sts48c_vc4_16c:
+	//		{
+	//			int au4ConcatId = sdhConc.getSts48c_vc4_16c().getValue();
+	//			int au4Id = 16*(au4ConcatId - 1) + 1;
+	//			virtualTPId.setAu4(au4Id);
+	//
+	//		}
+	//		break;
+	//
+	//		case SdhConcatenatedTpComponent.sts192c_vc4_64c:
+	//		{
+	//			int au4ConcatId = sdhConc.getSts192c_vc4_64c().getValue();
+	//			int au4Id = 64*(au4ConcatId - 1) + 1;
+	//			virtualTPId.setAu4(au4Id);
+	//
+	//		}
+	//		break;
+	//		case SdhConcatenatedTpComponent.sts768c_vc4_256c:
+	//		{
+	//			int au4ConcatId = sdhConc.getSts768c_vc4_256c().getValue();
+	//			int au4Id = 256 * (au4ConcatId - 1) + 1;
+	//			virtualTPId.setAu4(au4Id);
+	//
+	//		}
+	//		break;
+	//		default:
+	//			log.warn(new DumpInfo(name, "Not yet supported"));
+	//		break;
+	//		}
+	//
+	//		if (sdhHO.isSts3c_au4())
+	//			virtualTPId.setVc4(sdhHO.getSts3c_au4().getJ().getValue());
+	//		else {
+	//			log.warn(new DumpInfo(name, "Sts1_au3 Not yet supported"));
+	//		    return out;
+	//		}
+	//
+	//		out.setVirtualTpId(virtualTPId);
+	//	 	return out;
+	//
+	//	}
+
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36TimeSlot makeTimeSlot(SdhHOCtpComponent name) {
+	//		X36TimeSlot out = new X36TimeSlot();
+	//
+	//		switch (name.getMemberId()) {
+	////		case SdhHOCtpComponent.single_sts1_au3:
+	////			out.setnull();
+	////			break;
+	//		case SdhHOCtpComponent.sts1_au3:
+	//			out.setKlm(makeKLM(name.getSts1_au3()));
+	//			break;
+	//		case SdhHOCtpComponent.sts3c_au4:
+	//			out.setKlm(makeKLM(name.getSts3c_au4()));
+	//			break;
+	//		}
+	//		return out;
+	//	}
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36TimeSlot makeTimeSlot(SdhLOCtpOfsts3c_au4Component name) {
+	//		X36TimeSlot out = new X36TimeSlot();
+	//
+	//		switch (name.getMemberId()) {
+	//		case SdhLOCtpOfsts3c_au4Component.vt15_tu11:
+	//			out.setKlm(makeKLM(name.getVt15_tu11()));
+	//			break;
+	//		case SdhLOCtpOfsts3c_au4Component.vt2_tu12:
+	//			out.setKlm(makeKLM(name.getVt2_tu12()));
+	//			break;
+	//		case SdhLOCtpOfsts3c_au4Component.vt6_tu2:
+	//			out.setKlm(makeKLM(name.getVt6_tu2()));
+	//			break;
+	//		case SdhLOCtpOfsts3c_au4Component.tu3_vc3:
+	//			out.setKlm(makeKLM(name.getTu3_vc3()));
+	//			break;
+	//		}
+	//		return out;
+	//	}
+
+	//	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36TimeSlot makeTimeSlot(SdhConcatenatedTpComponent name) {
+	//		X36TimeSlot out = new X36TimeSlot();
+	//
+	//		switch (name.getMemberId()) {
+	//		case SdhConcatenatedTpComponent.sts12c_vc4_4c:
+	//		{
+	//			int au4ConcatId = name.getSts12c_vc4_4c().getValue();
+	//			int au4Id = 4*(au4ConcatId - 1) + 1;
+	//			out.setKlm(makeKLM(au4Id));
+	//		}
+	//		break;
+	//
+	//		case SdhConcatenatedTpComponent.sts48c_vc4_16c:
+	//			out.setKlm(makeKLM(name.getSts48c_vc4_16c().getValue()));
+	//		break;
+	//
+	//		case SdhConcatenatedTpComponent.sts192c_vc4_64c:
+	//			out.setKlm(makeKLM(name.getSts192c_vc4_64c().getValue()));
+	//		break;
+	//		case SdhConcatenatedTpComponent.sts768c_vc4_256c:
+	//			out.setKlm(makeKLM(name.getSts768c_vc4_256c().getValue()));
+	//		break;
+	//		}
+	//
+	//		return out;
+	//	}
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36KLM makeKLM(JKLM name) {
+	//		X36KLM klm = new X36KLM();
+	//		klm.setAu4(name.getJ().getValue());
+	//		klm.setTu3(name.getK().getValue());
+	//		klm.setTu2(name.getL().getValue());
+	//		klm.setTu12(name.getM().getValue());
+	//
+	//		return klm;
+	//	}
+
+	//	@Deprecated
+	//	static public X36KLM makeKLM(SdhConcatenatedTpComponent name) {
+	//		X36KLM klm = new X36KLM();
+	//
+	//		switch (name.getMemberId()) {
+	//		case SdhConcatenatedTpComponent.sts12c_vc4_4c:
+	//		{
+	//			int au4ConcatId = name.getSts12c_vc4_4c().getValue();
+	//			int au4Id = 4*(au4ConcatId - 1) + 1;
+	//
+	//			klm.setAu4(au4Id);
+	//
+	//		}
+	//		break;
+	//
+	//		case SdhConcatenatedTpComponent.sts48c_vc4_16c:
+	//		{
+	//			int au4ConcatId = name.getSts48c_vc4_16c().getValue();
+	//			int au4Id = 16*(au4ConcatId - 1) + 1;
+	//			klm.setAu4(au4Id);
+	//
+	//		}
+	//		break;
+	//
+	//		case SdhConcatenatedTpComponent.sts192c_vc4_64c:
+	//		{
+	//			int au4ConcatId = name.getSts192c_vc4_64c().getValue();
+	//			int au4Id = 64*(au4ConcatId - 1) + 1;
+	//			klm.setAu4(au4Id);
+	//
+	//		}
+	//		break;
+	//
+	//		case SdhConcatenatedTpComponent.sts768c_vc4_256c:
+	//		{
+	//			int au4ConcatId = name.getSts768c_vc4_256c().getValue();
+	//			int au4Id = 256*(au4ConcatId - 1) + 1;
+	//			klm.setAu4(au4Id);
+	//
+	//		}
+	//		break;
+	//
+	//		default:
+	//			log.warn(new DumpInfo(name, "Not yet supported"));
+	//		break;
+	//		}
+	//	 	return klm;
+	//	}
+
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36KLM makeKLM(JKL name) {
+	//		X36KLM klm = new X36KLM();
+	//		klm.setAu4(name.getJ().getValue());
+	//		klm.setTu3(name.getK().getValue());
+	//		klm.setTu2(name.getL().getValue());
+	//		klm.setTu12(0);
+	//
+	//		return klm;
+	//	}
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36KLM makeKLM(JK name) {
+	//		X36KLM klm = new X36KLM();
+	//		klm.setAu4(name.getJ().getValue());
+	//		klm.setTu3(name.getK().getValue());
+	//		klm.setTu2(0);
+	//		klm.setTu12(0);
+	//
+	//		return klm;
+	//	}
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36KLM makeKLM(J name) {
+	//		X36KLM klm = new X36KLM();
+	//		klm.setAu4(name.getJ().getValue());
+	//		klm.setTu3(0);
+	//		klm.setTu2(0);
+	//		klm.setTu12(0);
+	//
+	//		return klm;
+	//	}
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36KLM makeKLM(int id) {
+	//		X36KLM klm = new X36KLM();
+	//		klm.setAu4(id);
+	//		klm.setTu3(0);
+	//		klm.setTu2(0);
+	//		klm.setTu12(0);
+	//
+	//		return klm;
+	//	}
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36TimeSlot makeTimeSlot(MultiplexCtpComponent name) {
+	//		// TODO
+	//		X36TimeSlot out = new X36TimeSlot();
+	//		out.setNull();
+	//
+	//		return out;
+	//	}
+
+	/* ***************************************************************************/
+	//	@Deprecated
+	//	static public X36TimeSlot makeTimeSlot(OchCtp name) {
+	//
+	//		X36TimeSlot out = new X36TimeSlot();
+	//
+	//		log.error("DEPRECATED METHOD!!! DON'T USE IT");
+
+	//		if (name.isPresentOdu1() || name.isPresentOdu2() || name.isPresentOdu3()) {
+	//			X36ODUTimeSlot oduTimeSlot = new X36ODUTimeSlot();
+	//			X36ODUId oduId = new X36ODUId();
+	//			X36KLM klm = new X36KLM();
+	//
+	//			if (name.isPresentOchId()) {
+	//				oduId.setOchId(name.getOchId());
+	//			}
+	//
+	//			if (name.isPresentOdu1()) {
+	//				oduId.setOdu1(name.getOdu1());
+	//			}
+	//
+	//			if (name.isPresentOdu2()) {
+	//				oduId.setOdu2(name.getOdu2());
+	//			}
+	//
+	//			if (name.isPresentOdu3()) {
+	//				oduId.setOdu3(name.getOdu3());
+	//			}
+	//
+	//			if (name.isPresentTermination()) {
+	//				OchCtpTermination termin = name.getTermination();
+	//
+	//				if (termin.isHo()) {
+	//					klm.setAu4(termin.getHo().getSts3c_au4().getJ());
+	//					klm.setTu3(0);
+	//					klm.setTu2(0);
+	//					klm.setTu12(0);
+	//
+	//					oduTimeSlot.setJklm(klm);
+	//
+	//				} else if (termin.isDsr()) {
+	//					oduTimeSlot.setNotPresentJklm();
+	//				} else {
+	//					log.error(new DumpInfo(termin, "Termination type not supported..."));
+	//				}
+	//
+	//			} else {
+	//				oduTimeSlot.setNotPresentJklm();
+	//			}
+	//
+	//			oduTimeSlot.setOduId(oduId);
+	//			out.setOduTimeSlot(oduTimeSlot);
+	//
+	//		} else if (name.isPresentOchId()) {
+	//			out.setOchId(name.getOchId().getValue());
+	//		} else {
+	//			out.setNull();
+	//		}
+
+	//		return out;
+	//	}
+
+
+	/* ***************************************************************************/
+	public String makeLocation(final X36NetworkElement   neInfo,
+					final X36ShelfId shelfId,
+					final X36CardInformation  cardInfo,
+					final X36PortId  portId) {
+		final boolean useSlotId  = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.layeredParamsLocationUseSlotId, true);
+		Integer cardId;
+
+		if (cardInfo.isPresentPhysicalCardInfo() && useSlotId) {
+			final X36PhysicalCardInfo info = cardInfo.getPhysicalCardInfo();
+
+			cardId = info.getPhysicalSlot().getValue();
+		} else {
+			cardId = cardInfo.getCardId().getValue();
+		}
+
+		return makeLocation(shelfId, cardId, portId);
+	}
+
+	/* ***************************************************************************/
+	public String makeLocation(final X36WdmPort info, final NeHelper helper) {
+		final boolean useOuterReceivingCard = sbiClient.getProfile().getBoolProperty(
+						I36PlugIn.PluginProperty.layeredParamsLocationUseOuterReceivingCard, true);
+		if (!useOuterReceivingCard){
+			return null;
+		}
+
+		final X36SetOfCoordPh setOfCoord = info.getCoordPh();
+		final String oaPortModelStrategy = helper.getSBIClient().getProfile().getProperty(
+						I36PlugIn.PluginProperty.sbiOAPortModelStrategy, "OA");
+		if (oaPortModelStrategy.equalsIgnoreCase("OA:OSC")) {
+			for (final X36CoordPh coord : setOfCoord) {
+				if (!coord.isPresentOuterReceivingCard() || (coord.isPresentCardType() && coord.getCardType().isOsu())) {
+					continue;
+				}
+
+				return makeLocation(helper, coord.getShelfId(), coord.getSlotId(), coord.getPortId());
+			}
+		} else {
+			for (final X36CoordPh coord : setOfCoord) {
+				if (!coord.isPresentOuterReceivingCard()) {
+					continue;
+				}
+
+				return makeLocation(helper, coord.getShelfId(), coord.getSlotId(), coord.getPortId());
+			}
+		}
+
+		return null;
+	}
+	/* ***************************************************************************/
+	public String makeLocation(final NeHelper helper, final X36ShelfId shelfId, final X36SlotId slotId, final X36PortId  portId) {
+		final boolean useSlotId  = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.layeredParamsLocationUseSlotId, true);
+		Integer cardId;
+
+		if (useSlotId) {
+			cardId = slotId.getValue();
+		} else {
+			cardId = helper.getCardId(shelfId, slotId).getValue();
+		}
+
+		return makeLocation(shelfId, cardId, portId);
+	}
+
+	/* ***************************************************************************/
+	static public String makeLocation(final X36ShelfId shelfId, final int cardId, final X36PortId  portId) {
+		/**
+		 * [/remote_unit=1..n]
+		 * [/rack=[1..n]]
+		 * /shelf=[1..n]
+		 * [/sub_shelf=[1..n]]
+		 * /slot=[1..n]
+		 * /[remote_]sub_slot=[1..n]
+		 * /port=[1..n]
+		 */
+		String location = "";
+
+		location = "/shelf=" + shelfId.getValue();
+		location += "/slot=" + cardId;
+		location += "/port=" + portId.getValue();
+
+		return location;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final X36ShelfInformation shelfInfo) {
+
+		final String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.namingHolderNativeNameFormat, "%s");
+
+		final String nativeEMSName = String.format(format,
+						shelfInfo.getShelfType().getValue(),
+						shelfInfo.getShelfId().getValue());
+
+		return nativeEMSName;
+	}
+
+
+	//********defined for MFD***************************************************************************/
+	public String makeNativeEMSName(final X36MfdId mfdId) {
+
+		final String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.mfdNameFormat, "%d");
+
+		final String nativeEMSName = String.format(format,mfdId.getValue());
+
+		return nativeEMSName;
+	}
+	//********defined for FD***********************************************************
+	public String makeNativeEMSName(final FDDn fdName, final X36NeId neId) {
+
+		final String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.fdNameFormat, "%s-%s");
+
+		final String nativeEMSName = String.format(format, neId.getValue(), fdName.getFd().getValue());
+
+		return nativeEMSName;
+	}
+	/* ********defined for FDFr*********************************************************/
+	/*public String makeNativeEMSName(FDFrDn frDn, X36NeId neId) {
+
+		String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.fdNameFormat, "%s-%s");
+
+		String nativeEMSName = String.format(format, frDn.getFdFr().getValue(), neId.getValue());
+
+		return nativeEMSName;
+	}*/
+
+	public String makeNativeEMSName(final FDFrDn frDn) {
+
+		final String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.fdFrNameFormat, "%10s");
+
+		final String nativeEMSName = String.format(format, frDn.getFdFr().getValue());
+
+		return nativeEMSName;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final X36ShelfInformation shelfInfo, final X36CardInformation cardInfo) {
+		final X36PhysicalCardInfo physicalCard = cardInfo.getPhysicalCardInfo();
+
+		final String cardType = (physicalCard != null) ? physicalCard.getCardType().getValue() : "";
+
+		final boolean f = sbiClient.getProfile().getBoolProperty(I36PlugIn.PluginProperty.namingEqCardNameAsCardTypeIfEmpty, true);
+
+		String cardName = "";
+		if (cardInfo.isPresentCardName()) {
+			cardName = cardInfo.getCardName().getValue();
+		}
+
+		if ((cardName.length() == 0) && f) {
+			cardName = cardType;
+		}
+
+		final String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.namingEqNativeNameFormat, "%s");
+
+		final String nativeEMSName = String.format(format,
+						cardName,
+						cardType,
+						shelfInfo.getShelfType(),
+						shelfInfo.getShelfId().getValue());
+
+		return nativeEMSName;
+		//		/*
+		//		 * per renedere i nomi piu' univoci ci mettiamo anche la coord di shelf e card
+		//		 */
+		//		String str = "";
+		//
+		//		if (cardInfo.isPresentPhysicalCardInfo()) {
+		//			str = cardInfo.getPhysicalCardInfo().getCardType().getValue();
+		//			str += ctpNativeNameSeparator + shelfInfo.getShelfId().getValue() + ctpNativeNameSeparator + cardInfo.getCardId().getValue();
+		//		}
+		//
+		//		if (str.length() == 0) {
+		//			str = "" + shelfInfo.getShelfId().getValue() + ctpNativeNameSeparator;
+		//			str += cardInfo.getCardId().getValue();
+		////			str = "cdId(" + cardInfo.getCardId().getValue() + ")";
+		//		}
+		//		return str;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardInfo, final X36PortInformation portInfo) {
+		/**
+		 * TODO si potrebbe pensare a renderla un po' configurabile
+		 */
+		if (portInfo.isPresentPortLabel()) {
+			final String portLabel = portInfo.getPortLabel().getValue();
+			if(portLabel!=null && portLabel.length()!=0){
+				return portLabel;
+			}
+		}
+
+		final String format = sbiClient.getProfile().getProperty(I36PlugIn.PluginProperty.namingPTPNativeNameFormat, "%s-%d");
+		final String nativeEMSName = String.format(format, cardInfo, portInfo.getPortId().getValue());
+
+		return nativeEMSName;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardInfo, final X36ClientPortInfo portInfo) {
+		/**
+		 * TODO si potrebbe pensare a renderla un po' configurabile
+		 */
+		final String name = cardInfo + ctpNativeNameSeparator + portInfo.getClientPortId().getValue();
+
+		return name;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName, final X36PortInformation portInfo, final X36KLM klm) {
+		String str = makeNativeEMSName(cardName, portInfo);
+
+		if (str.length() > 0) {
+			str += ctpNativeNameSeparator;
+		}
+		str += klm.getAu4().getValue();
+		if (klm.getTu3().getValue() > 0) {
+			str += ctpNativeNameSeparator + klm.getTu3().getValue();
+		}
+		if (klm.getTu2().getValue() > 0) {
+			str += ctpNativeNameSeparator + klm.getTu2().getValue();
+		}
+		if (klm.getTu12().getValue() > 0) {
+			str += ctpNativeNameSeparator + klm.getTu12().getValue();
+		}
+
+		return str;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName, final X36PortInformation portInfo, final IntegerType Id) {
+		String str = makeNativeEMSName(cardName, portInfo);
+
+		if (str.length() > 0) {
+			str += ctpNativeNameSeparator;
+		}
+		str += Id.getValue();
+
+		return str;
+	}
+
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName, final X36PortInformation portInfo, final String Id) {
+		String str = makeNativeEMSName(cardName, portInfo);
+
+		if (str.length() > 0) {
+			str += ctpNativeNameSeparator;
+		}
+		str += Id;
+
+		return str;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName, final X36PortInformation portInfo, final X36ODUId oduId, final IntegerType Id) {
+		String str = makeNativeEMSName(cardName, portInfo, oduId);
+
+		if (str.length() > 0) {
+			str += ctpNativeNameSeparator;
+		}
+		str += Id.getValue();
+
+		return str;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName, final X36PortInformation portInfo, final X36ODUId oduId, final X36KLM klm) {
+		String str = makeNativeEMSName(cardName, portInfo, oduId);
+
+		if (str.length() > 0) {
+			str += ctpNativeNameSeparator;
+		}
+		str += klm.getAu4().getValue();
+		if (klm.getTu3().getValue() > 0) {
+			str += ctpNativeNameSeparator + klm.getTu3().getValue();
+		}
+		if (klm.getTu2().getValue() > 0) {
+			str += ctpNativeNameSeparator + klm.getTu2().getValue();
+		}
+		if (klm.getTu12().getValue() > 0) {
+			str += ctpNativeNameSeparator + klm.getTu12().getValue();
+		}
+
+		return str;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName, final X36PortInformation portInfo, final int instanceId, final int concatenationOrder) {
+		String str = makeNativeEMSName(cardName, portInfo);
+
+		if (str.length() > 0) {
+			str += ctpNativeNameSeparator;
+		}
+		str += instanceId + ctpNativeNameSeparator + concatenationOrder + "c";
+
+		return str;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName,
+					final X36PortInformation portInfo,
+					final X36SetOfGenericTP virtualTps,
+					final int encapsulationInstance) {
+		String str = makeNativeEMSName(cardName, portInfo);
+
+		str += "[" + virtualTps.size() + "]"; //puo' andare?
+
+		return str;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName,
+					final X36PortInformation portInfo,
+					final X36VCGroup vcGroup) {
+		String str = makeNativeEMSName(cardName, portInfo);
+
+		str += "[" + vcGroup.getEncapsulationMode().getEnum() +"]";
+
+		return str;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final String cardName, final X36PortInformation portInfo, final X36ODUId oduId) {
+		IntegerType ochId = new IntegerType(1);
+		if (oduId.isPresentOchId()) {
+			ochId = oduId.getOchId();
+		}
+
+		String str = makeNativeEMSName(cardName, portInfo, ochId);
+
+		if (str.length() > 0) {
+			str += ctpNativeNameSeparator;
+		}
+		str += oduId.getOdu3().getValue() + ctpNativeNameSeparator;
+		str += oduId.getOdu2().getValue() + ctpNativeNameSeparator;
+		str += oduId.getOdu1().getValue();
+
+		return str;
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final X36ShelfInformation shelfInfo, final X36CardInformation cardInfo, final X36PortInformation portInfo) {
+		final String str = makeNativeEMSName(shelfInfo, cardInfo);
+
+		return makeNativeEMSName(str, portInfo);
+	}
+
+	/* ***************************************************************************/
+	public String makeNativeEMSName(final X36ShelfInformation shelfInfo, final X36CardInformation cardInfo, final X36ClientPortInfo portInfo) {
+		final String str = makeNativeEMSName(shelfInfo, cardInfo);
+
+		return makeNativeEMSName(str, portInfo);
+	}
+
+	//	 /* ***************************************************************************/
+	//	static public String makeNativeEMSName(String cardName,
+	//										   X36PortInformation portInfo,
+	//										   boolean isFlat) {
+	//		String str = makeNativeEMSName(cardName, portInfo);
+	//
+	//		if (str.length() > 0)
+	//			str += ctpNativeNameSeparator;
+	//		if (isFlat)
+	//			str += "FLAT";
+	//		else
+	//			str += "NESTED";
+	//
+	//		return str;
+	//	}
+
+	/**
+	 * As part of fix for TR HM40684 and HM48573: When frequency is not set
+	 * on an NE, the EM will set the frequency as -1 by default. This
+	 * frequency(i.e -1) will not be normalized. It will be normalized only
+	 * when the frequency is >1 in TMF.
+	 */
+	protected static X36Frequency normalizeFrequency(final X36Frequency freq){
+		int frequency =  freq.getValue();
+		final X36Frequency newFreq = new X36Frequency(freq);
+		if(frequency >0 && frequency<10000){
+			frequency = I36Utilities.makeFrequencyFromNM(frequency);
+			newFreq.set(frequency);
+		}
+		return newFreq;
+	}
+
+
+	/**
+	 * Build a complex FTP name used in backplane ports.<br>
+	 * @param meId the MeId
+	 * @param shelfId the shelf identifier
+	 * @param cardId the card identifier
+	 * @param portId the port identifier
+	 * @param vc4Id the vc4 coordinate
+	 * @param vc3Id the vc3 coordinate
+	 * @param vc2Id the vc2 coordinate
+	 * @param vc12Id the vc12 coordinate
+	 * @param lR the layer rate supported by this FTP
+	 * @return the FTP dn
+	 */
+	static public TPDn makeFTPDn(final MEId meId, final int shelfId, final int cardId, final int portId,
+					final int vc4Id, final int vc3Id, final int vc2Id, final int vc12Id, final LayerRate lR) {
+		return makeFTPDn(meId,
+						String.valueOf(shelfId),
+						String.valueOf(cardId),
+						String.valueOf(portId),
+						String.valueOf(vc4Id),
+						String.valueOf(vc3Id),
+						String.valueOf(vc2Id),
+						String.valueOf(vc12Id),
+						lR);
+	}
+
+	/**
+	 * Build a complex FTP name.<br>
+	 * @param meId the MeId
+	 * @param shelfId the shelf identifier
+	 * @param cardId the card identifier
+	 * @param portId the port identifier
+	 * @param vc4Id the vc4 coordinate
+	 * @param vc3Id the vc3 coordinate
+	 * @param vc2Id the vc2 coordinate
+	 * @param vc12Id the vc12 coordinate
+	 * @param lR the layer rate supported by this FTP
+	 * @return the FTP dn
+	 */
+
+	static public TPDn makeFTPDn(final MEId meId, final String shelfId, final String cardId, final String portId,
+					final String vc4Id, final String vc3Id, final String vc2Id, final String vc12Id,
+					final LayerRate lR) {
+		final TPDn name = new TPDn();
+		name.setMe(meId);
+		name.setPresentTp();
+		name.getTp().setFtp(I36Naming.makeFTPId(shelfId, cardId, portId, vc4Id, vc3Id, vc2Id, vc12Id, lR));
+		return name;
+	}
+
+	/**
+	 * Build a complex FTP id component.<br>
+	 * @param shelfId the shelf identifier
+	 * @param cardId the card identifier
+	 * @param portId the port identifier
+	 * @param vc4Id the vc4 coordinate
+	 * @param vc3Id the vc3 coordinate
+	 * @param vc2Id the vc2 coordinate
+	 * @param vc12Id the vc12 coordinate
+	 * @param lR the layer rate supported by this FTP
+	 * @return the FTP dn
+	 */
+	static public GenericTPId makeFTPId(final String shelfId, final String cardId, final String portId,
+					final String vc4Id, final String vc3Id, final String vc2Id, final String vc12Id, final LayerRate lR) {
+
+		final PortCoordinates portCoord = new PortCoordinates();
+		portCoord.setShelf(shelfId);
+		// va bene la card?
+		portCoord.setSlot(cardId);
+		portCoord.setPort(portId);
+
+		final GenericTPId name = new GenericTPId();
+		name.setCoord(portCoord);
+
+		/**
+		 * Per la costruzione del FTP name aggiungo anche una label - utilizzo un formatter
+		 */
+		final String label = I36Naming.getFTPBackplaneName(vc4Id, vc3Id, vc2Id, vc12Id, lR);
+		name.setLabel(label);
+		return name;
+	}
+
+	/**
+	 * Formatter per backplane FTPs.<br>
+	 * @param vc4Id the vc4 coordinate
+	 * @param vc3Id the vc3 coordinate
+	 * @param vc2Id the vc2 coordinate
+	 * @param vc12Id the vc12 coordinate
+	 * @param lR the layer rate supported by this FTP
+	 * @return the additional string FTP used in name
+	 */
+
+	static public String getFTPBackplaneName(final String vc4Id, final String vc3Id, final String vc2Id, final String vc12Id, final LayerRate lR) {
+		String name = "";
+		if (lR.getValue() == LayerRateManager.getLayerRate("LR_STS3c_and_AU4_VC4").getValue()) {
+			name = "/timeSlot-j=" + vc4Id;
+		} else if (lR.getValue() == LayerRateManager.getLayerRate("LR_Low_Order_TU3_VC3").getValue()) {
+			name = "/timeSlot-j=" + vc4Id + "-k=" + vc3Id;
+		} else if (lR.getValue() == LayerRateManager.getLayerRate("LR_VT6_and_TU2_VC2").getValue()) {
+			name = "/timeSlot-j=" + vc4Id + "-k=" + vc3Id + "-l=" + vc2Id;
+		} else if (lR.getValue() == LayerRateManager.getLayerRate("LR_VT2_and_TU12_VC12").getValue()) {
+			name = "/timeSlot-j=" + vc4Id + "-k=" + vc3Id + "-l=" + vc2Id + "-m=" + vc12Id;
+		} else {
+			LOG.error("Layer Rate not supported " + LayerRateManager.toString(lR));
+		}
+
+		return name;
+	}
+
+	/**
+	 * This method is used to form the FTP name for an InternalODUPort.
+	 *
+	 * @param neId
+	 * @param shelfId
+	 * @param slotId
+	 * @param portId
+	 * @param kLevel
+	 * @param id
+	 * @return
+	 */
+	public TPDn makeFTPDn(final X36NeId neId, final X36ShelfId shelfId, final X36SlotId slotId, final X36PortId portId, final int kLevel, final int id) {
+		final TPDn tpDn = new TPDn();
+		final PortCoordinates portCoord = new PortCoordinates();
+		portCoord.setShelf(String.valueOf(shelfId.getValue()));
+		portCoord.setSlot(String.valueOf(slotId.getValue()));
+		portCoord.setPort(String.valueOf(portId.getValue()));
+
+		final GenericTPId name = new GenericTPId();
+		tpDn.setMe(this.get(neId));
+		name.setCoord(portCoord);
+		final String label = "/timeSlot-odu" + kLevel + "=" + id;
+		name.setLabel(label);
+		final TPId tpId = new TPId();
+		tpId.setFtp(name);
+		tpDn.setPresentTp();
+		tpDn.setTp(tpId);
+		return tpDn;
+	}
+
+
+	/**
+	 * This method is used to get the naming for InternalODU port CTP from a given TpType.
+	 *
+	 * @param ftpDn
+	 * @param tpType
+	 * @param id
+	 * @return
+	 */
+	public TPDn makeCtpDn(final TPDn ftpDn, final TpType tpType, final int id) {
+
+		final TPDn dn = new TPDn(ftpDn);
+		dn.setPresentCtp();
+
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents ctpComp = new CtpNameComponents();
+		final CtpNameComponent cbrStmCtp = new CtpNameComponent();
+		if (tpType != null) {
+			cbrStmCtp.setDsr(id);
+		}
+		ctpComp.add(cbrStmCtp);
+		ctpName.setComponents(ctpComp);
+		dn.setCtp(ctpName);
+
+		return dn;
+	}
+
+
+	/**
+	 * This method is used to form the name of aggregated CTP's of backplane transponder
+	 * @param OduInfo
+	 * @param meId
+	 * @param tpDn
+	 * @param isFtp
+	 * @return ctpDn
+	 */
+	public TPDn makeAggregatedCTPDn(final X36ODUInfo OduInfo, final MEId meId, final TPDn tpDn, final boolean isPtp) {
+
+		final TPDn ctpDn = new TPDn();
+		// As TPId Feiled in TPDn class is optional field, need to setPresentTP
+		// on TPDn object. Fix for the TR HP74977
+		ctpDn.setPresentTp();
+		final GenericTPId name = new GenericTPId();
+
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents ctpComp = new CtpNameComponents();
+		final CtpNameComponent oduCtp = new CtpNameComponent();
+		final int kLevel = OduInfo.getKLevel().getValue();
+		final X36ODUId oduID = OduInfo.getId();
+		if (kLevel == 1) {
+			oduCtp.setOdu1(oduID.getOdu1().getValue());
+		} else if (kLevel == 2) {
+			oduCtp.setOdu2(oduID.getOdu2().getValue());
+		} else if (kLevel == 3) {
+			oduCtp.setOdu3(oduID.getOdu3().getValue());
+		}
+		ctpComp.add(oduCtp);
+		ctpName.setComponents(ctpComp);
+		ctpDn.setMe(meId);
+		if(isPtp){
+			name.set(tpDn.getTp().getPtp());
+			ctpDn.setPresentTp();
+			ctpDn.getTp().setPtp(name);
+		}else{
+			name.set(tpDn.getTp().getFtp());
+			ctpDn.setPresentTp();
+			ctpDn.getTp().setFtp(name);
+		}
+
+		ctpDn.setCtp(ctpName);
+		return ctpDn;
+
+	}
+
+	/**
+	 * This method is used to form name of CTP B of backplane transponder
+	 * @param oduInfo
+	 * @param kLevelTrans
+	 * @param meId
+	 * @param tpDn
+	 * @param isFtp
+	 * @return ctpDn
+	 */
+	public TPDn makeBackplaneCTPDn(final X36ODUInfo oduInfo, final int kLevelTrans, final MEId meId, final TPDn tpDn, final boolean isPtp,
+					final X36ODUId aggregatedOduId) {
+
+		final TPDn ctpDn = new TPDn();
+		// As TPId Feiled in TPDn class is optional field, need to setPresentTP
+		// on TPDn object. Fix for the TR HP74977
+		ctpDn.setPresentTp();
+		final GenericTPId name = new GenericTPId();
+
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents ctpComp = new CtpNameComponents();
+		final CtpNameComponent oduCtp = new CtpNameComponent();
+		if (kLevelTrans == 1) {
+			oduCtp.setOdu1(aggregatedOduId.getOdu1().getValue());
+		} else if (kLevelTrans == 2) {
+			oduCtp.setOdu2(aggregatedOduId.getOdu2().getValue());
+		} else if (kLevelTrans == 3) {
+			oduCtp.setOdu3(aggregatedOduId.getOdu3().getValue());
+		}
+		ctpComp.add(oduCtp);
+		final CtpNameComponent childOduCtp = new CtpNameComponent();
+		final int kLevel = oduInfo.getKLevel().getValue();
+		if (kLevel == 1) {
+			childOduCtp.setOdu1(oduInfo.getId().getOdu1().getValue());
+		} else if (kLevel == 2) {
+			childOduCtp.setOdu2(oduInfo.getId().getOdu2().getValue());
+		} else if (kLevel == 3) {
+			childOduCtp.setOdu3(oduInfo.getId().getOdu3().getValue());
+		}
+		ctpComp.add(childOduCtp);
+		ctpName.setComponents(ctpComp);
+		ctpDn.setMe(meId);
+		if(isPtp){
+			name.set(tpDn.getTp().getPtp());
+			ctpDn.setPresentTp();
+			ctpDn.getTp().setPtp(name);
+		}else{
+			name.set(tpDn.getTp().getFtp());
+			ctpDn.setPresentTp();
+			ctpDn.getTp().setFtp(name);
+		}
+
+		ctpDn.setCtp(ctpName);
+		return ctpDn;
+	}
+
+	/**
+	 * This method is used for naming of FTP of CBR port
+	 * @param neId
+	 * @param shelfId
+	 * @param slotId
+	 * @param portId
+	 * @return tpDn
+	 */
+	public TPDn makeCbrFTPDn(final X36NeId neId, final X36ShelfId shelfId, final X36SlotId slotId, final X36PortId portId){
+		final TPDn tpDn = new TPDn();
+		final PortCoordinates portCoord = new PortCoordinates();
+		portCoord.setShelf(String.valueOf(shelfId.getValue()));
+		portCoord.setSlot(String.valueOf(slotId.getValue()));
+		portCoord.setPort(String.valueOf(portId.getValue()));
+
+		final GenericTPId name = new GenericTPId();
+		tpDn.setMe(this.get(neId));
+		name.setCoord(portCoord);
+		final String label = "/dsr=1";
+		name.setLabel(label);
+		final TPId tpId = new TPId();
+		tpId.setFtp(name);
+		tpDn.setPresentTp();
+		tpDn.setTp(tpId);
+		return tpDn;
+
+	}
+	/**
+	 * This method is written as part of the WP 503(CEP aggregation to PNP service) in order to suport mutiple CTAG's for CEP if addStag is true.
+	 * 	 *
+	 * @param tpDn
+	 *            ,primaryTPID,primaryVlanID,secondaryVlanID,isPresentSetOfSecTags
+	 * @return
+	 */
+	public TPDn makeVlanTaggedFPDn(final TPDn tpDn,
+					final X36PrimaryTPID primaryTPID, final int primaryVlanID) {
+		final TPDn dn = new TPDn(tpDn);
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents ctpNameComponents = new CtpNameComponents();
+		final CtpNameComponent ctpNameComponent = new CtpNameComponent();
+
+		if (primaryTPID.isPrimary_ieee802_1q_ctag()) {
+			ctpNameComponent.setEthcvid(Integer.toString(primaryVlanID));
+		} else {
+			ctpNameComponent.setEthsvid(Integer.toString(primaryVlanID));
+		}
+		/*
+		 * if(isPresentSetOfSecTags){ nameComp2.setEthcvid("many"); }else{ if
+		 * (secondaryVlanID > 0) {
+		 * nameComp2.setEthcvid(Integer.toString(secondaryVlanID)); } else if
+		 * (secondaryVlanID == 0) { nameComp2.setEthcvid("all"); } }
+		 */
+		ctpNameComponents.add(ctpNameComponent);
+		ctpName.setComponents(ctpNameComponents);
+		dn.setCtp(ctpName);
+		return dn;
+	}
+
+	public TPDn makeCTPDn(final TPDn dn, final int ctpCount) {
+		final TPDn tpDn = new TPDn(dn);
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents name = new CtpNameComponents();
+		final CtpNameComponent nameComp1 = new CtpNameComponent();
+		nameComp1.setDsr(ctpCount);
+		name.add(nameComp1);
+		ctpName.setComponents(name);
+		tpDn.setCtp(ctpName);
+		return tpDn;
+	}
+
+	/**
+	 * This method is written as part of MPLS support to form the name of LSP
+	 * and VPN FTP.
+	 *
+	 * @param neId
+	 * @param id
+	 * @return
+	 */
+	public TPDn makeMplsFTPDn(final X36NeId neId, final Integer id) {
+		final TPDn tpDn = new TPDn();
+		tpDn.setMe(this.get(neId));
+		final TPId tpId = new TPId();
+		final GenericTPId name = new GenericTPId();
+		final String label = "/mpls_tp=" + id;
+		name.setLabel(label);
+		tpId.setFtp(name);
+		tpDn.setPresentTp();
+		tpDn.setTp(tpId);
+		return tpDn;
+	}
+
+	/**
+	 * This method is written as part of MPLS support to form the name of LSP
+	 * and VPN CTP.
+	 *
+	 * @param neId
+	 * @param id
+	 * @return
+	 */
+	public TPDn makeMplsCTPDn(final X36NeId neId, final Integer id) {
+		final TPDn tpDn = new TPDn();
+		tpDn.setMe(this.get(neId));
+		final CtpName ctpName = new CtpName();
+		final CtpNameComponents name = new CtpNameComponents();
+		final CtpNameComponent nameComp1 = new CtpNameComponent();
+		nameComp1.setMpls_tp(id);
+		name.add(nameComp1);
+		ctpName.setComponents(name);
+		tpDn.setCtp(ctpName);
+		return tpDn;
+	}
+
+	/**
+	 * This method is introduced as part of MPLS Support for building the name
+	 * of Bridged CTP of WDM transport port.
+	 * 
+	 * @param tpDn
+	 * @param ethId
+	 * @return
+	 */
+	public TPDn makeWDMBridgedCTPDn(final TPDn tpDn, final int ethId) {
+
+		final TPDn dn = new TPDn(tpDn);
+
+		final CtpName ctpName = dn.getCtp();
+		final CtpNameComponents ethComponents = ctpName.getComponents();
+
+		final CtpNameComponent ethComponent = new CtpNameComponent();
+		ethComponent.setEth(Integer.toString(ethId));
+		ethComponents.add(ethComponent);
+
+		return dn;
+	}
+
+	public TPDn makeOtmEthCTPDn(final TPDn tpDn, final int primaryVlanID, final CTPType type) {
+		/* ************************************************************************** */
+		/**
+		 * Cerco il PTP oppure l'FTP
+		 */
+		final TPDn ctpName = new TPDn(tpDn);
+
+		final CtpNameComponents name = ctpName.getCtp().getComponents();
+		final CtpNameComponent nameComp1 = new CtpNameComponent();
+		nameComp1.setEth(Integer.toString(primaryVlanID));
+		name.add(nameComp1);
+
+		return ctpName;
+	}
+}

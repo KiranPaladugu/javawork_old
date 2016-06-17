@@ -1,0 +1,878 @@
+/**
+ * File: MERealigner.java
+ */
+
+package com.marconi.fusion.tmf.i38PlugIn.sbi.realigner;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.lang.time.StopWatch;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import com.marconi.fusion.X38.X38EMState;
+import com.marconi.fusion.X38.X38Layer;
+import com.marconi.fusion.X38.X38NEPattern;
+import com.marconi.fusion.X38.X38SNName;
+import com.marconi.fusion.X38.X38SNQueryResult;
+import com.marconi.fusion.X38.X38SetOfLayer;
+import com.marconi.fusion.X38.X38SetOfSNQueryResult;
+import com.marconi.fusion.tmf.additionalInformation.AdditionalInfoUtils;
+import com.marconi.fusion.tmf.additionalInformation.CircuitSystemProfile;
+import com.marconi.fusion.tmf.additionalInformation.EmSystemProfile;
+import com.marconi.fusion.tmf.additionalInformation.MEOwner;
+import com.marconi.fusion.tmf.additionalInformation.MEOwner.MeOwner;
+import com.marconi.fusion.tmf.additionalInformation.ManagedSystemProfile;
+import com.marconi.fusion.tmf.additionalInformation.ProprietaryAdditionalInfo;
+import com.marconi.fusion.tmf.agnosticInfo.AICircuitSystemProfile;
+import com.marconi.fusion.tmf.agnosticInfo.AIEmSystemProfile;
+import com.marconi.fusion.tmf.db.DBComponent.TMFObject;
+import com.marconi.fusion.tmf.db.DBIterator;
+import com.marconi.fusion.tmf.db.DBManagedElement;
+import com.marconi.fusion.tmf.db.DBSubnetwork;
+import com.marconi.fusion.tmf.db.Session;
+import com.marconi.fusion.tmf.i38PlugIn.AbstractUser;
+import com.marconi.fusion.tmf.i38PlugIn.converter2.MEConverter;
+import com.marconi.fusion.tmf.i38PlugIn.db2.I38Database;
+import com.marconi.fusion.tmf.i38PlugIn.db2.MECache;
+import com.marconi.fusion.tmf.i38PlugIn.db2.MEData;
+import com.marconi.fusion.tmf.i38PlugIn.db2.MEHolder;
+import com.marconi.fusion.tmf.i38PlugIn.sbi.EmInfo;
+import com.marconi.fusion.tmf.i38PlugIn.sbi.X38SBIClient;
+import com.marconi.fusion.tmf.naming.Naming;
+import com.marconi.fusion.tmf.plugIn.PlugInException;
+import com.marconi.fusion.tmf.plugIn.PlugInExceptionHandler;
+import com.marconi.fusion.tmf.plugIn.types.AdditionalInfo;
+import com.marconi.fusion.tmf.plugIn.types.MEDn;
+import com.marconi.fusion.tmf.plugIn.types.ManagedElement;
+import com.marconi.fusion.tmf.plugIn.types.SNDn;
+import com.marconi.fusion.tmf.sbi.nm.NmSBIPluginProperty;
+import com.marconi.fusion.tmf.sbi.nm.SBIException;
+import com.marconi.fusion.tmf.tmfFramework.TmfNameUtilities;
+import com.marconi.fusion.tmf.utils.ConnectionsCount;
+import com.marconi.fusion.tmf.utils.ListCursor;
+
+public class MERealigner extends AbstractUser {
+	private static Log log = LogFactory.getLog(MERealigner.class);
+
+	static class Data {
+		int emId = 0;
+		int neIdInEM = 0;
+		ManagedElement me = null;
+
+		private Data(final MEHolder holder) {
+			try {
+				emId = holder.getData().getEMId();
+				neIdInEM = holder.getData().getNeIdInEM();
+				me = holder.getSyntax();
+			} catch (final Exception ex) {
+			}
+		}
+	}
+
+	private Profile profile = null;
+	private X38SNName snName = null;
+	private Map<String, MEInfo> map = null;
+
+	public MERealigner(final X38SBIClient sbi, final String sessionName, final Profile profile) {
+		super(sbi, sessionName);
+		this.profile = profile;
+
+	}
+
+	public List<MEInfo> realign(final String hostName) throws Exception {
+		snName = getParentSNName();
+		if (snName != null) {
+			log.warn(format("### Realigning SNName: '%s.%s.%s'", snName
+					.getLongSNName().getValue(), snName.getShortSNName()
+					.getValue(), snName.getSnSuffix().getValue()));
+		}
+
+		final List<MEInfo> items = collect(null, hostName);
+		realign(items, sbi.getSNDn());
+		return items;
+	}
+
+	public Data create(final X38NEPattern pattern, final String hostName)
+			throws Exception {
+		final List<MEInfo> infos = collect(pattern, hostName);
+
+		if (infos.size() != 1) {
+			log.error(format("Cannot collect info for NEPattern:", pattern));
+			throw PlugInExceptionHandler.internalError();
+		}
+
+		return create(infos.get(0), sbi.getSNDn());
+	}
+
+	public Data delete(final X38NEPattern pattern) throws Exception {
+		Session session = null;
+		try {
+			session = sbi.getDatabase().beginSession(true);
+
+			final List<MEHolder> infos = sbi.getDatabase().findManagedElements(
+					pattern);
+
+			if (infos.size() == 0) {
+				log.error(format("Cannot find ManagedElement:", pattern));
+				throw new Exception("Cannot find ManagedElement.");
+			}
+
+			if (infos.size() > 1) {
+				log.error(format(
+						String.format("Found %d ManagedElements for:",
+								infos.size()), pattern));
+				throw new Exception("Cannot find ManagedElement.");
+			}
+
+			final MEHolder holder = infos.get(0);
+			final String meName = holder.getDBObject().getName();
+
+			final StopWatch watch = new StopWatch();
+			watch.start();
+
+			log.info(String.format("Removing ME <%s>....", meName));
+			final Data data = new Data(infos.get(0));
+
+			final String meId = infos.get(0).getDBObject()
+					.getManagedElementDn().getMe().getValue();
+
+			sbi.getDatabase().delete(infos.get(0).getDBObject());
+
+			ConnectionsCount.removeEntriesForME(meId);
+
+			if (log.isDebugEnabled()) {
+				log.debug(String
+						.format("Deleted all the entries for ME [%s] from connCount maps",
+								meId));
+			}
+
+			session.commit();
+
+			watch.stop();
+			log.info(String.format("Removed ME <%s> in %s", meName,
+					watch.toString()));
+
+			return data;
+		} catch (final Exception ex) {
+
+			log.error(format("Transaction Rollback.", ex));
+			throw PlugInExceptionHandler
+			.internalError(I38Database.DATABASE_ERROR_STRING);
+		} finally {
+			if (session != null && !session.isTerminated()) {
+				session.terminate();
+			}
+		}
+	}
+
+	public void update(final MEDn meDn) throws Exception {
+		X38SNName snName = null;
+		String hostName = null;
+		Session session = null;
+		try {
+			session = sbi.getDatabase().beginSession(false);
+			final MEHolder me = sbi.getDatabase().getManagedElement(meDn);
+			CircuitSystemProfile circuitSystemProfile = null;
+			circuitSystemProfile = sbi.getCircuitSystemProfile(me.getDBObject());
+			hostName = circuitSystemProfile != null ? circuitSystemProfile.getSyntax().getHostId().getValue() : null;
+			snName = me.getData().getX38SNName();
+		} catch (final Exception ex) {
+			throw new Exception(String.format(
+					"Cannot find Managed Element: %s", Naming.makeValue(meDn)));
+		} finally {
+			if (session != null && !session.isTerminated()) {
+				session.terminate();
+			}
+		}
+
+		final X38NEPattern pattern = new X38NEPattern();
+		pattern.setLongNEName(snName.getLongSNName().getValue());
+		pattern.setShortNEName(snName.getShortSNName().getValue());
+		if (snName.isPresentSnSuffix()) {
+			pattern.setNeSuffix(snName.getSnSuffix().getValue());
+		} else {
+			pattern.setNeSuffix("");
+		}
+
+		final List<MEInfo> infos = collect(pattern, hostName);
+
+		if (infos.size() != 1) {
+			log.error(format("Cannot collect info for NEPattern:", pattern));
+			throw PlugInExceptionHandler.internalError();
+		}
+
+		update(meDn, infos.get(0));
+	}
+
+	public void update(final MEDn meDn, final X38SNName snName)
+			throws Exception {
+		final X38NEPattern pattern = new X38NEPattern();
+		pattern.setLongNEName(snName.getLongSNName().getValue());
+		pattern.setShortNEName(snName.getShortSNName().getValue());
+		if (snName.isPresentSnSuffix()) {
+			pattern.setNeSuffix(snName.getSnSuffix().getValue());
+		} else {
+			pattern.setNeSuffix("");
+		}
+		String hostName = null;
+		Session session = null;
+		try {
+			session = sbi.getDatabase().beginSession(false);
+			final MEHolder me = sbi.getDatabase().getManagedElement(meDn);
+			CircuitSystemProfile circuitSystemProfile = null;
+			circuitSystemProfile = sbi.getCircuitSystemProfile(me.getDBObject());
+			hostName = circuitSystemProfile != null ? circuitSystemProfile.getSyntax().getHostId().getValue() : null;
+		} catch (final Exception ex) {
+			throw new Exception(String.format(
+					"Cannot find Managed Element: %s", Naming.makeValue(meDn)));
+		} finally {
+			if (session != null && !session.isTerminated()) {
+				session.terminate();
+			}
+		}
+
+		final List<MEInfo> infos = collect(pattern, hostName);
+
+		if (infos.size() != 1) {
+			log.error(format("Cannot collect info for NEPattern:", pattern));
+			throw PlugInExceptionHandler.internalError();
+		}
+
+		update(meDn, infos.get(0));
+	}
+
+	public List<MEInfo> collect(final X38NEPattern pattern,
+			final String hostName) throws Exception {
+		map = new HashMap<String, MEInfo>();
+		final List<MEInfo> infos = new ArrayList<MEInfo>();
+
+		X38SetOfLayer setOfLayer = new X38SetOfLayer();
+		setOfLayer.add(new X38Layer(X38Layer.ph));
+
+		X38SetOfSNQueryResult setOfSnQueryResult = processLayer(pattern,
+				setOfLayer, hostName);
+		processPhQuery(infos, setOfSnQueryResult);
+
+		for (final Iterator<X38Layer> itr = MEData.getManagedLayers()
+				.iterator(); itr.hasNext();) {
+			setOfLayer = new X38SetOfLayer();
+			setOfLayer.add(itr.next());
+			setOfSnQueryResult = processLayer(pattern, setOfLayer, hostName);
+			processQuery(setOfSnQueryResult);
+		}
+
+		return infos;
+	}
+
+	/**
+	 * This method will process the setOfLayers
+	 *
+	 * @param pattern
+	 * @param setOfLayer
+	 * @return
+	 * @throws SBIException
+	 * @throws Exception
+	 */
+	private X38SetOfSNQueryResult processLayer(final X38NEPattern pattern,
+			final X38SetOfLayer setOfLayer, final String hostName)
+					throws SBIException, Exception {
+
+		X38SetOfSNQueryResult setOfSnQueryResult;
+		if (pattern == null) {
+			setOfSnQueryResult = sbi.getMessageHandler().makeSNQuery(
+					getConverter().getManagedSNTypes(), setOfLayer, hostName);
+		} else {
+			setOfSnQueryResult = sbi.getMessageHandler().makeSNQuery(pattern,
+					getConverter().getManagedSNTypes(), setOfLayer, hostName);
+
+			// To Fix the TR HL38739 - If the snSuffix of an NE is removed from
+			// MV38
+			if (pattern.isPresentShortNEName() && snName == null) {
+				final X38SNName snName = new X38SNName();
+				snName.setLongSNName(pattern.getLongNEName().getValue());
+				snName.setShortSNName(pattern.getShortNEName().getValue());
+				snName.setSnSuffix(pattern.getNeSuffix().getValue());
+				final X38SetOfSNQueryResult tempSetOfSnQueryResult = new X38SetOfSNQueryResult(
+						setOfSnQueryResult);
+				setOfSnQueryResult.clear();
+				for (final X38SNQueryResult snQueryResult : tempSetOfSnQueryResult) {
+					if (equals(snQueryResult.getName(), snName)) {
+						setOfSnQueryResult.add(snQueryResult);
+						break;
+					}
+				}
+			}
+
+		}
+		return setOfSnQueryResult;
+
+	}
+
+	private void processPhQuery(final List<MEInfo> meInfos,
+			final X38SetOfSNQueryResult setOfSNQueryResult) throws Exception {
+		for (final Iterator<X38SNQueryResult> itr = setOfSNQueryResult
+				.iterator(); itr.hasNext();) {
+			final X38SNQueryResult snQueryResult = itr.next();
+
+			if (snName != null
+					&& (!equals(snQueryResult.getParentName(), snName))) {
+				continue;
+			}
+
+			final ManagedElement managedElement = toManagedElement(snQueryResult);
+			if (managedElement == null) {
+				log.error(format("Cannot convert X38SNQueryResult:",
+						snQueryResult));
+				continue;
+			}
+
+			if (map.containsKey(makeSNQueryKey(snQueryResult))) {
+				log.error(format("Duplicated NEId:", snQueryResult.getNeId()));
+				continue;
+			}
+
+			final MEInfo meInfo = new MEInfo(snQueryResult);
+
+			map.put(makeSNQueryKey(snQueryResult), meInfo);
+			meInfos.add(meInfo);
+		}
+	}
+
+	private void processQuery(final X38SetOfSNQueryResult setOfSNQueryResult)
+			throws Exception {
+		for (final Iterator<X38SNQueryResult> en = setOfSNQueryResult
+				.iterator(); en.hasNext();) {
+			final X38SNQueryResult item = en.next();
+
+			final MEInfo meInfo = map.get(makeSNQueryKey(item));
+			if (meInfo == null) {
+				if (snName != null) {
+					continue;
+				}
+				log.error(format(String.format(
+						"Cannot find MEInfo for NEId=%d", item.getNeId()
+						.getValue())));
+				throw new Exception(String.format(
+						"Cannot find MEInfo for NEId=%d", item.getNeId()
+						.getValue()));
+			}
+
+			meInfo.data.setSNId(item.getSnId(), item.getSnId().getLayer());
+		}
+	}
+
+	private String makeSNQueryKey(final X38SNQueryResult in) {
+		return String.format("%d:%d", in.getEmId().getValue(), in.getNeIdInEM()
+				.getValue());
+	}
+
+	private void realign(final List<MEInfo> items, final SNDn snDn)
+			throws Exception {
+		Session session = null;
+		try {
+			session = sbi.getDatabase().beginSession(true);
+
+			final DBSubnetwork dbSubnetwork = sbi.getDatabase()
+					.getDBSubnetwork(snDn);
+			if (dbSubnetwork == null) {
+				log.error(format("Cannot find Subnetwork:", snDn));
+				throw new Exception("Cannot find Subnetwork.");
+			}
+
+			final Map<String, DBManagedElement> meMap = new HashMap<String, DBManagedElement>();
+			final DBIterator<DBManagedElement> itr = dbSubnetwork.getMEs()
+					.iterator();
+			try {
+				while (itr.hasNext()) {
+					final DBManagedElement me = itr.next();
+					meMap.put(me.getDn().getMe().getValue(), me);
+				}
+			} finally {
+				itr.close();
+			}
+
+			final ListCursor<MEInfo> cursor = new ListCursor<MEInfo>(items);
+			while (cursor.hasMore()) {
+				final List<MEInfo> list = cursor
+						.getNext(profile.meQueryGranularity);
+
+				for (final MEInfo info : list) {
+					updateMeInfo(info, meMap, dbSubnetwork);
+				}
+
+				session.checkpoint();
+
+				log.info(format(String.format(
+						"Realigned %d/%d ManagedElement.", cursor.current(),
+						cursor.size())));
+			}
+
+			for (final DBManagedElement dbManagedElement : meMap.values()) {
+				if (dbManagedElement == null) {
+					log.error(format("Found null ManagedElement in map"));
+					continue;
+				}
+				log.info(String.format("Delete Managed Element: <%s>",
+						Naming.makeValue(dbManagedElement.getDn())));
+				sbi.getDatabase().delete(dbManagedElement);
+			}
+
+			session.commit();
+		} catch (final Exception ex) {
+			log.error(format("Transaction Rollback.", ex));
+			throw PlugInExceptionHandler
+			.internalError(I38Database.DATABASE_ERROR_STRING);
+		} finally {
+			if (session != null && !session.isTerminated()) {
+				session.terminate();
+			}
+		}
+	}
+
+	/**
+	 * This method will updates Me information with given info.
+	 *
+	 * @param info
+	 * @param meMap
+	 * @param dbSubnetwork
+	 * @throws Exception
+	 */
+	@SuppressWarnings("deprecation")
+	private void updateMeInfo(final MEInfo info,
+			final Map<String, DBManagedElement> meMap,
+			final DBSubnetwork dbSubnetwork) throws Exception {
+		final ManagedElement me = toManagedElement(info.snQueryResult);
+		if (me == null) {
+			log.error(format("Cannot get ManagedElement for",
+					info.snQueryResult));
+			throw new Exception("Cannot get ManagedElement");
+		}
+
+		DBManagedElement dbManagedElement = meMap.remove(me.getName().getMe()
+				.getValue());
+
+		if (dbManagedElement == null) {
+			/*
+			 * If the ME is not found with using the name (having NEId in it),
+			 * check if the ME can be found using the same SNName
+			 */
+			final MECache meCache = sbi.getDatabase().getMECache();
+
+			if (meCache != null) {
+				final MEDn oldMEDn = meCache.get(info.data.getX38SNName());
+				if (oldMEDn != null) {
+					/** Update the name in the syntax **/
+					me.setName(oldMEDn);
+					final MEHolder oldDBMe = sbi.getDatabase()
+							.getManagedElement(oldMEDn);
+					if (oldDBMe != null) {
+						dbManagedElement = oldDBMe.getDBObject();
+						meMap.remove(dbManagedElement.getDn().getMe()
+								.getValue());
+						/*
+						 * If the NE is found with the same old SNName, then
+						 * check if the NEId is changed *
+						 */
+						final ManagedElement syntax = dbManagedElement
+								.getInformation();
+						final AdditionalInfo ai = syntax.getAdditionalInfo();
+						final String oldNEId = AdditionalInfoUtils.find(ai,
+								ProprietaryAdditionalInfo.MEIDOnEM.name());
+						if (oldNEId != null
+								&& (Integer.parseInt(oldNEId) != info.data
+								.getNeIdInEM())) {
+							if (log.isDebugEnabled()) {
+								log.debug(format(
+										"Q3NE: Detected the NEId change of the ME <%s> from <%s> to <%d>",
+										TmfNameUtilities.toString(oldMEDn),
+										oldNEId, info.data.getNeIdInEM()));
+							}
+							/** Update the NEIdInEM additional info **/
+							AdditionalInfoUtils.update(ai,
+									TMFObject.ManagedElement,
+									ProprietaryAdditionalInfo.MEIDOnEM.name(),
+									"" + info.data.getNeIdInEM());
+							syntax.setAdditionalInfo(ai);
+						}
+					}
+				}
+			}
+		}
+
+		if (dbManagedElement == null) {
+			// dbManagedElement = sbi.getDatabase().create(dbSubnetwork, me, info.data);
+		} else {
+			innerUpdate(me.getName(), info);
+		}
+
+		// To set MEOwner, EmSystemProfile and CircuitSystemProfile
+		// setAdditionalInfo(dbManagedElement, info.snQueryResult);
+		sbi.getDatabase().cache(me.getName(), info.data);
+
+	}
+
+	/**
+	 * This method sets additionalInfos MEOwner, EmSystemProfile and
+	 * CircuitSystemProfile on DBManagedElement
+	 *
+	 * @param dbManagedElement
+	 * @param snQueryResult
+	 */
+	private void setAdditionalInfo(final DBManagedElement dbManagedElement,
+			final X38SNQueryResult snQueryResult) {
+
+		final MEOwner meOwner = (MEOwner) dbManagedElement.getAdditionalInformation(MEOwner.NAME);
+		if (meOwner == null) {
+			dbManagedElement.addAdditionalInformation(new MEOwner(new StringBuilder(MeOwner.Circuit.toString())));
+		} else {
+			final StringBuilder owner = meOwner.getMeOwner();
+			if (owner.toString().equalsIgnoreCase(MeOwner.Packet.toString())) {
+				owner.append(":").append(MeOwner.Circuit.toString());
+			}
+		}
+
+		ManagedSystemProfile systemProfiles = (ManagedSystemProfile) dbManagedElement
+				.getAdditionalInformation(ManagedSystemProfile.NAME);
+
+		if (systemProfiles == null) {
+			systemProfiles = new ManagedSystemProfile();
+
+			// Setting EmSystemProfile
+			setEmSystemProfile(systemProfiles, snQueryResult);
+
+			// Set CircuitSystemProfile
+			setCircuitSystemProile(systemProfiles, snQueryResult);
+
+			dbManagedElement.addAdditionalInformation(systemProfiles);
+		} else {
+			// Update EmSystemProfile
+			if (snQueryResult.getEmId() != systemProfiles.getEmSystemProfile().getSyntax().getSbiId()) {
+				setEmSystemProfile(systemProfiles, snQueryResult);
+			}
+			// Set CircuitSystemProfile
+			setCircuitSystemProile(systemProfiles, snQueryResult);
+
+			dbManagedElement.setAdditionalInformation(systemProfiles);
+		}
+	}
+
+	private void setEmSystemProfile(final ManagedSystemProfile systemProfiles, final X38SNQueryResult snQueryResult) {
+		final List<EmInfo> emInfoLst = sbi.getEmInfoList();
+		EmInfo emInfo = null;
+		for (int i = 0; i < emInfoLst.size(); i++) {
+			if (emInfoLst.get(i).getEMId() == snQueryResult.getEmId().getValue()) {
+				emInfo = emInfoLst.get(i);
+				break;
+			}
+		}
+		final AIEmSystemProfile emSystemProfile = new AIEmSystemProfile();
+		emSystemProfile.setSbiId(emInfo.getEMId());
+		emSystemProfile.setHostId(emInfo.getEMName());
+		final EmSystemProfile emSysProfile = new EmSystemProfile(emSystemProfile);
+		systemProfiles.setEmSystemProfile(emSysProfile);
+	}
+
+	private void setCircuitSystemProile(final ManagedSystemProfile systemProfiles, final X38SNQueryResult snQueryResult) {
+		// TODO : need to change it to handle multiple NM scenario
+		final AICircuitSystemProfile cktSystemProfile = new AICircuitSystemProfile();
+		final String nmHostName = sbi.getPlugIn().getProfile().getProperty(NmSBIPluginProperty.Key.SBI_HOST, "localhost");
+		cktSystemProfile.setSbiId(1);
+		cktSystemProfile.setHostId(nmHostName);
+		systemProfiles.setCktSystemProfile(new CircuitSystemProfile(cktSystemProfile));
+	}
+
+	private Data create(final MEInfo info, final SNDn snDn)
+			throws PlugInException {
+
+		// Variable to decide if a new ME should be created (or) the existing ME
+		// should be updated
+		MEDn oldMEDn = null;
+		Session session = null;
+		try {
+
+			session = sbi.getDatabase().beginSession(true);
+
+			MEHolder oldDBMe = null;
+
+			final List<MEDn> oldMeDnList = sbi.getDatabase().getMECache()
+					.get(info.data.getEMId());
+
+			// Check if the ME already exists with the same NEId
+			for (final MEDn oldDn : oldMeDnList) {
+				oldDBMe = isNeIdEqual(oldDn, info.data.getNeIdInEM());
+				if (oldDBMe != null) {
+					oldMEDn = oldDn;
+					break;
+				}
+			}
+
+			// If the ME is found with the same NEID, check if the SNName is
+			// changed. If yes, update the SNName
+			if (oldDBMe != null) {
+
+				boolean isSNNameUpdated = false;
+
+				final X38SNName oldSNName = oldDBMe.getData().getX38SNName();
+				final X38SNName newSNName = info.snQueryResult.getName();
+
+				if (oldSNName.getLongSNName().getValue()
+						.equals(newSNName.getLongSNName().getValue())
+						&& oldSNName.getShortSNName().getValue()
+						.equals(newSNName.getShortSNName().getValue())) {
+					if (!oldSNName.isPresentSnSuffix()
+							&& !newSNName.isPresentSnSuffix()) {
+						isSNNameUpdated = false;
+					} else if (oldSNName.isPresentSnSuffix()
+							&& newSNName.isPresentSnSuffix()
+							&& oldSNName.getSnSuffix().getValue()
+							.equals(newSNName.getSnSuffix().getValue())) {
+						isSNNameUpdated = false;
+					} else {
+						isSNNameUpdated = true;
+					}
+				} else {
+					isSNNameUpdated = true;
+				}
+
+				if (isSNNameUpdated) {
+					if (log.isDebugEnabled()) {
+						log.debug(format(
+								"Q3NE: Detected the SNName change of the ME <%s> from <%s> to <%s>",
+								TmfNameUtilities.toString(oldMEDn),
+								MECache.toString(oldSNName),
+								MECache.toString(newSNName)));
+					}
+					sbi.getDatabase().getMECache().update(oldSNName, newSNName);
+					oldDBMe.getData().setX38SNName(newSNName);
+					oldDBMe.update();
+				}
+			} else {
+				// If the ME is not found with the same NEID, check if the ME
+				// can be found using the same SNName
+				oldMEDn = sbi.getDatabase().getMECache()
+						.get(info.data.getX38SNName());
+				if (oldMEDn != null) {
+					oldDBMe = sbi.getDatabase().getManagedElement(oldMEDn);
+					if (oldDBMe != null) {
+						// If the NE is found with the same old SNName, then
+						// check if the NEId is changed
+						final AdditionalInfo ai = oldDBMe.getDBObject()
+								.getAdditionalInfo();
+						final String oldNEId=AdditionalInfoUtils.find(ai,
+								ProprietaryAdditionalInfo.MEIDOnEM.name());
+						if (Integer.parseInt(oldNEId) != info.data
+								.getNeIdInEM()) {
+
+							oldDBMe.getData().setNeIdInEM(
+									info.data.getNeIdInEM());
+							oldDBMe.update();
+
+							if (log.isDebugEnabled()) {
+								log.debug(format(
+										"Q3NE: Detected the NEId change of the ME <%s> from <%s> to <%d>",
+										TmfNameUtilities.toString(oldMEDn),
+										oldNEId, info.data.getNeIdInEM()));
+							}
+						}
+					} else {
+						oldMEDn = null;
+					}
+				}
+			}
+			session.commit();
+		} catch (final Exception ex) {
+			log.error(format("Transaction Rollback.", ex));
+			throw PlugInExceptionHandler
+			.internalError(I38Database.DATABASE_ERROR_STRING);
+		} finally {
+			if (session != null && !session.isTerminated()) {
+				session.terminate();
+			}
+		}
+
+		return createOrUpdateMe(info, snDn, oldMEDn);
+	}
+
+	/**
+	 * This method will updates me info if already present in DB otherwise new
+	 * one will be created.
+	 *
+	 * @param info
+	 * @param snDn
+	 * @param isMECreationNeeded
+	 * @return
+	 */
+	@SuppressWarnings("deprecation")
+	private Data createOrUpdateMe(final MEInfo info, final SNDn snDn,
+			final MEDn oldMEDn) {
+		Session session = null;
+		try {
+
+			session = sbi.getDatabase().beginSession(true);
+			final ManagedElement me = toManagedElement(info.snQueryResult);
+			if (me == null) {
+				log.error(format("Cannot get ManagedElement for",
+						info.snQueryResult));
+				throw new Exception("Cannot get ManagedElement");
+			}
+
+			// Q3NE: If the NEId (or) SNName is updated, no need to create a new
+			// NE; instead the old ME should be updated
+			if (oldMEDn != null) {
+				me.setName(oldMEDn);
+			}
+
+			final MEDn meDn = me.getName();
+
+			DBManagedElement dbManagedElement = sbi.getDatabase()
+					.getDBManagedElement(meDn);
+
+			if (dbManagedElement != null) {
+				dbManagedElement.setInformation(me);
+				sbi.getDatabase().update(dbManagedElement, info.data);
+			} else {
+				final DBSubnetwork dbSubnetwork = sbi.getDatabase()
+						.getDBSubnetwork(snDn);
+				if (dbSubnetwork == null) {
+					log.error(format("Cannot find Subnetwork:", snDn));
+					throw new Exception("Cannot find Subnetwork.");
+				}
+				dbManagedElement = sbi.getDatabase().create(dbSubnetwork, me,
+						info.data);
+				sbi.getDatabase().cache(me.getName(), info.data);
+			}
+
+			// To set MEOwner, EMSystemProfile and CircuitSystemProfile
+			setAdditionalInfo(dbManagedElement, info.snQueryResult);
+
+			final Data out = new Data(new MEHolder(dbManagedElement));
+			session.commit();
+			return out;
+		} catch (final Exception ex) {
+			log.error(format("Transaction Rollback.", ex));
+			session.abort();
+			throw PlugInExceptionHandler
+			.internalError(I38Database.DATABASE_ERROR_STRING);
+		} finally {
+			if (session != null && !session.isTerminated()) {
+				session.terminate();
+			}
+		}
+
+	}
+
+	private void update(final MEDn meDn, final MEInfo info)
+			throws PlugInException {
+		Session session = null;
+		try {
+			session = sbi.getDatabase().beginSession(true);
+
+			innerUpdate(meDn, info);
+
+			session.commit();
+		} catch (final Exception ex) {
+			log.error(format("Transaction Rollback.", ex));
+			throw PlugInExceptionHandler
+			.internalError(I38Database.DATABASE_ERROR_STRING);
+		} finally {
+			if (session != null && !session.isTerminated()) {
+				session.terminate();
+			}
+
+		}
+	}
+
+	private void innerUpdate(final MEDn meDn, final MEInfo info)
+			throws Exception {
+		final ManagedElement managedElement = toManagedElement(info.snQueryResult);
+		if (managedElement == null) {
+			log.error(format("Cannot get ManagedElement for",
+					info.snQueryResult));
+			throw new Exception("Cannot get ManagedElement");
+		}
+
+		final MEHolder holder = sbi.getDatabase().getManagedElement(meDn);
+
+		if (holder == null) {
+			log.error(format("Cannot find ManagedElement:", meDn));
+			throw PlugInExceptionHandler
+			.internalError(I38Database.DATABASE_ERROR_STRING);
+		}
+
+		final X38SNName oldSNName = holder.getData().getX38SNName();
+
+		try {
+			getConverter().update(holder.getSyntax(), managedElement);
+		} catch (final Exception ex) {
+			log.error(format(ex));
+		}
+		holder.getData().setX38SNName(info.snQueryResult.getName());
+		holder.getData().setNeIdInEM(
+				info.snQueryResult.getNeIdInEM().getValue());
+
+		holder.update();
+
+		sbi.getDatabase().update(oldSNName, info.snQueryResult.getName());
+
+	}
+
+	private ManagedElement toManagedElement(final X38SNQueryResult in) {
+		final List<EmInfo> emInfoLst = sbi.getEmInfoList();
+		EmInfo emInfo = null;
+		for (int i = 0; i < emInfoLst.size(); i++) {
+			if (emInfoLst.get(i).getEMId() == in.getEmId().getValue()) {
+				emInfo = emInfoLst.get(i);
+				break;
+			}
+		}
+
+		if (emInfo == null) {
+			log.error(format("Cannot find EM:", in));
+			return null;
+		}
+		final X38EMState emState = emInfo.getEMState();
+		return getConverter().toManagedElement(sbi.getNMName(), emState, in,
+				emInfo);
+	}
+
+	private MEConverter getConverter() {
+		return com.marconi.fusion.tmf.i38PlugIn.converter2.Converter
+				.getDefault().getMeConverter();
+	}
+
+	private MEHolder isNeIdEqual(final MEDn meDn, final int neId)
+			throws Exception {
+
+		final MEHolder dbMe = sbi.getDatabase().getManagedElement(meDn);
+
+		if (dbMe != null) {
+			final AdditionalInfo ai = dbMe.getDBObject().getAdditionalInfo();
+			final String neIdInEm = AdditionalInfoUtils.find(ai,
+					ProprietaryAdditionalInfo.MEIDOnEM.name());
+			if (neIdInEm != null && Integer.parseInt(neIdInEm) == neId) {
+				return dbMe;
+			} else {
+				return null;
+			}
+		} else {
+			log.error(format("Couldn't find ME <%s> in the db.",
+					TmfNameUtilities.toString(meDn)));
+			return null;
+		}
+	}
+
+	public static class MEInfo {
+		public X38SNQueryResult snQueryResult = null;
+		public MEData data = null;
+
+		public MEInfo(final X38SNQueryResult snQueryResult) {
+			this.snQueryResult = snQueryResult;
+			this.data = new MEData(snQueryResult);
+		}
+	}
+}

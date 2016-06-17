@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<launchConfiguration type="org.eclipse.jdt.launching.localJavaApplication">
+<listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
+<listEntry value="/TMFv1.4.X/tmfI36PlugIn/test/com/marconi/tmp/tools/BERDataConverter.java"/>
+</listAttribute>
+<listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_TYPES">
+<listEntry value="1"/>
+</listAttribute>
+<stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="com.marconi.tmp.tools.BERDataConverter"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="C:\Users\ekirpal\Documents\Project\LatestDrop\TMF814\dev\run\CONF C:\Users\ekirpal\Desktop\BER_marctmf3\BER true true"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="TMFv1.4.X"/>
+</launchConfiguration>

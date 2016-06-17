@@ -1,0 +1,432 @@
+#!/bin/sh
+
+TAR_NAME="$1"
+MENU_MODE="$2"
+
+curr_dir=$(`pwd`)
+
+SOURCE_DIR=$(dirname ${curr_dir})
+
+##############################
+#
+# TARGETS
+#
+##############################
+
+DISTRIB_DIR="${curr_dir}"
+DEPLOY_DIR="${SOURCE_DIR}/DEPLOY"
+
+##############################
+#
+# COMMAND
+#
+##############################
+
+RM="/bin/rm -f"
+RMDIR="/bin/rm -rf"
+CP="/bin/cp -r"
+MV="/bin/mv"
+STRIP="strip"
+FIND="/bin/find"
+
+UTIL_DIR="${SOURCE_DIR}/DISTRIB/UTIL"
+
+##############################
+#
+# GENERAL
+#
+##############################
+
+DATE="`/bin/date '+%y_%m_%d'`"
+OS="created: `uname -sr`"
+SIGNEXE="${SOURCE_DIR}/QNE_ETSI/KERNEL/sign -w"
+GETIDENT="sh -f ${UTIL_DIR}/getident"
+MKDISTRIB="${UTIL_DIR}/copyFileSet"
+
+###############
+#
+# Get last release
+#
+############
+
+GETTAG_EXE="${UTIL_DIR}/getTag"
+REVISION_HOLDER_FILE="./RevisionHolder"
+
+$GETTAG_EXE "${REVISION_HOLDER_FILE}"
+
+FILE_VERSION="${DISTRIB_DIR}/.version"
+FILE_DROP="${DISTRIB_DIR}/.drop"
+FILE_RELEASE="${DISTRIB_DIR}/.release"
+FILE_INTERNALBUILD="${DISTRIB_DIR}/.internalbuild"
+
+if [ ! -a "${FILE_VERSION}" ]
+then
+  echo "1" > "${FILE_VERSION}"
+fi
+
+VERSION=`cat ${FILE_VERSION}`
+
+echo "\nVersion Number (default ${VERSION}): "
+read TMP
+
+if [ "${TMP}" <> "" ]
+then
+  VERSION=$TMP
+fi
+
+if [ ! -a "${FILE_DROP}" ]
+then
+  echo "a" > "${FILE_DROP}"
+fi
+
+DROP=`cat ${FILE_DROP}`
+
+if [ "$DROP" = "" ]
+then
+  echo "\nDrop Number (0 for null): "
+else
+  echo "\nDrop Number (default ${DROP} - 0 for null): "
+fi
+read TMP
+
+if [ "${TMP}" <> "" ]
+then
+  DROP="${TMP}"
+fi
+
+if [ "${DROP}" = "0" ]
+then
+  DROP=""
+fi
+
+if [ "${DROP}" <> "" ]
+then
+    RELEASE="${VERSION}.${DROP}"
+else
+    RELEASE="${VERSION}"
+fi
+
+if [ ! -a "${FILE_INTERNALBUILD}" ]
+then
+  echo "1" > "${FILE_INTERNALBUILD}"
+fi
+
+INTERNALBUILD=`cat ${FILE_INTERNALBUILD}`
+
+echo "Please specify internal build version if any : "
+read TMP
+
+  INTERNALBUILD=$TMP
+
+echo "${VERSION}" > "${FILE_VERSION}"
+echo "${DROP}"    > "${FILE_DROP}"
+echo "${RELEASE}" > "${FILE_RELEASE}"
+echo "${INTERNALBUILD}" > "${FILE_INTERNALBUILD}"
+
+###########################################
+#
+# SIGNATURES
+#
+###########################################
+
+DISTRIB_MARK="${VERSION}"
+
+if [ "${DROP}" = "" ]
+then
+  DISTRIB_MARK="${VERSION}"
+else
+  DISTRIB_MARK="${VERSION} - Drop ${DROP}"
+fi
+
+DISTRIB_NAME="TMFAgent_${RELEASE}"
+
+echo DISTRIB_MARK = "${DISTRIB_MARK}"
+echo DISTRIB_NAME = "${DISTRIB_NAME}"
+
+#leggo le asn version
+#
+
+#compongo le lib version
+#
+
+#compongo le lib sign
+#
+
+
+#compongo le exe sign
+#
+DISTRIB_VERSION="Distribuited: `/bin/date '+%y/%m/%d'`\n"
+
+##################################################
+#
+# Copiatura albero
+#
+##################################################
+
+#### Creo directories
+
+echo "Creating directories tree......"
+
+if [ ! -d "${DISTRIB_DIR}" ]
+then
+  mkdir -p "${DISTRIB_DIR}"
+fi
+
+TARGET="AGENT_ROOT"
+TARGET_DIR="${DISTRIB_DIR}/${TARGET}"
+
+LOG_DIR="${TARGET_DIR}/LOG"
+BIN_DIR="${TARGET_DIR}/BIN"
+LIB_DIR="${TARGET_DIR}/LIB"
+CONF_DIR="${TARGET_DIR}/CONF"
+DATA_DIR="${TARGET_DIR}/DATA"
+SCRIPT_DIR="${TARGET_DIR}/SCRIPT"
+HTML_DIR="${TARGET_DIR}/HTML"
+INFO_DIR="${TARGET_DIR}/INFO"
+SOCKETS_DIR="${TARGET_DIR}/SOCKETS"
+
+if [ -d "${TARGET_DIR}" ]
+then
+  ${RMDIR} "${TARGET_DIR}"
+fi
+
+mkdir -p "${TARGET_DIR}"
+mkdir -p "${LOG_DIR}"
+mkdir -p "${BIN_DIR}"
+mkdir -p "${LIB_DIR}"
+mkdir -p "${CONF_DIR}"
+mkdir -p "${DATA_DIR}"
+mkdir -p "${SCRIPT_DIR}"
+mkdir -p "${HTML_DIR}"
+mkdir -p "${INFO_DIR}"
+mkdir -p "${SOCKETS_DIR}"
+
+if [ -r "${CONF_DIR}/LH.conf" ];
+then
+  rm -f "${CONF_DIR}/LH.conf"
+fi
+
+if [ -r "${CONF_DIR}/TransmissionParams.properties" ];
+then
+  rm -f "${CONF_DIR}/TransmissionParams.properties"
+fi
+
+if [ -r "${LIB_DIR}/Utilities.jar" ];
+then
+  rm -f "${LIB_DIR}/Utilities.jar"
+fi
+
+if [ -r "${LIB_DIR}/oojava.jar" ];
+then
+  rm -f "${LIB_DIR}/oojava.jar"
+fi
+
+if [ -r "${LIB_DIR}/oojava-"?"."?".jar" ];
+then
+  rm -f "${LIB_DIR}/oojava-"?"."?".jar"
+fi
+
+rm -f "${LIB_DIR}/oojava.jar."* > /dev/null 2>&1
+rm -f "${LIB_DIR}/liboojava."*  > /dev/null 2>&1
+
+### Html del Proxy
+
+### Copio i files
+
+### EXE & LIBs
+
+if [ ! -d "${DEPLOY_DIR}" ]
+then
+  mkdir -p "${DEPLOY_DIR}"
+fi
+
+cd "${SOURCE_DIR}"
+
+echo ""
+echo "Making deploy....."
+echo ""
+
+ant clean
+ant
+ant deploy
+
+cd "${SOURCE_DIR}/DISTRIB"
+
+echo ""
+echo "Copying Common files....."
+echo ""
+echo ""
+
+cd "${SOURCE_DIR}/DISTRIB"
+
+FILE_SET_NAME="Files_Common.set"
+FILE_SET="${SOURCE_DIR}/DISTRIB/${FILE_SET_NAME}"
+
+if [ ! -a "${FILE_SET}" ]
+then
+  echo "ERROR: file <${FILE_SET}> doesn't exist"
+  exit 1
+fi
+
+${MKDISTRIB} "${FILE_SET}" "${TARGET_DIR}"
+
+if [ $? -ne 0 ]
+then
+    echo ""
+    exit 1
+fi
+
+file_list=$(find "${CONF_DIR}" -type f -name "*.ORIG" -print)
+for item in ${file_list};
+do
+  new_item=$(basename "${item}" .ORIG)
+  mv "${item}" "${CONF_DIR}"/"${new_item}" > /dev/null  2>&1
+done
+
+chmod -R 755 "${BIN_DIR}/*"     > /dev/null 2>&1
+chmod -R 644 "${LIB_DIR}/*"     > /dev/null 2>&1
+chmod -R 644 "${CONF_DIR}/*"    > /dev/null 2>&1
+chmod -R 644 "${DATA_DIR}/*"    > /dev/null 2>&1
+chmod -R 755 "${SCRIPT_DIR}/*"  > /dev/null 2>&1
+chmod -R 644 "${HTML_DIR}/*"    > /dev/null 2>&1
+
+if [ -r "${CONF_DIR}/LH.conf" ];
+then
+  rm -f "${CONF_DIR}/LH.conf"
+fi
+
+if [ -r "${CONF_DIR}/TransmissionParams.properties" ];
+then
+  rm -f "${CONF_DIR}/TransmissionParams.properties"
+fi
+
+if [ -r "${LIB_DIR}/Utilities.jar" ];
+then
+  rm -f "${LIB_DIR}/Utilities.jar"
+fi
+
+if [ -e "${CONF_DIR}"/Objectivity.properties ];
+then
+  rm -f "${CONF_DIR}"/Objectivity.properties
+fi
+
+if [ "${MENU_MODE}" = "1" ];
+then
+  # EM case
+  rm -f "${CONF_DIR}"/I38*
+  rm -f "${CONF_DIR}"/X38*
+  rm -f "${LIB_DIR}"/I38*
+  rm -f "${LIB_DIR}"/TMF38*
+  rm -f "${LIB_DIR}"/TMFI38*
+  rm -f "${LIB_DIR}"/X38*
+  if [ -e "${CONF_DIR}"/Objectivity_NM.properties ];
+  then
+    rm -f "${CONF_DIR}"/Objectivity_NM.properties
+  fi
+  mv -f "${CONF_DIR}"/Objectivity_EM.properties "${CONF_DIR}"/Objectivity.properties
+  tmp_def_file="${SOURCE_DIR}/tmfI36PlugIn/conf/DefaultUserProfile.properties"
+  if [ -e "${tmp_def_file}" ];
+  then
+    cp -f "${tmp_def_file}" "${CONF_DIR}/DefaultUserProfile.properties"
+  fi
+  
+  if [ -e "${CONF_DIR}"/mosquito_NM.info.uff ];
+  then
+    rm -f "${CONF_DIR}"/mosquito_NM.info.uff
+  fi  
+  mv -f "${CONF_DIR}"/mosquito_EM.info.uff "${CONF_DIR}"/mosquito.info.uff
+  
+else
+  # NM case
+  if [ -e "${CONF_DIR}"/Objectivity_EM.properties ];
+  then
+    rm -f "${CONF_DIR}"/Objectivity_EM.properties
+  fi
+  mv -f "${CONF_DIR}"/Objectivity_NM.properties "${CONF_DIR}"/Objectivity.properties
+  
+  if [ -e "${CONF_DIR}"/mosquito_EM.info.uff ];
+  then
+    rm -f "${CONF_DIR}"/mosquito_EM.info.uff
+  fi  
+  mv -f "${CONF_DIR}"/mosquito_NM.info.uff "${CONF_DIR}"/mosquito.info.uff
+fi
+
+if [ -e  "${CONF_DIR}"/mosquito.info.uff ];
+  then
+    #updating the version in mosquito.info file
+    var1="@VERSION_INFO"
+    var2=${RELEASE}
+    sed -e "s/$var1/$var2/g" "${CONF_DIR}"/mosquito.info.uff > "${CONF_DIR}"/mosquito.info.uff.tmp
+    #updating the release date in mosquito.info file
+    var1="@DATE"
+    var2=`date +%d-%B-%Y`
+    sed -e "s/$var1/$var2/g" "${CONF_DIR}"/mosquito.info.uff.tmp > "${CONF_DIR}"/mosquito.info.uff
+    rm -f "${CONF_DIR}"/mosquito.info.uff.tmp
+fi
+
+echo ""
+echo "Copying application files....."
+echo ""
+echo ""
+
+### Creo una directory INFO in cui vado a mettere qualche file di utilita'.
+if [ ! -d "${TARGET_DIR}/INFO" ]
+then
+   mkdir -p "${TARGET_DIR}/INFO"
+fi
+
+echo ""
+echo "Copying completed."
+echo ""
+
+### File .version (viene utilizzato per il file InfoRelease)
+echo "${VERSION}" > "${INFO_DIR}/.version"
+
+### File .drop (viene utilizzato per il file InfoRelease)
+echo "${DROP}" > "${INFO_DIR}/.drop"
+
+### File .drop (viene utilizzato per il file InfoRelease)
+echo "${RELEASE}" > "${INFO_DIR}/.release"
+
+echo "${INTERNALBUILD}" > "${INFO_DIR}/.internalbuild"
+
+
+echo "Marking exe & lib files...."
+
+echo "Marking completed."
+echo ""
+
+# preparo il file README
+
+OLD_DIR=`pwd`
+
+echo "README completed."
+echo ""
+
+# Lo copio nella directory $TARGET_DIR/INFO
+
+# Copio l'icona dell'agent in $TARGET_DIR/INFO
+
+
+cd "${TARGET_DIR}"
+find . -name "*db4*" -exec rm -f {} \;
+find . -name "*DB4*" -exec rm -f {} \;
+find . -name "*jacorb*" -exec rm -f {} \;
+find . -name "*12345678*" -exec rm -f {} \;
+find . -type d -name "CVS" -exec rm -fR {} \;
+
+tar cf "${TAR_NAME}" *
+mv "${TAR_NAME}" "${DISTRIB_DIR}/${TAR_NAME}"
+cd "${DISTRIB_DIR}"
+
+if [ -d "${TARGET_DIR}" ]
+then
+  ${RMDIR} "${TARGET_DIR}"
+fi
+
+cp -f "${FILE_RELEASE}" "${FILE_VERSION}"
+
+echo "...ended."
+echo ""
+
+exit 0

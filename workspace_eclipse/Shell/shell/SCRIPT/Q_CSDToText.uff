@@ -1,0 +1,151 @@
+#!/bin/sh
+
+###############################################################################
+#
+#  Q_CSDToText.uff
+#
+#  This script use to convert the CSD data files to Text files
+#
+###############################################################################
+
+curr_os=$(uname -s)
+
+if [ "${curr_os}" = "HP-UX" ];
+then
+  my_o="echo"
+elif [ "${curr_os}" = "Linux" ];
+then
+  my_o="echo -e"
+else
+  tmp_os=$(echo ${curr_os} |grep -i cygwin)
+  if [ "${tmp_os}" != "" ];
+  then
+    my_o="echo -e"
+  else
+    echo "Unknown OS: ${curr_os}"
+    echo "Exiting..."
+    exit 1
+  fi
+fi
+
+######## Retrieves AGENT environmental variables
+if [ -e "ENV_FILE" ];
+then
+  . "ENV_FILE"
+else
+  ${my_o} ""
+  ${my_o} "Cannot find environment file ENV_FILE"
+  ${my_o} "Exiting management procedure..."
+  ${my_o} ""
+  exit 1
+fi
+
+SCRIPT_DIR=$(pwd)
+LIB_DIR="${AGENT_DIR}"/LIB
+CONF_DIR="${AGENT_DIR}"/CONF
+CSDATA_DIR="${AGENT_DIR}/EXPORT/CUSTOMER_DATA"
+DATE=$(/bin/date '+%Y_%m_%d_%H_%M_%S')
+cd ..
+
+if [[ -x /usr/bin/whoami ]]; then
+  if [[ $(/usr/bin/whoami) != "AGENT_USER" ]]; then
+    ${my_o} ""
+    ${my_o} "Sorry, you must be AGENT_USER user to run this script!"
+    ${my_o} "${Exiting}"
+    ExitVal="${Success}"
+    exit 1
+  fi
+fi
+
+answer=""
+while [ "${answer}" = "" ];
+do
+  ${my_o} ""
+  ${my_o} "Please enter the full path of the file to be converted to readable format"
+  ${my_o} "[name of a device or full path to a backup file]: "
+  read answer
+done
+
+if [ ! -r "${answer}" ];
+then
+  ${my_o} ""
+  ${my_o} "\nSorry, file ${answer} doesn't exist."
+  ${my_o} ""
+  exit 1
+fi
+
+cd "${SCRIPT_DIR}"
+
+JOPTS="-server"
+
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" -o "${curr_os}" = "Linux" ];
+then
+  sep=":"
+else
+  sep=";"
+fi
+
+if [ "${curr_os}" = "HP-UX" ];
+then
+  JOPTS="${JOPTS} -V2"
+  if [ -x /usr/bin/hp-pa ];
+  then
+  	$(/usr/bin/hp-pa)
+  	if [ $? -ne 0 ];
+  	then
+  		JOPTS="${JOPTS} -d64"
+	fi 
+  fi
+fi
+
+
+JAVA_EXE="/opt/java1.6/jre/bin/java"
+
+if [ -x "${JAVA_HOME}/jre/bin/java" ];
+then
+  JAVA_EXE="${JAVA_HOME}/jre/bin/java"
+elif [ -x "${JAVA_HOME}/bin/java" ];
+then
+  JAVA_EXE="${JAVA_HOME}/bin/java"
+else
+  ${my_o} ""
+  ${my_o} "Cannot find java on your server!"
+  ${my_o} "Please check your installation"
+  ${my_o} "Exiting..."
+  ${my_o} ""
+  exit 1
+fi
+
+TMF_XP="."
+
+file_list=$(find "${LIB_DIR}" \( -type f -o -type l \) -name "*.jar" -print)
+
+for item in ${file_list};
+do
+  TMF_XP="${TMF_XP}${sep}${item}"
+done
+
+TMF_XP=${TMF_XP}${sep}$(find "${OBJDIR}/java" \( -type f -o -type l \) -name "oojava.jar" -print)
+export TMF_XP
+
+MEM="-server -Xms384m -Xmx1024m -XX:MaxPermSize=256m"
+
+LOG4J="-Dlog4j.configuration=file:${CONF_DIR}/log4j.xml -Dlog4j.configuration.watchEnabled=yes -Dlog4j.configuration.watchDelay=120000 -Dlog4j.configuratorClass=com.marconi.fusion.base.logging.log4j.Configurator"
+
+${my_o} "Writing CustomerData to a text file is in progress, please wait ... "
+
+"${JAVA_EXE}" ${MEM} ${LOG4J} -classpath "${TMF_XP}" com.marconi.fusion.tmf.startup.CSDToText ${answer}
+res=$?
+
+if [ ${res} -ne 0 ];
+then
+${my_o} " Writing CustomerData to a text file could not be finished successfully ..."
+${my_o} " Please refer TMFAgent.log for the details."
+else
+${my_o} " Writing CustomerData to a text file has been completed successfully\n"
+TXT_DIR=`dirname ${answer}`
+${my_o} "The customer data is stored in location :\n"${TXT_DIR}
+fi
+
+exit $?

@@ -1,0 +1,419 @@
+[ Wed Jul 13 19:32:54 GMT+05:30 2011 ]Case1
+[ Wed Jul 13 19:32:54 GMT+05:30 2011 ]in :84
+[ Wed Jul 13 19:32:54 GMT+05:30 2011 ]Message is :______
+[ Wed Jul 13 19:32:55 GMT+05:30 2011 ]Visibility setting success...
+[ Wed Jul 13 19:33:00 GMT+05:30 2011 ]Closing LOG ...
+[ Wed Jul 13 19:39:40 GMT+05:30 2011 ]Case1
+[ Wed Jul 13 19:39:40 GMT+05:30 2011 ]in :90
+[ Wed Jul 13 19:39:40 GMT+05:30 2011 ]Message is :_________
+[ Wed Jul 13 19:39:40 GMT+05:30 2011 ]Visibility setting success...
+[ Wed Jul 13 19:39:42 GMT+05:30 2011 ]Closing LOG ...
+[ Wed Aug 24 14:18:32 GMT+05:30 2011 ]Case2
+[ Wed Aug 24 14:18:32 GMT+05:30 2011 ]in :27
+[ Wed Aug 24 14:18:33 GMT+05:30 2011 ]Message is :______
+[ Wed Aug 24 14:18:33 GMT+05:30 2011 ]Visibility setting success...
+[ Wed Aug 24 14:18:35 GMT+05:30 2011 ]Closing LOG ...
+[ Sat Feb 20 20:14:39 PST 2016 ]hello
+[ Sat Feb 20 20:15:14 PST 2016 ]hello
+[ Sat Feb 20 20:16:09 PST 2016 ]Case0
+[ Sat Feb 20 20:16:09 PST 2016 ]in :91
+[ Sat Feb 20 20:16:09 PST 2016 ]Message is :________
+[ Sat Feb 20 20:16:09 PST 2016 ]Visibility setting success...
+[ Sat Feb 20 20:16:20 PST 2016 ]input:A
+[ Sat Feb 20 20:16:20 PST 2016 ]view :________ : Length:8
+[ Sat Feb 20 20:16:22 PST 2016 ]input:E
+[ Sat Feb 20 20:16:22 PST 2016 ]view :A_______ : Length:8
+[ Sat Feb 20 20:16:22 PST 2016 ]MISTAKE!!! no:1
+[ Sat Feb 20 20:16:23 PST 2016 ]input:R
+[ Sat Feb 20 20:16:23 PST 2016 ]view :A_______ : Length:8
+[ Sat Feb 20 20:16:23 PST 2016 ]MISTAKE!!! no:2
+[ Sat Feb 20 20:16:24 PST 2016 ]input:Y
+[ Sat Feb 20 20:16:24 PST 2016 ]view :A_______ : Length:8
+[ Sat Feb 20 20:16:24 PST 2016 ]MISTAKE!!! no:3
+[ Sat Feb 20 20:16:24 PST 2016 ]input:G
+[ Sat Feb 20 20:16:24 PST 2016 ]view :A_______ : Length:8
+[ Sat Feb 20 20:16:24 PST 2016 ]MISTAKE!!! no:4
+[ Sat Feb 20 20:16:24 PST 2016 ]input:F
+[ Sat Feb 20 20:16:24 PST 2016 ]view :A_______ : Length:8
+[ Sat Feb 20 20:16:24 PST 2016 ]MISTAKE!!! no:5
+[ Sat Feb 20 20:16:25 PST 2016 ]input:F
+[ Sat Feb 20 20:16:25 PST 2016 ]view :A_______ : Length:8
+[ Sat Feb 20 20:16:25 PST 2016 ]MISTAKE!!! no:6
+[ Sat Feb 20 20:16:28 PST 2016 ]Case1
+[ Sat Feb 20 20:16:28 PST 2016 ]in :36
+[ Sat Feb 20 20:16:28 PST 2016 ]Message is :_____
+[ Sat Feb 20 20:17:14 PST 2016 ]input:A
+[ Sat Feb 20 20:17:14 PST 2016 ]view :_____ : Length:5
+[ Sat Feb 20 20:17:16 PST 2016 ]input:E
+[ Sat Feb 20 20:17:16 PST 2016 ]view :____A : Length:5
+[ Sat Feb 20 20:17:16 PST 2016 ]input:I
+[ Sat Feb 20 20:17:16 PST 2016 ]view :____A : Length:5
+[ Sat Feb 20 20:17:16 PST 2016 ]MISTAKE!!! no:1
+[ Sat Feb 20 20:17:17 PST 2016 ]input:O
+[ Sat Feb 20 20:17:17 PST 2016 ]view :____A : Length:5
+[ Sat Feb 20 20:17:17 PST 2016 ]MISTAKE!!! no:2
+[ Sat Feb 20 20:17:17 PST 2016 ]input:U
+[ Sat Feb 20 20:17:17 PST 2016 ]view :____A : Length:5
+[ Sat Feb 20 20:17:17 PST 2016 ]MISTAKE!!! no:3
+[ Sat Feb 20 20:17:20 PST 2016 ]input:B
+[ Sat Feb 20 20:17:20 PST 2016 ]view :____A : Length:5
+[ Sat Feb 20 20:17:20 PST 2016 ]MISTAKE!!! no:4
+[ Sat Feb 20 20:17:23 PST 2016 ]input:O
+[ Sat Feb 20 20:17:23 PST 2016 ]view :____A : Length:5
+[ Sat Feb 20 20:17:23 PST 2016 ]MISTAKE!!! no:5
+[ Sat Feb 20 20:17:23 PST 2016 ]input:O
+[ Sat Feb 20 20:17:23 PST 2016 ]view :____A : Length:5
+[ Sat Feb 20 20:17:23 PST 2016 ]MISTAKE!!! no:6
+[ Sat Feb 20 20:17:29 PST 2016 ]Case2
+[ Sat Feb 20 20:17:29 PST 2016 ]in :45
+[ Sat Feb 20 20:17:29 PST 2016 ]Message is :__________
+[ Sat Feb 20 20:17:30 PST 2016 ]input:A
+[ Sat Feb 20 20:17:30 PST 2016 ]view :__________ : Length:10
+[ Sat Feb 20 20:17:30 PST 2016 ]MISTAKE!!! no:1
+[ Sat Feb 20 20:17:30 PST 2016 ]input:E
+[ Sat Feb 20 20:17:30 PST 2016 ]view :__________ : Length:10
+[ Sat Feb 20 20:17:51 PST 2016 ]Closing LOG ...
+[ Sat Feb 20 20:51:14 PST 2016 ]hello
+[ Sun Feb 21 22:52:17 PST 2016 ]Case0
+[ Sun Feb 21 22:52:17 PST 2016 ]in :49
+[ Sun Feb 21 22:52:17 PST 2016 ]Message is :____________
+[ Sun Feb 21 22:52:17 PST 2016 ]Visibility setting success...
+[ Sun Feb 21 22:52:21 PST 2016 ]input:A
+[ Sun Feb 21 22:52:21 PST 2016 ]view :____________ : Length:12
+[ Sun Feb 21 22:52:22 PST 2016 ]input:E
+[ Sun Feb 21 22:52:22 PST 2016 ]view :____A_______ : Length:12
+[ Sun Feb 21 22:52:23 PST 2016 ]input:I
+[ Sun Feb 21 22:52:23 PST 2016 ]view :____A_______ : Length:12
+[ Sun Feb 21 22:52:23 PST 2016 ]input:O
+[ Sun Feb 21 22:52:23 PST 2016 ]view :____A_______ : Length:12
+[ Sun Feb 21 22:52:24 PST 2016 ]input:U
+[ Sun Feb 21 22:52:24 PST 2016 ]view :____A_______ : Length:12
+[ Sun Feb 21 22:52:28 PST 2016 ]input:S
+[ Sun Feb 21 22:52:28 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:28 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 22:52:31 PST 2016 ]input:I
+[ Sun Feb 21 22:52:31 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:32 PST 2016 ]input:I
+[ Sun Feb 21 22:52:32 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:32 PST 2016 ]input:I
+[ Sun Feb 21 22:52:32 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:32 PST 2016 ]input:I
+[ Sun Feb 21 22:52:32 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:33 PST 2016 ]input:I
+[ Sun Feb 21 22:52:33 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:33 PST 2016 ]input:O
+[ Sun Feb 21 22:52:33 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:33 PST 2016 ]input:O
+[ Sun Feb 21 22:52:33 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:33 PST 2016 ]input:O
+[ Sun Feb 21 22:52:33 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:34 PST 2016 ]input:O
+[ Sun Feb 21 22:52:34 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:34 PST 2016 ]input:O
+[ Sun Feb 21 22:52:34 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:35 PST 2016 ]input:U
+[ Sun Feb 21 22:52:35 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:36 PST 2016 ]input:U
+[ Sun Feb 21 22:52:36 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:36 PST 2016 ]input:U
+[ Sun Feb 21 22:52:36 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:36 PST 2016 ]input:U
+[ Sun Feb 21 22:52:36 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:36 PST 2016 ]input:U
+[ Sun Feb 21 22:52:36 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:37 PST 2016 ]input:U
+[ Sun Feb 21 22:52:37 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:37 PST 2016 ]input:A
+[ Sun Feb 21 22:52:37 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:37 PST 2016 ]Already present ... check for another
+[ Sun Feb 21 22:52:37 PST 2016 ]input:A
+[ Sun Feb 21 22:52:37 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:37 PST 2016 ]Already present ... check for another
+[ Sun Feb 21 22:52:37 PST 2016 ]input:A
+[ Sun Feb 21 22:52:37 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:37 PST 2016 ]Already present ... check for another
+[ Sun Feb 21 22:52:37 PST 2016 ]input:A
+[ Sun Feb 21 22:52:37 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:37 PST 2016 ]Already present ... check for another
+[ Sun Feb 21 22:52:38 PST 2016 ]input:E
+[ Sun Feb 21 22:52:38 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:38 PST 2016 ]input:E
+[ Sun Feb 21 22:52:38 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:38 PST 2016 ]input:E
+[ Sun Feb 21 22:52:38 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:39 PST 2016 ]input:E
+[ Sun Feb 21 22:52:39 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:39 PST 2016 ]input:E
+[ Sun Feb 21 22:52:39 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:39 PST 2016 ]input:E
+[ Sun Feb 21 22:52:39 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:39 PST 2016 ]input:E
+[ Sun Feb 21 22:52:39 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:40 PST 2016 ]input:M
+[ Sun Feb 21 22:52:40 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:40 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 22:52:45 PST 2016 ]input:S
+[ Sun Feb 21 22:52:45 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:45 PST 2016 ]MISTAKE!!! no:3
+[ Sun Feb 21 22:52:46 PST 2016 ]input:T
+[ Sun Feb 21 22:52:46 PST 2016 ]view :U___A_U_____ : Length:12
+[ Sun Feb 21 22:52:48 PST 2016 ]input:I
+[ Sun Feb 21 22:52:48 PST 2016 ]view :U___A_U_T___ : Length:12
+[ Sun Feb 21 22:52:49 PST 2016 ]input:O
+[ Sun Feb 21 22:52:49 PST 2016 ]view :U___A_U_T___ : Length:12
+[ Sun Feb 21 22:52:50 PST 2016 ]input:N
+[ Sun Feb 21 22:52:50 PST 2016 ]view :U___A_U_T___ : Length:12
+[ Sun Feb 21 22:53:04 PST 2016 ]input:S
+[ Sun Feb 21 22:53:04 PST 2016 ]view :U_N_A_U_T___ : Length:12
+[ Sun Feb 21 22:53:04 PST 2016 ]MISTAKE!!! no:4
+[ Sun Feb 21 22:53:17 PST 2016 ]input:C
+[ Sun Feb 21 22:53:17 PST 2016 ]view :U_N_A_U_T___ : Length:12
+[ Sun Feb 21 22:53:17 PST 2016 ]MISTAKE!!! no:5
+[ Sun Feb 21 22:53:25 PST 2016 ]input:R
+[ Sun Feb 21 22:53:25 PST 2016 ]view :U_N_A_U_T___ : Length:12
+[ Sun Feb 21 22:53:28 PST 2016 ]input:L
+[ Sun Feb 21 22:53:28 PST 2016 ]view :U_N_A_U_T___ : Length:12
+[ Sun Feb 21 22:53:28 PST 2016 ]MISTAKE!!! no:6
+[ Sun Feb 21 22:53:36 PST 2016 ]Closing LOG ...
+[ Sun Feb 21 22:58:02 PST 2016 ]Case2
+[ Sun Feb 21 22:58:02 PST 2016 ]in :67
+[ Sun Feb 21 22:58:02 PST 2016 ]Message is :_ _ _ _ _ _ _
+[ Sun Feb 21 22:58:03 PST 2016 ]Visibility setting success...
+[ Sun Feb 21 22:58:08 PST 2016 ]input:A
+[ Sun Feb 21 22:58:08 PST 2016 ]view :_ _ _ _ _ _ _ : Length:13
+[ Sun Feb 21 22:58:08 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 22:58:09 PST 2016 ]input:E
+[ Sun Feb 21 22:58:09 PST 2016 ]view :_ _ _ _ _ _ _ : Length:13
+[ Sun Feb 21 22:58:10 PST 2016 ]input:I
+[ Sun Feb 21 22:58:10 PST 2016 ]view :_ _ _ _ E _ _ : Length:13
+[ Sun Feb 21 22:58:10 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 22:58:11 PST 2016 ]input:O
+[ Sun Feb 21 22:58:11 PST 2016 ]view :_ _ _ _ E _ _ : Length:13
+[ Sun Feb 21 22:58:11 PST 2016 ]input:U
+[ Sun Feb 21 22:58:11 PST 2016 ]view :_ O _ _ E _ _ : Length:13
+[ Sun Feb 21 22:58:11 PST 2016 ]MISTAKE!!! no:3
+[ Sun Feb 21 22:58:15 PST 2016 ]input:N
+[ Sun Feb 21 22:58:15 PST 2016 ]view :_ O _ _ E _ _ : Length:13
+[ Sun Feb 21 22:58:18 PST 2016 ]input:L
+[ Sun Feb 21 22:58:18 PST 2016 ]view :_ O N N E _ _ : Length:13
+[ Sun Feb 21 22:58:18 PST 2016 ]MISTAKE!!! no:4
+[ Sun Feb 21 22:58:19 PST 2016 ]input:T
+[ Sun Feb 21 22:58:19 PST 2016 ]view :_ O N N E _ _ : Length:13
+[ Sun Feb 21 22:58:25 PST 2016 ]input:C
+[ Sun Feb 21 22:58:25 PST 2016 ]view :_ O N N E _ T : Length:13
+[ Sun Feb 21 22:58:29 PST 2016 ]Case2
+[ Sun Feb 21 22:58:29 PST 2016 ]in :67
+[ Sun Feb 21 22:58:29 PST 2016 ]Message is :_ _ _ _ _ _ _
+[ Sun Feb 21 22:58:37 PST 2016 ]input:A
+[ Sun Feb 21 22:58:37 PST 2016 ]view :_ _ _ _ _ _ _ : Length:13
+[ Sun Feb 21 22:58:37 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 22:58:38 PST 2016 ]input:E
+[ Sun Feb 21 22:58:38 PST 2016 ]view :_ _ _ _ _ _ _ : Length:13
+[ Sun Feb 21 22:58:39 PST 2016 ]input:I
+[ Sun Feb 21 22:58:39 PST 2016 ]view :_ _ _ _ E _ _ : Length:13
+[ Sun Feb 21 22:58:39 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 22:58:50 PST 2016 ]input:O
+[ Sun Feb 21 22:58:50 PST 2016 ]view :_ _ _ _ E _ _ : Length:13
+[ Sun Feb 21 22:58:58 PST 2016 ]input:T
+[ Sun Feb 21 22:58:58 PST 2016 ]view :_ O _ _ E _ _ : Length:13
+[ Sun Feb 21 23:00:53 PST 2016 ]input:M
+[ Sun Feb 21 23:00:53 PST 2016 ]view :_ O _ _ E _ T : Length:13
+[ Sun Feb 21 23:00:53 PST 2016 ]MISTAKE!!! no:3
+[ Sun Feb 21 23:00:54 PST 2016 ]input:N
+[ Sun Feb 21 23:00:54 PST 2016 ]view :_ O _ _ E _ T : Length:13
+[ Sun Feb 21 23:00:56 PST 2016 ]input:C
+[ Sun Feb 21 23:00:56 PST 2016 ]view :_ O N N E _ T : Length:13
+[ Sun Feb 21 23:01:08 PST 2016 ]Case0
+[ Sun Feb 21 23:01:08 PST 2016 ]in :87
+[ Sun Feb 21 23:01:08 PST 2016 ]Message is :_ _ _ _ _ _ _
+[ Sun Feb 21 23:01:10 PST 2016 ]input:E
+[ Sun Feb 21 23:01:10 PST 2016 ]view :_ _ _ _ _ _ _ : Length:13
+[ Sun Feb 21 23:01:10 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 23:01:11 PST 2016 ]input:I
+[ Sun Feb 21 23:01:11 PST 2016 ]view :_ _ _ _ _ _ _ : Length:13
+[ Sun Feb 21 23:01:11 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 23:01:11 PST 2016 ]input:O
+[ Sun Feb 21 23:01:11 PST 2016 ]view :_ _ _ _ _ _ _ : Length:13
+[ Sun Feb 21 23:01:12 PST 2016 ]input:A
+[ Sun Feb 21 23:01:12 PST 2016 ]view :_ _ _ _ O _ _ : Length:13
+[ Sun Feb 21 23:01:16 PST 2016 ]input:T
+[ Sun Feb 21 23:01:16 PST 2016 ]view :A _ A _ O _ _ : Length:13
+[ Sun Feb 21 23:01:22 PST 2016 ]input:L
+[ Sun Feb 21 23:01:22 PST 2016 ]view :A _ A T O _ _ : Length:13
+[ Sun Feb 21 23:01:22 PST 2016 ]MISTAKE!!! no:3
+[ Sun Feb 21 23:01:24 PST 2016 ]input:S
+[ Sun Feb 21 23:01:24 PST 2016 ]view :A _ A T O _ _ : Length:13
+[ Sun Feb 21 23:01:24 PST 2016 ]MISTAKE!!! no:4
+[ Sun Feb 21 23:01:25 PST 2016 ]input:M
+[ Sun Feb 21 23:01:25 PST 2016 ]view :A _ A T O _ _ : Length:13
+[ Sun Feb 21 23:01:29 PST 2016 ]input:C
+[ Sun Feb 21 23:01:29 PST 2016 ]view :A _ A T O M _ : Length:13
+[ Sun Feb 21 23:01:29 PST 2016 ]MISTAKE!!! no:5
+[ Sun Feb 21 23:01:39 PST 2016 ]input:N
+[ Sun Feb 21 23:01:39 PST 2016 ]view :A _ A T O M _ : Length:13
+[ Sun Feb 21 23:01:44 PST 2016 ]input:E
+[ Sun Feb 21 23:01:44 PST 2016 ]view :A N A T O M _ : Length:13
+[ Sun Feb 21 23:01:44 PST 2016 ]MISTAKE!!! no:6
+[ Sun Feb 21 23:01:49 PST 2016 ]Case0
+[ Sun Feb 21 23:01:49 PST 2016 ]in :37
+[ Sun Feb 21 23:01:49 PST 2016 ]Message is :_ _ _ _ _ _ _
+[ Sun Feb 21 23:02:00 PST 2016 ]input:A
+[ Sun Feb 21 23:02:00 PST 2016 ]view :_ _ _ _ _ _ _ : Length:13
+[ Sun Feb 21 23:02:00 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 23:02:00 PST 2016 ]input:E
+[ Sun Feb 21 23:02:00 PST 2016 ]view :_ _ _ _ _ _ _ : Length:13
+[ Sun Feb 21 23:02:01 PST 2016 ]input:I
+[ Sun Feb 21 23:02:01 PST 2016 ]view :_ E _ _ _ _ _ : Length:13
+[ Sun Feb 21 23:02:01 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 23:02:01 PST 2016 ]input:O
+[ Sun Feb 21 23:02:01 PST 2016 ]view :_ E _ _ _ _ _ : Length:13
+[ Sun Feb 21 23:02:01 PST 2016 ]input:U
+[ Sun Feb 21 23:02:01 PST 2016 ]view :_ E _ _ _ O _ : Length:13
+[ Sun Feb 21 23:02:01 PST 2016 ]MISTAKE!!! no:3
+[ Sun Feb 21 23:02:04 PST 2016 ]input:T
+[ Sun Feb 21 23:02:04 PST 2016 ]view :_ E _ _ _ O _ : Length:13
+[ Sun Feb 21 23:02:05 PST 2016 ]input:N
+[ Sun Feb 21 23:02:05 PST 2016 ]view :_ E _ T _ O _ : Length:13
+[ Sun Feb 21 23:02:05 PST 2016 ]MISTAKE!!! no:4
+[ Sun Feb 21 23:02:06 PST 2016 ]input:M
+[ Sun Feb 21 23:02:06 PST 2016 ]view :_ E _ T _ O _ : Length:13
+[ Sun Feb 21 23:02:06 PST 2016 ]MISTAKE!!! no:5
+[ Sun Feb 21 23:02:07 PST 2016 ]input:S
+[ Sun Feb 21 23:02:07 PST 2016 ]view :_ E _ T _ O _ : Length:13
+[ Sun Feb 21 23:02:10 PST 2016 ]input:P
+[ Sun Feb 21 23:02:10 PST 2016 ]view :_ E S T _ O _ : Length:13
+[ Sun Feb 21 23:02:10 PST 2016 ]MISTAKE!!! no:6
+[ Sun Feb 21 23:02:13 PST 2016 ]Case1
+[ Sun Feb 21 23:02:13 PST 2016 ]in :47
+[ Sun Feb 21 23:02:13 PST 2016 ]Message is :_ _ _ _ _ _ _ _
+[ Sun Feb 21 23:02:15 PST 2016 ]input:A
+[ Sun Feb 21 23:02:15 PST 2016 ]view :_ _ _ _ _ _ _ _ : Length:15
+[ Sun Feb 21 23:02:15 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 23:02:15 PST 2016 ]input:E
+[ Sun Feb 21 23:02:15 PST 2016 ]view :_ _ _ _ _ _ _ _ : Length:15
+[ Sun Feb 21 23:02:15 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 23:02:16 PST 2016 ]input:I
+[ Sun Feb 21 23:02:16 PST 2016 ]view :_ _ _ _ _ _ _ _ : Length:15
+[ Sun Feb 21 23:02:16 PST 2016 ]input:I
+[ Sun Feb 21 23:02:16 PST 2016 ]view :_ _ _ _ _ I _ _ : Length:15
+[ Sun Feb 21 23:02:16 PST 2016 ]Already present ... check for another
+[ Sun Feb 21 23:02:16 PST 2016 ]input:O
+[ Sun Feb 21 23:02:16 PST 2016 ]view :_ _ _ _ _ I _ _ : Length:15
+[ Sun Feb 21 23:02:16 PST 2016 ]input:U
+[ Sun Feb 21 23:02:16 PST 2016 ]view :_ O _ _ _ I O _ : Length:15
+[ Sun Feb 21 23:02:20 PST 2016 ]input:T
+[ Sun Feb 21 23:02:20 PST 2016 ]view :_ O _ U _ I O _ : Length:15
+[ Sun Feb 21 23:02:22 PST 2016 ]input:N
+[ Sun Feb 21 23:02:22 PST 2016 ]view :_ O _ U T I O _ : Length:15
+[ Sun Feb 21 23:02:51 PST 2016 ]input:C
+[ Sun Feb 21 23:02:51 PST 2016 ]view :_ O _ U T I O N : Length:15
+[ Sun Feb 21 23:02:51 PST 2016 ]MISTAKE!!! no:3
+[ Sun Feb 21 23:02:52 PST 2016 ]input:P
+[ Sun Feb 21 23:02:52 PST 2016 ]view :_ O _ U T I O N : Length:15
+[ Sun Feb 21 23:02:52 PST 2016 ]MISTAKE!!! no:4
+[ Sun Feb 21 23:02:55 PST 2016 ]input:M
+[ Sun Feb 21 23:02:55 PST 2016 ]view :_ O _ U T I O N : Length:15
+[ Sun Feb 21 23:02:55 PST 2016 ]MISTAKE!!! no:5
+[ Sun Feb 21 23:03:00 PST 2016 ]input:P
+[ Sun Feb 21 23:03:00 PST 2016 ]view :_ O _ U T I O N : Length:15
+[ Sun Feb 21 23:03:00 PST 2016 ]MISTAKE!!! no:6
+[ Sun Feb 21 23:03:02 PST 2016 ]Case2
+[ Sun Feb 21 23:03:02 PST 2016 ]in :39
+[ Sun Feb 21 23:03:02 PST 2016 ]Message is :_ _ _ _
+[ Sun Feb 21 23:03:03 PST 2016 ]input:A
+[ Sun Feb 21 23:03:03 PST 2016 ]view :_ _ _ _ : Length:7
+[ Sun Feb 21 23:03:05 PST 2016 ]input:N
+[ Sun Feb 21 23:03:05 PST 2016 ]view :_ _ A _ : Length:7
+[ Sun Feb 21 23:03:05 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 23:03:05 PST 2016 ]input:T
+[ Sun Feb 21 23:03:05 PST 2016 ]view :_ _ A _ : Length:7
+[ Sun Feb 21 23:03:05 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 23:03:06 PST 2016 ]input:M
+[ Sun Feb 21 23:03:06 PST 2016 ]view :_ _ A _ : Length:7
+[ Sun Feb 21 23:03:06 PST 2016 ]MISTAKE!!! no:3
+[ Sun Feb 21 23:03:08 PST 2016 ]input:B
+[ Sun Feb 21 23:03:08 PST 2016 ]view :_ _ A _ : Length:7
+[ Sun Feb 21 23:03:08 PST 2016 ]MISTAKE!!! no:4
+[ Sun Feb 21 23:03:08 PST 2016 ]input:C
+[ Sun Feb 21 23:03:08 PST 2016 ]view :_ _ A _ : Length:7
+[ Sun Feb 21 23:03:08 PST 2016 ]MISTAKE!!! no:5
+[ Sun Feb 21 23:03:09 PST 2016 ]input:D
+[ Sun Feb 21 23:03:09 PST 2016 ]view :_ _ A _ : Length:7
+[ Sun Feb 21 23:03:09 PST 2016 ]MISTAKE!!! no:6
+[ Sun Feb 21 23:03:12 PST 2016 ]Case1
+[ Sun Feb 21 23:03:12 PST 2016 ]in :24
+[ Sun Feb 21 23:03:12 PST 2016 ]Message is :_ _ _ _ _ _
+[ Sun Feb 21 23:03:13 PST 2016 ]input:E
+[ Sun Feb 21 23:03:13 PST 2016 ]view :_ _ _ _ _ _ : Length:11
+[ Sun Feb 21 23:03:16 PST 2016 ]input:O
+[ Sun Feb 21 23:03:16 PST 2016 ]view :E _ _ _ _ E : Length:11
+[ Sun Feb 21 23:03:16 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 23:03:17 PST 2016 ]input:I
+[ Sun Feb 21 23:03:17 PST 2016 ]view :E _ _ _ _ E : Length:11
+[ Sun Feb 21 23:03:17 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 23:03:18 PST 2016 ]input:A
+[ Sun Feb 21 23:03:18 PST 2016 ]view :E _ _ _ _ E : Length:11
+[ Sun Feb 21 23:03:19 PST 2016 ]input:N
+[ Sun Feb 21 23:03:19 PST 2016 ]view :E _ A _ _ E : Length:11
+[ Sun Feb 21 23:03:52 PST 2016 ]input:B
+[ Sun Feb 21 23:03:52 PST 2016 ]view :E N A _ _ E : Length:11
+[ Sun Feb 21 23:03:53 PST 2016 ]input:L
+[ Sun Feb 21 23:03:53 PST 2016 ]view :E N A B _ E : Length:11
+[ Sun Feb 21 23:03:56 PST 2016 ]Case0
+[ Sun Feb 21 23:03:56 PST 2016 ]in :82
+[ Sun Feb 21 23:03:56 PST 2016 ]Message is :_ _ _ _ _ _ _ _
+[ Sun Feb 21 23:03:57 PST 2016 ]input:A
+[ Sun Feb 21 23:03:57 PST 2016 ]view :_ _ _ _ _ _ _ _ : Length:15
+[ Sun Feb 21 23:03:58 PST 2016 ]input:E
+[ Sun Feb 21 23:03:58 PST 2016 ]view :A _ _ _ A _ _ _ : Length:15
+[ Sun Feb 21 23:03:58 PST 2016 ]input:I
+[ Sun Feb 21 23:03:58 PST 2016 ]view :A _ _ _ A _ _ E : Length:15
+[ Sun Feb 21 23:03:58 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 23:04:00 PST 2016 ]input:N
+[ Sun Feb 21 23:04:00 PST 2016 ]view :A _ _ _ A _ _ E : Length:15
+[ Sun Feb 21 23:04:00 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 23:04:00 PST 2016 ]input:T
+[ Sun Feb 21 23:04:00 PST 2016 ]view :A _ _ _ A _ _ E : Length:15
+[ Sun Feb 21 23:04:00 PST 2016 ]MISTAKE!!! no:3
+[ Sun Feb 21 23:04:01 PST 2016 ]input:M
+[ Sun Feb 21 23:04:01 PST 2016 ]view :A _ _ _ A _ _ E : Length:15
+[ Sun Feb 21 23:04:01 PST 2016 ]MISTAKE!!! no:4
+[ Sun Feb 21 23:04:02 PST 2016 ]input:S
+[ Sun Feb 21 23:04:02 PST 2016 ]view :A _ _ _ A _ _ E : Length:15
+[ Sun Feb 21 23:04:06 PST 2016 ]input:T
+[ Sun Feb 21 23:04:06 PST 2016 ]view :A _ _ _ A _ S E : Length:15
+[ Sun Feb 21 23:04:06 PST 2016 ]MISTAKE!!! no:5
+[ Sun Feb 21 23:04:07 PST 2016 ]input:T
+[ Sun Feb 21 23:04:07 PST 2016 ]view :A _ _ _ A _ S E : Length:15
+[ Sun Feb 21 23:04:07 PST 2016 ]MISTAKE!!! no:6
+[ Sun Feb 21 23:04:09 PST 2016 ]Case2
+[ Sun Feb 21 23:04:09 PST 2016 ]in :73
+[ Sun Feb 21 23:04:09 PST 2016 ]Message is :_ _ _ _ _ _
+[ Sun Feb 21 23:04:10 PST 2016 ]input:A
+[ Sun Feb 21 23:04:10 PST 2016 ]view :_ _ _ _ _ _ : Length:11
+[ Sun Feb 21 23:04:10 PST 2016 ]MISTAKE!!! no:1
+[ Sun Feb 21 23:04:11 PST 2016 ]input:E
+[ Sun Feb 21 23:04:11 PST 2016 ]view :_ _ _ _ _ _ : Length:11
+[ Sun Feb 21 23:04:11 PST 2016 ]input:I
+[ Sun Feb 21 23:04:11 PST 2016 ]view :_ _ _ _ _ E : Length:11
+[ Sun Feb 21 23:04:11 PST 2016 ]input:O
+[ Sun Feb 21 23:04:11 PST 2016 ]view :_ _ _ I _ E : Length:11
+[ Sun Feb 21 23:04:11 PST 2016 ]input:U
+[ Sun Feb 21 23:04:11 PST 2016 ]view :_ O _ I _ E : Length:11
+[ Sun Feb 21 23:04:11 PST 2016 ]MISTAKE!!! no:2
+[ Sun Feb 21 23:04:13 PST 2016 ]input:N
+[ Sun Feb 21 23:04:13 PST 2016 ]view :_ O _ I _ E : Length:11
+[ Sun Feb 21 23:04:13 PST 2016 ]MISTAKE!!! no:3
+[ Sun Feb 21 23:04:14 PST 2016 ]input:T
+[ Sun Feb 21 23:04:14 PST 2016 ]view :_ O _ I _ E : Length:11
+[ Sun Feb 21 23:04:14 PST 2016 ]MISTAKE!!! no:4
+[ Sun Feb 21 23:04:15 PST 2016 ]input:S
+[ Sun Feb 21 23:04:15 PST 2016 ]view :_ O _ I _ E : Length:11
+[ Sun Feb 21 23:04:15 PST 2016 ]MISTAKE!!! no:5
+[ Sun Feb 21 23:04:18 PST 2016 ]input:M
+[ Sun Feb 21 23:04:18 PST 2016 ]view :_ O _ I _ E : Length:11
+[ Sun Feb 21 23:04:18 PST 2016 ]MISTAKE!!! no:6
+[ Sun Feb 21 23:04:20 PST 2016 ]Case2
+[ Sun Feb 21 23:04:20 PST 2016 ]in :42
+[ Sun Feb 21 23:04:20 PST 2016 ]Message is :_ _ _ _ _
+[ Sun Feb 21 23:04:29 PST 2016 ]Closing LOG ...

@@ -1,0 +1,310 @@
+#!/bin/sh
+
+TAR_NAME="$1" 
+MENU_MODE="$2"
+
+curr_dir=$(pwd)
+
+SOURCE_DIR=$(dirname ${curr_dir})
+
+##############################
+#
+# TARGETS
+#
+##############################
+
+DISTRIB_DIR="${curr_dir}"
+echo DISTRIB_DIR=${DISTRIB_DIR}
+DEPLOY_DIR="${SOURCE_DIR}/DEPLOY"
+
+##############################
+#
+# COMMAND
+#
+##############################
+
+RM="/bin/rm -f"
+RMDIR="/bin/rm -rf"
+CP="/bin/cp -r"
+MV="/bin/mv -f"
+STRIP="strip"
+MKDISTRIB="./copyFileSet"
+
+
+UTIL_DIR="${SOURCE_DIR}/DISTRIB/UTIL"
+
+##############################
+#
+# GENERAL
+#
+##############################
+
+DATE="`/bin/date '+%y_%m_%d'`"
+OS="created: `uname -sr`"
+SIGNEXE="${SOURCE_DIR}/QNE_ETSI/KERNEL/sign -w" 
+GETIDENT="sh -f ${UTIL_DIR}/getident"
+MKDISTRIB="${UTIL_DIR}/copyFileSet"
+
+###########################################
+#
+# CHIEDO IL NUMERO DI TOOL
+#
+###########################################
+
+FILE_TOOL="${DISTRIB_DIR}/.tool"
+
+$GETTAG_EXE $REVISION_HOLDER_FILE
+
+if [ ! -a ${FILE_TOOL} ]
+then
+  echo "001" > ${FILE_TOOL}
+fi
+
+TOOL_NUMBER=`cat ${FILE_TOOL}`
+
+
+echo "\nInsert the tool number, please (default ${TOOL_NUMBER}): \c"
+read TMP
+
+if [ "$TMP" <> "" ]
+then
+    TOOL_NUMBER=$TMP
+fi
+
+echo "\nMaking tool number $TOOL_NUMBER"
+
+if [ ! -f $DISTRIB_DIR/TOOL.README.$TOOL_NUMBER ]
+then
+    echo "\nCannot find tool release notes file <${DISTRIB_DIR}/TOOL.README.$TOOL_NUMBER>."
+    echo "You have to make it, first. Exiting ..."
+    echo "\n"
+    exit 1
+fi
+
+
+##############################
+#
+# TARGETS
+#
+##############################
+
+TARGET="TOOL_$TOOL_NUMBER"
+TARGET_DIR="$DISTRIB_DIR/$TARGET"
+
+echo "TARGET_DIR = $TARGET_DIR"
+
+###############
+#
+# Get last release
+#
+############
+
+FILE_VERSION="${DISTRIB_DIR}/.version"
+FILE_DROP="${DISTRIB_DIR}/.drop"
+FILE_RELEASE="${DISTRIB_DIR}/.release"
+
+if [ ! -a ${FILE_VERSION} ]
+then
+  echo "1" > ${FILE_VERSION}
+fi
+
+VERSION=`cat ${FILE_VERSION}`
+
+echo "\nVersion Number (default ${VERSION}): \c"
+read TMP
+
+if [ "$TMP" <> "" ]
+then
+  VERSION=$TMP
+fi
+
+if [ ! -a ${FILE_DROP} ]
+then
+  echo "1" > ${FILE_DROP}
+fi
+
+DROP=`cat ${FILE_DROP}`
+
+echo "\nDrop Number (default ${DROP}- 0 for null): \c"
+read TMP
+
+if [ "${TMP}" <> "" ]
+then
+  DROP=${TMP}
+fi
+
+if [ "${DROP}" = "0" ]
+then
+  DROP=""
+fi
+
+if [ "${DROP}" <> "" ]
+then
+  RELEASE="${VERSION}.${DROP}"
+else
+  RELEASE="${VERSION}"
+fi
+
+echo "The release is <$RELEASE>"
+echo "The version is <$VERSION>"
+echo "The drop is <$DROP>"
+echo "The tool is <${TOOL_NUMBER}>"
+
+echo $RELEASE > $FILE_RELEASE
+echo $VERSION > $FILE_VERSION
+echo $DROP  > $FILE_DROP
+echo ${TOOL_NUMBER}   > $FILE_TOOL
+
+### File .version
+echo ${VERSION} > .version
+
+VERSION_FOR_NAME=$(cat ./.version | tr '[.]' '[_]')
+
+DISTRIB_MARK="${VERSION} - Drop ${DROP} P${TOOL_NUMBER}"
+echo "\nSignature name is $DISTRIB_MARK"
+
+if [ "$DROP" = "" ]
+then
+  DISTRIB_NAME="TMFAgent_${VERSION_FOR_NAME}_tool${TOOL_NUMBER}"
+else
+  DISTRIB_NAME="TMFAgent_${VERSION_FOR_NAME}_${DROP}_tool${TOOL_NUMBER}"
+fi
+
+echo DISTRIB_NAME = $DISTRIB_NAME
+
+DISTRIB_VERSION="Distribuited: `/bin/date '+%y/%m/%d'`"
+
+##################################################
+#
+# Copiatura albero
+#
+##################################################
+
+#### Creo directories
+
+echo "Creating directories tree......"
+
+if [ ! -d "${DISTRIB_DIR}" ]
+then
+  mkdir -p "${DISTRIB_DIR}"
+fi
+
+if [ -d "${TARGET_DIR}" ]
+then
+  $RMDIR "${TARGET_DIR}"
+fi
+
+echo "\n*****************************************"
+echo "Making directory $TARGET_DIR"
+echo "*****************************************"
+
+mkdir -p "${TARGET_DIR}"
+
+echo "Copying exe & lib files....."
+cd ${DISTRIB_DIR}
+
+if [  "${MENU_MODE}" = "1" ]
+then
+echo "Copying files for EM package to support Customer Specific Data"
+FILE_SET_NAME="FilesToolAgent_EM.set"
+elif [  "${MENU_MODE}" = "2" ]
+then
+echo "Copying files for NM package to support Customer Specific Data"
+FILE_SET_NAME="FilesToolAgent_NM.set"
+fi
+
+FILE_SET=$DISTRIB_DIR/$FILE_SET_NAME
+
+if [ ! -a $FILE_SET ]
+then
+  echo "ERROR: file <$FILE_SET> doesn't exist"
+  exit
+fi
+
+$MKDISTRIB $FILE_SET $TARGET_DIR
+
+if [ $! <> 0 ]
+then
+    exit 1
+fi
+
+## 
+# il file  prodotto da MKDISTRIB e' il contenuto della tool
+#
+mv ${FILE_SET}.copied $DISTRIB_DIR/.tool_contents
+
+LOG_DIR=$TARGET_DIR/LOG
+EXE_DIR=$TARGET_DIR/BIN
+LIB_DIR=$TARGET_DIR/LIB
+CONF_DIR=$TARGET_DIR/CONF
+DATA_DIR=$TARGET_DIR/DATA
+SCRIPT_DIR=$TARGET_DIR/SCRIPT
+HTML_DIR=$TARGET_DIR/HTML
+INFO_DIR=$TARGET_DIR/INFO
+
+
+if [ -d $LOG_DIR ]
+then
+    $RM -R $LOG_DIR
+fi
+
+if [ $? -ne 0 ]
+then
+  exit 1
+fi
+
+if [ -r "${LIB_DIR}/Utilities.jar" ];
+then
+  rm -f "${LIB_DIR}/Utilities.jar"
+fi
+
+if [ -r "${LIB_DIR}/oojava.jar" ];
+then
+  rm -f "${LIB_DIR}/oojava.jar"
+fi
+
+if [ -r "${LIB_DIR}/oojava-"?"."?".jar" ];
+then
+  rm -f "${LIB_DIR}/oojava-"?"."?".jar"
+fi
+
+rm -f "${LIB_DIR}/oojava.jar."* > /dev/null 2>&1
+rm -f "${LIB_DIR}/liboojava."*  > /dev/null 2>&1
+
+
+### Creo una directory INFO in cui vado a mettere qualche file di utilita'.
+if [ ! -d $TARGET_DIR/INFO ]
+then
+   mkdir -p $TARGET_DIR/INFO
+fi
+
+echo "\nCopying completed.\n"
+
+### File .version (viene utilizzato per il file InfoRelease)
+echo ${VERSION} > $INFO_DIR/.version
+
+### File .drop (viene utilizzato per il file InfoRelease)
+echo ${DROP} > $INFO_DIR/.drop
+
+### File .drop (viene utilizzato per il file InfoRelease)
+echo ${RELEASE} > $INFO_DIR/.release
+echo ${TOOL_NUMBER} > $INFO_DIR/.tool
+
+cp -f $DISTRIB_DIR/TOOL.README.$TOOL_NUMBER $INFO_DIR
+
+echo "Marking exe & lib files...."
+
+echo "Marking completed.\n"
+
+echo "Archiving tool tar...."
+
+cd "${TARGET_DIR}"
+
+tar cf "${TAR_NAME}" *
+
+mv "${TAR_NAME}" "${DISTRIB_DIR}/${TAR_NAME}"
+cd "${DISTRIB_DIR}"
+
+echo "...ended.\n"
+
+exit 0

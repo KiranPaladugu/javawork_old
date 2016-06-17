@@ -1,0 +1,176 @@
+#!/bin/sh
+
+######## Retrieves AGENT environmental variables
+if [ -e "ENV_FILE" ];
+then
+  . "ENV_FILE"
+else
+  echo ""
+  echo "Cannot find environment file ENV_FILE"
+  echo "Exiting management procedure..."
+  echo ""
+  exit 1
+fi
+
+if [ "${AGENT_MODE}" = "NM" ];
+then
+  DATA_DIR="${AGENT_DIR}/DATA"
+  if [ -d "${DATA_DIR}" ];
+  then
+    if [ ! -e "${DATA_DIR}"/HistoryInfo.properties ];
+    then
+      #find "${DATA_DIR}" -type f -name "*" -exec rm -f {} \;
+      "${AGENT_DIR}"/SCRIPT/Q_ResetDB force
+    fi
+  fi
+fi
+
+LOG_DIR="${AGENT_DIR}/LOG"
+LOGPREV_DIR="${LOG_DIR}/LOG_PREV"
+DATE=$(date "+%Y-%m-%d-%H-%M-%S")
+
+#file_list=$(find "${LOG_DIR}" -type f \( -name "*.log" -o -name "*.bak" \) -print)
+file_list=$(ls -1d "${LOG_DIR}/"*.log* "${LOG_DIR}/"*.ior)
+LOG_FILES=""
+
+for item in ${file_list};
+do
+  item1=$(basename "${item}")
+  LOG_FILES="${LOG_FILES} ${item1}"
+done
+
+if [ ! -d "${LOGPREV_DIR}" ];
+then
+  mkdir "${LOGPREV_DIR}"
+fi
+
+if [ -r "${LOGPREV_DIR}/Logs.${DATE}.tgz" ];
+then
+  rm -f "${LOGPREV_DIR}/Logs.${DATE}.tgz"
+fi
+
+if [ -r "${LOGPREV_DIR}/Logs.${DATE}.tZ" ];
+then
+  rm -f "${LOGPREV_DIR}/Logs.${DATE}.tZ"
+fi
+
+curr_os=$(uname -s)
+if [ "${curr_os}" = "HP-UX" ];
+then
+  compress_exe="/usr/contrib/bin/gzip"
+  if [ ! -x "${compress_exe}" ];
+  then
+    compress_exe=$(which compress)
+    if [ $? -eq 0 ];
+    then
+      if [ -x "${compress_exe}" ];
+      then
+        log_ext="tZ"
+      fi
+    else
+      compress_exe=""
+      log_ext="tar"
+    fi
+  else
+    log_ext="tgz"
+  fi
+elif [ "${curr_os}" = "Linux" ];
+then
+  compress_exe="/bin/gzip"
+  if [ ! -x "${compress_exe}" ];
+  then
+    compress_exe=$(which compress)
+    if [ $? -eq 0 ];
+    then
+      if [ -x "${compress_exe}" ];
+      then
+        log_ext="tZ"
+      fi
+    else
+      compress_exe=""
+      log_ext="tar"
+    fi
+  else
+    log_ext="tgz"
+  fi
+else
+  compress_exe="${AGENT_DIR}/bin/gzip"
+  if [ ! -x "${compress_exe}" ];
+  then
+    compress_exe=""
+    log_ext="tar"
+  else
+    log_ext="tgz"
+  fi
+fi
+
+curr_dir=$(pwd)
+if [ "${LOG_FILES}" != "" ];
+then
+  cd ${LOG_DIR}
+  if [ "${compress_exe}" != "" ];
+  then
+    tar cf - -C "${LOG_DIR}" ${LOG_FILES} | "${compress_exe}" > "${LOGPREV_DIR}"/Logs.${DATE}.${log_ext}
+  else
+    tar cf - -C "${LOG_DIR}" ${LOG_FILES} > "${LOGPREV_DIR}"/Logs.${DATE}.${log_ext}
+  fi
+fi
+cd ${curr_dir}
+
+find ${LOGPREV_DIR} -type f -name "Logs.*.t*" -atime +10 -exec rm -f {} \;
+
+rm -f "${LOG_DIR}/TMFAgent.log".* > /dev/null 2>&1
+rm -f "${LOG_DIR}/Database.log".* > /dev/null 2>&1
+
+
+######## Ripulisco eventuali transazioni appese
+"${AGENT_DIR}"/SCRIPT/cleanup
+
+######## Ripulisco la dir TMP (se esiste)
+TMF_TMP_DIR="${AGENT_DIR}/TMP"
+if [ -d "${TMF_TMP_DIR}" ];
+then
+  file_list=$(ls -1d "${TMF_TMP_DIR}/"*.swc*)
+
+  for item in ${file_list};
+  do
+    rm -f "${item}" > /dev/null 2>&1
+  done
+  rmdir -f "${TMF_TMP_DIR}" > /dev/null 2>&1
+fi
+
+# Waiting for Port no-TIME_WAIT
+
+COMM_PORT=17601
+ASYN_PORT=39876
+
+if [ "${AGENT_MODE}" = "NM" ];
+then
+  COMM_PORT=17601
+  ASYN_PORT=39876
+fi
+
+if [ "${AGENT_MODE}" = "EM" ];
+then
+  COMM_PORT=9070
+  ASYN_PORT=9071
+fi
+
+port1=$(netstat -an | grep -v grep | grep ${COMM_PORT} | grep TIME_WAIT)
+port2=$(netstat -an | grep -v grep | grep ${ASYN_PORT} | grep TIME_WAIT)
+
+typeset -i stop_index=0
+
+while [ "${port1}" != "" -o "${port2}" != "" ];
+do
+  if [ ${stop_index} -eq 300 ];
+  then
+    break
+  fi
+  sleep 1
+  port1=$(netstat -an | grep -v grep | grep ${COMM_PORT} | grep TIME_WAIT)
+  port2=$(netstat -an | grep -v grep | grep ${ASYN_PORT} | grep TIME_WAIT)
+  let "stop_index=${stop_index} + 1"
+done
+
+exit 0
