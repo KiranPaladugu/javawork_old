@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">
-<refactoring comment="Extract method &apos;public void process(String filename)&apos; from &apos;com.app.rename.ListSorter.ListSorter()&apos; to &apos;com.app.rename.ListSorter&apos;&#x0D;&#x0A;- Original project: &apos;javaWork&apos;&#x0D;&#x0A;- Method name: &apos;process&apos;&#x0D;&#x0A;- Destination type: &apos;com.app.rename.ListSorter&apos;&#x0D;&#x0A;- Declared visibility: &apos;public&apos;&#x0D;&#x0A;- Generate method comment" comments="true" description="Extract method &apos;process&apos;" destination="0" exceptions="false" flags="786434" id="org.eclipse.jdt.ui.extract.method" input="/renamer&lt;com.app.rename{ListSorter.java" name="process" replace="false" selection="1266 511" stamp="1340873027496" version="1.0" visibility="1"/>
-</session>

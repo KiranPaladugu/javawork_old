@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">
-<refactoring comment="Copy package &apos;com.framework.reg&apos; to &apos;Work/src&apos;&#x0D;&#x0A;- Original project: &apos;framework&apos;&#x0D;&#x0A;- Destination element: &apos;Work/src&apos;&#x0D;&#x0A;- Original element: &apos;framework/ideas/com.framework.reg&apos;" description="Copy package" destination="=Work/src" element1="/ideas&lt;com.framework.reg" flags="589830" fragments="1" id="org.eclipse.jdt.ui.copy" policy="org.eclipse.jdt.ui.copyPackages" stamp="1335971647307" version="1.0"/>
-</session>

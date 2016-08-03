@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">
-<refactoring comment="Copy 2 elements to &apos;Work/src/com.tcs.tmp&apos;&#x0D;&#x0A;- Original project: &apos;javaWork&apos;&#x0D;&#x0A;- Destination element: &apos;Work/src/com.tcs.tmp&apos;&#x0D;&#x0A;- Original elements:&#x0D;&#x0A;     com.app.rename.RenamerListItem.java&#x0D;&#x0A;     com.app.rename.RenamerListModel.java" description="Copy compilation units" destination="=Work/src&lt;com.tcs.tmp" element1="/renamer&lt;com.app.rename{RenamerListItem.java" element2="/renamer&lt;com.app.rename{RenamerListModel.java" files="0" flags="589830" folders="0" id="org.eclipse.jdt.ui.copy" policy="org.eclipse.jdt.ui.copyResources" stamp="1336754064421" units="2" version="1.0"/>
-</session>

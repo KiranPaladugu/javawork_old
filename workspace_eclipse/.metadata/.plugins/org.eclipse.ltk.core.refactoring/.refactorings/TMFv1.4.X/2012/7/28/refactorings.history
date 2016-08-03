@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">
-<refactoring comment="Copy element &apos;MakePatchAgentTar&apos; to &apos;DISTRIB&apos;&#x0D;&#x0A;- Original project: &apos;TMFv1.4.X&apos;&#x0D;&#x0A;- Destination element: &apos;DISTRIB&apos;&#x0D;&#x0A;- Original element: &apos;MakePatchAgentTar&apos;" description="Copy file" element1="DISTRIB/MakePatchAgentTar" files="1" flags="589830" folders="0" id="org.eclipse.jdt.ui.copy" policy="org.eclipse.jdt.ui.copyResources" stamp="1342087983390" target="/TMFv1.4.X/DISTRIB" units="0" version="1.0"/>
-</session>
